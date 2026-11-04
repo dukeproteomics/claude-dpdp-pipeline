@@ -121,8 +121,21 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   (q-value is the noise criterion); Filter and Stats (missing factor, Detected_Imputed, one-group-only) use the mask; Impute skipped.
 - Then compare on 11488: app imputation vs Spectronaut background / global / run-wise, scored by SPQC CV, ADH CV, casein level
   agreement, one-group-only calls and the p-value histogram.
-- Waiting on the user: exports of 11488 with per-run EG.Qvalue (+ EG.IsImputed), the imputation setting, normalization setting and
-  Spectronaut version for each; a no-imputation q-value-filtered export of the same analysis.
+- **Exports received 2026-11-04** (data/input, no Spectronaut normalization): `..._Report.tsv` (no imputation; identical to the original
+  11488 report), `_background_`, `_impute_global_`, `_impute_runwise_`. Same 131,975 precursors and run order in all four.
+- Findings:
+  - `EG.IsImputed` is unreliable: in global/run-wise it is TRUE for the 72,232 filled values but also for 79,547 measured values that are
+    unchanged (ratio 1.00). The q-value rule misses 13,573 values that are identified (q <= 0.01) but have no quantity.
+    **Reliable mask = missing in the no-imputation export.** Values that weren't filled are identical across all exports.
+  - Global: uniform on log2 between the ~1.5th and ~9th percentile of all measured values (4.43-6.58), the same in every run.
+    Run-wise: the same rule per run (1.48-1.54% / 8.98-9.19%). Fills are unrelated to the precursor (cor 0.00). **Replicable.**
+  - Background: fills 68,289 of 72,245 gaps (3,956 stay empty); median log2 6.3 (measured 9.6); **correlates with the precursor's level in
+    its measured runs (r = 0.69)**, about 0.84 log2 below it. It needs the raw chromatograms, so **not replicable**: import it.
+  - 46% of gaps (33,022) have both other group replicates measured (missing at random). Global puts these a median 1.95 log2 below the
+    group mean (49% more than 4x below); background a median 0.87 below (24%). SPQC precursors missing 1 of 3 injections: median CV after
+    filling 52% background vs 71% global/run-wise (fully measured: 15%).
+  - The app's bottom-X 2% fills lower (min to 2nd percentile, log2 0-4.7) than Spectronaut (1.5-9%); duke fills missing-at-random gaps
+    near the group mean, which Spectronaut's global/run-wise don't do.
 
 ## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize)
 - Decisions so far made on the review pages: Load accept, Parameters accept, Noise fixed 26.91 (log2 4.75, from the replicate
