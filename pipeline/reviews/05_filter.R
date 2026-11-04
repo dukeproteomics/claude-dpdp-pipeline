@@ -17,6 +17,7 @@ review_filter <- function(db_path) {
   m <- as.matrix(df[, (info + 1):ncol(df)]); m[!is.na(m) & m == 0] <- NA
   labels <- if (!is.null(design$Label) && length(design$Label) == n_s) design$Label else colnames(m)
   n_rows <- nrow(m)
+  grp_of_all <- rep(groups$Group, as.integer(groups$Count))
   sd_dir <- file.path(run_dir, "steps", "05_filter")
   summ <- if (file.exists(file.path(sd_dir, "summary.json"))) fromJSON(file.path(sd_dir, "summary.json"), simplifyVector = FALSE) else NULL
   applied <- !is.null(summ) && identical(summ$action, "apply")
@@ -147,16 +148,25 @@ review_filter <- function(db_path) {
   }
 
   qc <- p$qc_path
-  graphs <- paste0('<section><h2>Graphs</h2>',
-    embed_png(file.path(qc, "Precursor_NoiseFiltered_Histogram.png"), "Noise filtered histogram",
-              "App plot: log2 intensity histogram of the filter's input. Green line = misaligned intensity cutoff (mean + SD factor)."),
-    if (applied) paste0('<div class="grid2">',
-      embed_png(file.path(qc, "Precursor_Start_barplot.png"), "Start bar plot", "Before: total intensity per sample (start)."),
-      embed_png(file.path(qc, "Precursor_Filter_barplot.png"), "Filter bar plot", "After filtering: total intensity per sample."),
-      embed_png(file.path(qc, "Precursor_Start_boxplot.png"), "Start box plot", "Before: log2 intensity distribution per sample."),
-      embed_png(file.path(qc, "Precursor_Filter_boxplot.png"), "Filter box plot", "After filtering: log2 intensity distribution per sample."),
-      '</div>') else "",
-    '</section>')
+  lmean <- as.numeric(p$intensity_mean); lsd <- as.numeric(p$intensity_sd)
+  ref <- list()
+  if (is.finite(lmean) && is.finite(lsd)) ref <- list(`mean` = list(x = lmean, color = "--text-primary", dash = "solid"), `-1 SD` = list(x = lmean - lsd), `+1 SD` = list(x = lmean + lsd))
+  if (is.finite(as.numeric(p$intensity_cutoff))) ref$`misaligned cutoff` <- list(x = log2(as.numeric(p$intensity_cutoff)), color = "--series-3", dash = "dash")
+  nb <- suppressWarnings(as.numeric(p$noise_baseline_value)); if (identical(p$noise_type, "fixed") && is.finite(nb) && nb > 1) ref$`noise baseline` <- list(x = log2(nb), color = "--series-2", dash = "dash")
+  if (identical(p$noise_type, "dynamic") && is.finite(as.numeric(p$noise_inflection))) ref$`noise inflection` <- list(x = log2(as.numeric(p$noise_inflection)), color = "--series-2", dash = "dash")
+  charts <- if (applied) {
+    fm <- as.matrix(read_table("precursor_filter", db_path)[, (info + 1):(info + n_s)])
+    paste0('<p class="note">After filtering', if (!is.null(summ$noise_keep)) " (noise values put back for kept precursors, noise_keep)" else "", '.</p>', sample_charts(fm, labels, grp_of_all, "filt", ref))
+  } else paste0('<p class="note">The filter&apos;s input (after the noise step). The misaligned cutoff line is the intensity the misaligned filter uses.</p>', sample_charts(m, labels, grp_of_all, "filt", ref))
+  graphs <- paste0('<section><h2>Graphs</h2>', charts,
+    '<details><summary>The app&apos;s original plots</summary><div class="grid2">',
+    embed_png(file.path(qc, "Precursor_NoiseFiltered_Histogram.png"), "Noise filtered histogram", "App plot: histogram of the filter's input."),
+    if (applied) paste0(
+      embed_png(file.path(qc, "Precursor_Start_barplot.png"), "Start bar plot", "Start: total intensity per sample."),
+      embed_png(file.path(qc, "Precursor_Filter_barplot.png"), "Filter bar plot", "Filtered: total intensity per sample."),
+      embed_png(file.path(qc, "Precursor_Start_boxplot.png"), "Start box plot", "Start: log2 intensity per sample."),
+      embed_png(file.path(qc, "Precursor_Filter_boxplot.png"), "Filter box plot", "Filtered: log2 intensity per sample.")) else "",
+    '</div></details></section>')
 
   explorers <- list(
     list(id = "wi_min", title = "Minimum measured, all samples", xlab = "minimum values measured", unit = "",

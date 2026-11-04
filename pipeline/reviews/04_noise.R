@@ -130,7 +130,7 @@ Without noise_keep, removed values stay missing and are imputed later.</p>',
     sprintf('<p class="note">Noise is signal that does not repeat. Using %s: for each intensity, the share of values that are also measured in <b>all</b> the other replicates, and the replicate CV. ', esc(rep_src)),
     'A noise floor shows as the point where re-detection falls and CV climbs. Move the slider to pick a cutoff; <b>Use as fixed baseline</b> puts it in the decision form above.</p>',
     '<div class="control"><label for="rcut">Cutoff (log2)</label><input id="rcut" type="range" min="0" max="', length(rb) * 4, '" step="1"/><span class="val" id="rcutv"></span>',
-    '<button type="button" id="ruse">Use as fixed baseline</button><button type="button" data-rjump="cv50">CV 50% point</button><button type="button" data-rjump="redet70">re-detected 70% point</button><button type="button" data-rjump="infl">current inflection</button></div>',
+    '<button type="button" id="ruse">Use as fixed baseline</button><button type="button" data-rjump="cv50">CV 50% point</button><button type="button" data-rjump="redet70">re-detected 70% point</button><button type="button" data-rjump="infl">current inflection</button></div><p class="dmsg" id="rusemsg"></p>',
     '<div class="tiles" id="rtiles"></div><div class="grid2"><div><h3>Re-detected in all other replicates</h3><div id="rredet" style="height:300px" role="img" aria-label="Share of values re-detected by intensity"></div></div>',
     '<div><h3>Median replicate CV</h3><div id="rcv" style="height:300px" role="img" aria-label="Replicate CV by intensity"></div></div></div>',
     '<details><summary>Table view</summary>', html_table(data.frame(`log2 intensity` = sprintf("%.1f-%.1f", head(rb, -1), tail(rb, -1)), Values = fmt_n(acc$n),
@@ -201,6 +201,7 @@ slider.value = D.inflection > 0 ? idxFor(D.inflection) : 0; update();
     an.push({ x: K.infl_rank, y: 0.95, yref: "paper", xanchor: "right", xshift: -4, showarrow: false, text: "dynamic: " + fmt(K.n - K.infl_rank) + " values below " + D.inflection, font: { size: 12, color: C("--text-primary") } }); }
   if (K.fixed_log2 !== null) { sh.push({ type: "line", x0: 0, x1: 1, xref: "paper", y0: K.fixed_log2, y1: K.fixed_log2, line: { color: C("--ref-fixed"), width: 2, dash: "dot" } });
     an.push({ x: 0.02, xref: "paper", y: K.fixed_log2, yanchor: "bottom", showarrow: false, text: "fixed baseline " + D.fixed, font: { size: 12, color: C("--text-primary") } }); }
+  window.DPDP_INFL = { shapes: sh, annotations: an, n: K.n };
   Plotly.newPlot("inflplot", [{ type: "scattergl", mode: "lines", x: K.x, y: K.y, line: { width: 2, color: C("--series-1") },
     hovertemplate: "rank %%{x:,}<br>log2 %%{y:.2f}<extra></extra>" }],
     { paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 }, margin: { l: 60, r: 20, t: 10, b: 50 },
@@ -238,16 +239,28 @@ REPRO_JS <- '
     let below = 0; if (typeof D !== "undefined") { const ki = D.edges.findIndex(e => e >= x - 1e-9); const kk = ki < 0 ? D.edges.length - 1 : ki; below = D.per_sample.reduce((s, c) => s + c[kk], 0); }
     const tot = (typeof D !== "undefined") ? D.sample_values.reduce((a, b) => a + b, 0) : 0;
     const rd = at(R.redet, x), cv = at(R.cv, x);
+    // same cutoff on the first graph (sorted intensities) and in the cutoff explorer
+    if (window.DPDP_INFL && document.getElementById("inflplot")) { const I = window.DPDP_INFL, rank = I.n - below;
+      Plotly.relayout("inflplot", { shapes: I.shapes.concat([{ type: "line", x0: 0, x1: 1, xref: "paper", y0: x, y1: x, line: { color: C("--text-primary"), width: 2, dash: "dot" } },
+          { type: "line", x0: rank, x1: rank, y0: 0, y1: 1, yref: "paper", line: { color: C("--text-primary"), width: 1, dash: "dot" } }]),
+        annotations: I.annotations.concat([{ x: 0.5, xref: "paper", y: x, yanchor: "bottom", showarrow: false, bgcolor: C("--surface-1"),
+          text: "your cutoff: intensity " + raw.toPrecision(3) + " (log2 " + x.toFixed(2) + "), " + fmt(below) + " values below", font: { size: 12, color: C("--text-primary") } }]) }); }
+    if (!syncing && typeof idxFor === "function" && document.getElementById("cut")) { document.getElementById("cut").value = idxFor(raw); if (typeof update === "function") update(); }
     document.getElementById("rtiles").innerHTML =
       `<div class="tile"><div class="v">${rd === null ? "-" : rd + "%"}</div><div class="l">re-detected in all other replicates at this intensity</div></div>` +
       `<div class="tile"><div class="v">${cv === null ? "-" : cv + "%"}</div><div class="l">median replicate CV at this intensity</div></div>` +
       `<div class="tile"><div class="v">${fmt(below)}</div><div class="l">values below this cutoff (${tot ? (100 * below / tot).toFixed(2) : "-"}% of all)</div></div>`;
   }
+  let syncing = false;
   sl.addEventListener("input", draw);
+  // typing a baseline in the decision form moves the slider (and the lines) to it
+  document.addEventListener("input", e => { if (e.target.dataset && e.target.dataset.name === "noise_baseline_value") { const v = parseFloat(e.target.value);
+    if (v > 0) { sl.value = kOf(Math.log2(v)); draw(); } } });
   document.querySelectorAll("[data-rjump]").forEach(b => { const v = R[b.dataset.rjump]; if (v === null) { b.disabled = true; return; } b.addEventListener("click", () => { sl.value = kOf(v); draw(); }); });
   document.getElementById("ruse").addEventListener("click", () => {
     const raw = Math.round(Math.pow(2, xOf(+sl.value)) * 100) / 100;
     if (window.dpdpChoose) window.dpdpChoose("fixed"); if (window.dpdpSetField) window.dpdpSetField("noise_baseline_value", String(raw), true);
+    document.getElementById("rusemsg").innerHTML = "Put in the decision form: <b>fixed</b>, baseline <b>" + raw + "</b>. Check noise_keep there if you want it, then press <b>Send to Claude</b>.";
     const d = document.getElementById("decision"); if (d) d.scrollIntoView({ behavior: "smooth" }); });
   sl.value = kOf(R.cv50 !== null ? R.cv50 : (R.infl !== null ? R.infl : R.centers[0])); draw();
 })();
