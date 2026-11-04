@@ -38,6 +38,18 @@ imp_mixed <- function(x, groups, mar_min = 0.5, k = 10, seed = 123) {
   out
 }
 
+# Mixed, group-blind: decides MAR vs MNAR from intensity, not from group labels (so it can't shrink within-group spread).
+#   The detection curve (limpa::dpc: logit P(detected) = b0 + b1 * log2 intensity) gives each precursor's chance of being detected at
+#   its measured mean. Gaps in precursors with P >= p_mar are treated as missed at random (kNN fill); the rest as low (Perseus fill).
+imp_mixed_blind <- function(x, groups = NULL, p_mar = 0.9, k = 10, seed = 123) {
+  d <- limpa::dpc(x)$dpc; mu <- rowMeans(x, na.rm = TRUE)
+  pdet <- stats::plogis(d[1] + d[2] * mu)
+  mar <- is.na(x) & matrix(pdet >= p_mar, nrow(x), ncol(x))
+  a <- imp_knn(x, k = k); b <- imp_perseus(x, seed = seed)
+  out <- x; out[mar] <- a[mar]; mnar <- is.na(x) & !mar; out[mnar] <- b[mnar]
+  out
+}
+
 # The app's duke + bottom-X (impute_duke / impute_bottomx / impute_meta_data_bg), re-implemented on log2:
 #   duke: per group, rows missing in <= Count*(100-missing_cutoff)/100 samples get group mean + U(-1,1) * SD of the group's
 #         intensity bin (20 bins of the row average; SD = mean of the bin's row SDs).
@@ -65,4 +77,5 @@ IMPUTE_METHODS <- list(
   perseus      = list(fun = imp_perseus,      label = "Perseus down-shift (1.8 SD, width 0.3)"),
   minprob      = list(fun = imp_minprob,      label = "MinProb"),
   qrilc        = list(fun = imp_qrilc,        label = "QRILC"),
-  knn          = list(fun = imp_knn,          label = "kNN (MAR only)"))
+  knn          = list(fun = imp_knn,          label = "kNN (MAR only)"),
+  mixed_blind  = list(fun = imp_mixed_blind,  label = "mixed, group-blind: kNN (likely missed) + Perseus (likely low)"))
