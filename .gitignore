@@ -1,0 +1,21 @@
+# Project data never goes to git (search reports, sample sheets, .db files, run folders, review pages)
+data/
+*.db
+*.tsv
+*.xlsx
+*.zip
+
+# The shiny_DPDP app has its own repository (and a credentials file); the pipeline records the app commit instead
+shiny_DPDP/
+shiny_DPDP-main/
+
+# Build output (rebuilt by tools/build_plugin.sh)
+dist/
+
+# R / editor clutter
+.Rhistory
+.RData
+.Rproj.user/
+Error/
+*.Rproj
+.claude/settings.local.json
