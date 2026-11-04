@@ -105,11 +105,17 @@ review_normalize <- function(db_path) {
     '</section>')
 
   qc <- p$qc_path
-  graphs <- paste0('<section><h2>Graphs</h2><div class="grid2">',
-    embed_png(file.path(qc, "Precursor_Filter_barplot.png"), "Filtered bar plot", "Before: total intensity per sample (filtered data)."),
-    embed_png(file.path(qc, "Precursor_NormData_barplot.png"), "NormData bar plot", "App plot: totals of the normalization subset (what the factors are calculated from)."),
-    if (applied) embed_png(file.path(qc, paste0("Precursor_", method, "_barplot.png")), "Normalized bar plot", sprintf("After %s: total intensity per sample.", method)) else "",
-    '</div><h2>log2 intensity per sample', if (applied) ', before vs after' else '', '</h2>',
+  totals <- list(`filtered` = colSums(smat(filt), na.rm = TRUE), `normalization subset` = colSums(smat(normdata), na.rm = TRUE))
+  if (applied && table_exists(summ$table, db_path)) totals[[paste0("after ", method, if (identical(method, "sltmm")) " (SL part)" else "")]] <- colSums(smat(read_table(summ$table, db_path)), na.rm = TRUE)
+  graphs <- paste0('<section><h2>Graphs</h2><h3>Total intensity per sample</h3>',
+    '<p class="note">Filtered data, the normalization subset (what the factors are calculated from), and after normalization. Hover for each total relative to the mean.</p>',
+    '<div id="totplot" style="height:340px" role="img" aria-label="Total intensity per sample before and after normalization"></div>',
+    sprintf('<script>window.DPDP_TOTALS = %s;</script>', toJSON(lapply(totals, unname), digits = NA)),
+    '<details><summary>The app&apos;s original plots</summary><div class="grid2">',
+    embed_png(file.path(qc, "Precursor_Filter_barplot.png"), "Filtered bar plot", "App plot: filtered data."),
+    embed_png(file.path(qc, "Precursor_NormData_barplot.png"), "NormData bar plot", "App plot: normalization subset."),
+    if (applied) embed_png(file.path(qc, paste0("Precursor_", method, "_barplot.png")), "Normalized bar plot", sprintf("App plot: after %s.", method)) else "",
+    '</div></details><h2>log2 intensity per sample', if (applied) ', before vs after' else '', '</h2>',
     '<p class="note">Box = 25th to 75th percentile, line = median, whiskers = 5th to 95th percentile. After normalization the medians should line up.</p>',
     '<div id="boxplot" style="height:420px" role="img" aria-label="log2 intensity distribution per sample"></div></section>')
 
@@ -123,6 +129,16 @@ review_normalize <- function(db_path) {
 }
 
 NORM_JS <- '
+(function () { const T = window.DPDP_TOTALS; if (!T) return;
+  const css0 = getComputedStyle(document.querySelector(".viz-root")), C0 = n => css0.getPropertyValue(n).trim(), cols = ["--text-muted", "--series-1", "--series-2"];
+  Plotly.newPlot("totplot", Object.keys(T).map((k, i) => { const mean = T[k].reduce((a, b) => a + b, 0) / T[k].length;
+    return { type: "bar", name: k, x: D.samples, y: T[k], marker: { color: C0(cols[i % 3]) }, customdata: T[k].map(v => (v / mean).toFixed(3)),
+      hovertemplate: "%{x}<br>" + k + ": %{y:.3s}<br>%{customdata} x mean<extra></extra>" }; }),
+    { barmode: "group", paper_bgcolor: C0("--surface-1"), plot_bgcolor: C0("--surface-1"), font: { color: C0("--text-secondary"), size: 12 },
+      margin: { l: 60, r: 10, t: 10, b: 50 }, legend: { orientation: "h", y: 1.12 }, bargap: 0.2, bargroupgap: 0.05,
+      xaxis: { categoryorder: "array", categoryarray: D.samples }, yaxis: { title: "total intensity", gridcolor: C0("--grid"), rangemode: "tozero" } },
+    { displaylogo: false, responsive: true });
+})();
 const css = getComputedStyle(document.querySelector(".viz-root"));
 const C = n => css.getPropertyValue(n).trim();
 const SER = ["--series-1", "--series-2", "--series-3", "--series-4"];
