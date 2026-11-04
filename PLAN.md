@@ -161,6 +161,20 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   **Accepted inputs: background-signal exports, or raw exports (no background, no imputation). For raw input the pipeline imputes, with
   several improved, best-practice methods to choose from (to be designed and tested).**
 - No-imputation exports keep working as now (empty = missing; the app's imputation step fills them).
+- **Built in Load (2026-11-04):** `pipeline/spectronaut.R::sp_detect_fill()`; Load refuses imputed exports (IsImputed True), reads the type
+  from run-wise q-values, needs `--sp_fill=raw` when there are none (background without q refused), writes `precursor_fill` + param
+  `sp_fill_mode`. 11488: raw 0 filled / 72,245 empty; background 55,705 filled / 3,956 empty; global and run-wise refused (151,779 flagged).
+  Triple-spike `_MOD` exports have no q-values (raw loads with `--sp_fill=raw`; the background one can't be loaded).
+  **Next:** Steps 4-7 use the mask (filter decisions and normalization factors from measured values, Impute keeps background values and
+  fills only the empty gaps); until then they stop on background runs.
+
+## Imputation benchmark (2026-11-04)
+- 11488 (step 07b, no known truth) and the triple-spike known-ratio data (`tools/impute_benchmark/triple_spike.R`, data
+  `data/input/triple_spike`, 10658, design after Guzman et al. 2024; the SPQC columns in the `_MOD` files are synthetic and dropped).
+- Triple-spike, 6 comparisons, adj p <= 0.05 and FC >= 1.5: limpa observed FDR 3.2% mean / 4.8% worst, background 3.5 / 6.2,
+  Perseus 3.9 / 9.4, duke+bottom-X 8.6 / 22.7 (most true calls), kNN and group-blind mixed compress ratios (dropped).
+- Proposed Impute options (not yet decided by the user): raw default limpa; background default Spectronaut background + Perseus for
+  empty gaps; Perseus / MinProb baselines; duke+bottom-X for comparison with old runs.
 
 ## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize)
 - Decisions so far made on the review pages: Load accept, Parameters accept, Noise fixed 26.91 (log2 4.75, from the replicate

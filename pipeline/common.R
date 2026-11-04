@@ -123,3 +123,12 @@ existing_plots <- function(qc_path, files) {
   p <- gsub("/+", "/", file.path(qc_path, files))
   p[file.exists(p)]
 }
+
+# Spectronaut background exports: the filled-value mask (table precursor_fill) isn't used by Steps 4-7 yet, so they refuse such runs
+# rather than treat background signal as measured.
+stop_if_background <- function(db_path, step) {
+  con <- RSQLite::dbConnect(RSQLite::SQLite(), db_path); on.exit(RSQLite::dbDisconnect(con))
+  m <- if ("sp_fill_mode" %in% RSQLite::dbListFields(con, "params")) RSQLite::dbGetQuery(con, "SELECT sp_fill_mode FROM params")$sp_fill_mode[1] else NULL
+  if (identical(m, "background")) stop(step, ": this run is a Spectronaut background export. This step doesn't use the filled-value mask ",
+                                      "(precursor_fill) yet, so it would treat background signal as measured. Not run.", call. = FALSE)
+}

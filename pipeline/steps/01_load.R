@@ -5,6 +5,12 @@
 # Usage:
 #   Rscript pipeline/steps/01_load.R --design=<xlsx> --data=<tsv> --prefix=<name> \
 #       [--outdir=$DPDP_DATA (default /home/user/Claude_Shiny/data)] [--overwrite]
+#       [--sp_fill=raw|background] [--sp_qvalue=0.01]
+#
+# Spectronaut precursor exports (pipeline/spectronaut.R): raw and background-signal exports are accepted, imputed (global / run-wise)
+# exports are refused. The type is read from the run-wise EG.Qvalue columns (background = values present with q > sp_qvalue);
+# --sp_fill states it when the export has no q-values (then only raw is accepted). Filled values are recorded in table
+# precursor_fill (same rows as precursor_raw, 1 = Spectronaut background signal) and param sp_fill_mode.
 #
 # Output: <outdir>/<prefix>/<prefix>.db, plus steps/01_load/summary.json
 
@@ -13,6 +19,7 @@ here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value 
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
 source(file.path(here, "..", "reviews", "01_load.R"))
+source(file.path(here, "..", "spectronaut.R"))
 
 args <- parse_args()
 need(args, c("design", "data", "prefix"))
@@ -21,6 +28,19 @@ data_file <- normalizePath(args$data, mustWork = TRUE)
 outdir <- normalizePath(args$outdir %||% Sys.getenv("DPDP_DATA", "/home/user/Claude_Shiny/data"), mustWork = TRUE)
 prefix <- args$prefix
 if (!grepl("^[A-Za-z0-9_.-]+$", prefix)) stop("Prefix may only contain letters, digits, _ . -")
+
+# --- 0. Spectronaut export type (before anything is written) ---------------
+sp_fill <- NULL
+if (!is.null(args$sp_fill) && !args$sp_fill %in% c("raw", "background")) stop("--sp_fill must be raw or background")
+hdr <- names(data.table::fread(data_file, sep = "\t", nrows = 0))
+if ("EG.PrecursorId" %in% hdr && length(grep("EG.TotalQuantity", hdr)) > 1) {
+  df0 <- as.data.frame(data.table::fread(data_file, sep = "\t", fill = TRUE, showProgress = FALSE))
+  sp_fill <- sp_detect_fill(df0, q_cut = as.numeric(args$sp_qvalue %||% 0.01), declared = args$sp_fill)
+  rm(df0)
+  if (!is.null(sp_fill$error)) stop("Spectronaut export not accepted: ", sp_fill$error, call. = FALSE)
+  cat(sprintf("Spectronaut export type: %s (%s values present, %s filled by Spectronaut, %s gaps)\n", sp_fill$mode,
+              format(sp_fill$values_present, big.mark = ","), format(sp_fill$filled, big.mark = ","), format(sp_fill$gaps, big.mark = ",")))
+}
 
 run_dir <- file.path(outdir, prefix)
 if (dir.exists(run_dir)) {
@@ -55,6 +75,16 @@ params$data_source <- "unkown"     # same placeholder value the app uses
 params$data_file <- basename(data_file)
 write_table_try("params", params, db_path)
 load_unknown_data_bg(list(datapath = data_file), db_path)
+if (!is.null(sp_fill)) {
+  pr <- read_table("precursor_raw", db_path)
+  if (nrow(pr) != nrow(sp_fill$mask)) stop("precursor_raw has ", nrow(pr), " rows but the export has ", nrow(sp_fill$mask))
+  fill_tbl <- data.frame(PrecursorId = pr$EG.PrecursorId, 1L * sp_fill$mask, check.names = FALSE)
+  names(fill_tbl)[-1] <- grep("EG.TotalQuantity", names(pr), value = TRUE)
+  write_table_try("precursor_fill", fill_tbl, db_path)
+  params <- get_params(db_path)
+  params$sp_fill_mode <- sp_fill$mode; params$sp_fill_qvalue <- sp_fill$q_cut
+  write_table_try("params", params, db_path)
+}
 
 # --- Summary for Claude ------------------------------------------------------
 params <- get_params(db_path)
@@ -87,6 +117,9 @@ org <- if ("PG.Organisms" %in% names(df)) {
 } else NULL
 
 warnings_out <- character(0)
+if (!is.null(sp_fill)) warnings_out <- c(warnings_out, sp_fill$notes)
+if (identical(sp_fill$mode, "background")) warnings_out <- c(warnings_out,
+  "Background export: Steps 4-7 don't use the filled-value mask yet, so they stop on this run until that is built.")
 if (length(qcols) != nrow(design)) warnings_out <- c(warnings_out, sprintf("Design has %d samples but data has %d sample columns.", nrow(design), length(qcols)))
 if (!all(id_table$app_check)) warnings_out <- c(warnings_out, "Sample IDs do not match the data columns in Raw_Order.")
 if (!all(id_table$full_id_check)) warnings_out <- c(warnings_out, "Full-ID check failed for some samples (replicate suffix differs; OK for pooled QC).")
@@ -108,6 +141,10 @@ summary <- list(
                 peptides = if ("PEP.StrippedSequence" %in% names(df)) length(unique(df$PEP.StrippedSequence)) else NA,
                 precursors = if ("EG.PrecursorId" %in% names(df)) length(unique(df$EG.PrecursorId)) else NA,
                 duplicate_precursors = if ("EG.PrecursorId" %in% names(df)) sum(duplicated(df$EG.PrecursorId)) else NA),
+  spectronaut_fill = if (!is.null(sp_fill)) list(mode = sp_fill$mode, q_cut = sp_fill$q_cut, has_qvalue = sp_fill$has_qvalue,
+    has_isimputed = sp_fill$has_isimputed, declared = sp_fill$declared, values_present = sp_fill$values_present, gaps = sp_fill$gaps,
+    filled = sp_fill$filled, measured = sp_fill$measured %||% sp_fill$values_present, identified_but_empty = sp_fill$identified_but_empty,
+    filled_per_sample = if (!is.null(sp_fill$filled_per_sample)) as.list(setNames(as.integer(sp_fill$filled_per_sample), d$Label)) else NULL) else NULL,
   missing_per_sample = as.list(missing),
   missing_fraction_per_sample = as.list(round(mf, 4)),
   organisms_top = if (!is.null(org)) as.list(head(org, 8)) else NULL,
@@ -116,7 +153,8 @@ summary <- list(
   tables = local({ con <- RSQLite::dbConnect(RSQLite::SQLite(), db_path); on.exit(RSQLite::dbDisconnect(con)); RSQLite::dbListTables(con) })
 )
 write_summary(summary, sd)
-log_decision(run_dir, "01_load", list(prefix = prefix, design = design_file, data = data_file))
+log_decision(run_dir, "01_load", c(list(prefix = prefix, design = design_file, data = data_file),
+  if (!is.null(sp_fill)) list(sp_fill_mode = sp_fill$mode, sp_fill_declared = sp_fill$declared, sp_qvalue = sp_fill$q_cut)))
 
 cat("\n==== Load complete ====\n")
 cat("DB:", db_path, "\n")

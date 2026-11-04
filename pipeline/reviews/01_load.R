@@ -39,6 +39,7 @@ review_load <- function(db_path) {
     sprintf('<div class="tile"><div class="v">%s</div><div class="l">proteins</div></div>', fmt_n(cn$proteins)),
     sprintf('<div class="tile"><div class="v">%s / %s</div><div class="l">samples in data / in sheet</div></div>', cn$sample_columns, cn$design_samples),
     '</div></section>',
+    sp_fill_section(summ$spectronaut_fill),
     '<section><h2>Samples</h2>', html_table(id_df), '</section>',
     '<section><h2>Missing values per sample (raw data)</h2><div id="miss" style="height:300px" role="img" aria-label="Missing values per sample"></div>',
     '<details><summary>Table view</summary>', html_table(data.frame(Sample = names(miss), Group = grp, Missing = fmt_n(miss), Percent = fmt_pct(missf * 100)), 3:4), '</details></section>',
@@ -55,4 +56,23 @@ Plotly.newPlot("miss", [...new Set(D.g)].map((g, k) => { const i = D.g.map((x, j
   extra <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; } .bad { color:var(--warn-ink); }</style>'
   write_review_page(run_dir, "01_load", "Step 1 - Load", if (is.null(a)) "Waiting for the analyst's review" else "Accepted",
                     if (is.null(a)) "waiting" else "done", body, extra_head = extra)
+}
+
+# Spectronaut export type: raw (every value measured) or background (q > cut = background signal filled by Spectronaut).
+sp_fill_section <- function(f) {
+  if (is.null(f)) return("")
+  how <- if (isTRUE(f$has_qvalue)) sprintf("read from the run-wise EG.Qvalue columns (filled = value present with q &gt; %s)", f$q_cut)
+         else "stated by the analyst (--sp_fill=raw); the export has no run-wise q-values"
+  tiles <- paste0('<div class="tiles">',
+    sprintf('<div class="tile"><div class="v">%s</div><div class="l">export type</div></div>', esc(f$mode)),
+    sprintf('<div class="tile"><div class="v">%s</div><div class="l">measured values</div></div>', fmt_n(f$measured)),
+    sprintf('<div class="tile"><div class="v">%s</div><div class="l">filled by Spectronaut (background)</div></div>', fmt_n(f$filled)),
+    sprintf('<div class="tile"><div class="v">%s</div><div class="l">empty (for the pipeline to fill)</div></div>', fmt_n(f$gaps)), '</div>')
+  per <- if (length(f$filled_per_sample) && isTRUE(as.numeric(f$filled) > 0)) paste0('<details><summary>Filled values per sample</summary>',
+    html_table(data.frame(Sample = names(f$filled_per_sample), Filled = fmt_n(unlist(f$filled_per_sample))), 2), '</details>') else ""
+  extra <- if (isTRUE(suppressWarnings(as.numeric(f$identified_but_empty)) > 0))
+    sprintf('<p class="note">%s values are identified (q &le; %s) but have no quantity in the export.</p>', fmt_n(f$identified_but_empty), f$q_cut) else ""
+  meaning <- if (f$mode == "background") "Background signal is real extracted signal, kept as values but marked as filled: later steps use only measured values for filtering and normalization factors."
+             else "Every value present is measured. Empty values are filled by the pipeline's Impute step."
+  paste0('<section><h2>Spectronaut export: ', esc(f$mode), '</h2><p>Type ', how, '. ', meaning, '</p>', tiles, extra, per, '</section>')
 }

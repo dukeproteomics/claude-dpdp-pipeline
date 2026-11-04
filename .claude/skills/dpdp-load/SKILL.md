@@ -13,8 +13,18 @@ description: Step 1 of the DPDP proteomics pipeline (same as the Shiny app's Loa
 ## Run
 ```bash
 cd /home/user/Claude_Shiny
-Rscript pipeline/steps/01_load.R --design=<xlsx> --data=<report> --prefix=<prefix> [--outdir=data] [--overwrite]
+Rscript pipeline/steps/01_load.R --design=<xlsx> --data=<report> --prefix=<prefix> [--outdir=data] [--overwrite] \
+  [--sp_fill=raw|background] [--sp_qvalue=0.01]
 ```
+- **Spectronaut export type** (user decision 2026-11-04; `pipeline/spectronaut.R`). Accepted: **raw** (no background, no imputation)
+  and **background-signal** exports, one TSV. Load checks before creating anything:
+  - `EG.IsImputed = True` anywhere: global / run-wise imputation export, **refused** (the flag also marks measured values).
+  - Run-wise `EG.Qvalue` present: values with q > `sp_qvalue` (or no q) are background signal, so the export is `background`;
+    none means `raw`. `--sp_fill` may state the type; a mismatch stops Load.
+  - No run-wise `EG.Qvalue`: Load stops and asks. If the user says it is raw, rerun with `--sp_fill=raw`. A background export without
+    q-values is refused (re-export with `EG.Qvalue`).
+  - Output: param `sp_fill_mode` (raw/background) and table `precursor_fill` (same rows as `precursor_raw`, 1 = background signal).
+  - **Steps 4-7 refuse background runs for now** (`stop_if_background()` in `common.R`) until they use the mask.
 - Use plain `Rscript` (not `--vanilla`); packages are in `/home/R_Packages`.
 - Output folder: `data/<prefix>/` with `<prefix>.db`, `Backup/` (design copy + archived app code), `QC/`, `Error/`, etc.
 - **`--overwrite` deletes the existing project folder.** Only use it with the user's OK.
@@ -27,7 +37,8 @@ Read `data/<prefix>/steps/01_load/summary.json` and report:
 3. **Sample ID check:** `app_check` must be TRUE for every sample, otherwise **stop**. The design order or the export is wrong.
    `full_id_check` FALSE for **SPQC** samples is fine (pooled QC, order within SPQC doesn't matter).
 4. **Missingness per sample:** point out samples well above the others. Don't decide anything here; it feeds TIC (Step 2) and QC.
-5. **Organisms:** the main species plus a few others is normal.
+5. **Spectronaut export** (`spectronaut_fill`): type, measured, filled by Spectronaut, empty. Say which it is and what it means.
+6. **Organisms:** the main species plus a few others is normal.
 
 ## Review page and decision
 The step builds **`data/<prefix>/review/01_load.html`**: detected format, counts, the sample sheet with each sample's matched data
