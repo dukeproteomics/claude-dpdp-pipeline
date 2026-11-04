@@ -19,6 +19,8 @@ Read `PLAN.md` first: it has the plan, the status of each step, and the test dat
 ## Git
 - Repo: https://github.com/dukeproteomics/claude-dpdp-pipeline (public). Commit as the repo-local identity `dukeproteomics`
   (already set in `.git/config`), never the global identity, which belongs to the app's GitHub account.
+- Pushing uses `gh` (logged in as dukeproteomics) through a repo-local credential helper in `.git/config`. The global helper
+  (`store`, gmw12) is for the user's other repos: don't change it. If a push gets 403 for gmw12, the local helper is missing.
 - `.gitignore` keeps out `data/`, the app clones (`shiny_DPDP*/`, which also hold a credentials file), `dist/`, and data file types.
   Check `git status` before committing; never force-add those.
 - Commit after each finished piece of work and push to `origin main` when the user asks to back up.
