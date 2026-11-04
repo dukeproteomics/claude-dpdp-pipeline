@@ -5,8 +5,8 @@ data/
 *.xlsx
 *.zip
 
-# The shiny_DPDP app has its own repository (and a credentials file); the pipeline records the app commit instead
-shiny_DPDP/
+# The shiny_DPDP app is a git submodule (shiny_DPDP/, fork dukeproteomics/shiny_DPDP pinned to the commit the pipeline uses).
+# shiny_DPDP-main/ is an old unzipped copy of the app.
 shiny_DPDP-main/
 
 # Build output (rebuilt by tools/build_plugin.sh)

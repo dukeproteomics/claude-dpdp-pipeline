@@ -1,0 +1,3 @@
+[submodule "shiny_DPDP"]
+	path = shiny_DPDP
+	url = https://github.com/dukeproteomics/shiny_DPDP.git
