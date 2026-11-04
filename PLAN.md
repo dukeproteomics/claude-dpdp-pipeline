@@ -135,6 +135,10 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     cutoff). The other ~11,500 need another rule (candidates: precursor PEP cutoff, minimum fragments for quantification).
   - Background can't fill 3,956 gaps although RT and q exist for 3,943 of them: no usable signal at the expected position.
   - **Mask for the pipeline: filled = empty in the no-imputation export (exact). Keep `EG.IsImputed` as a second flag for "weak measured value".**
+  - **User requirement (2026-11-04): one Spectronaut analysis, one TSV.** Single-export rules (script 13): `q > 0.01 (or no q)` finds 81% of
+    fills with zero measured values misclassified; the other 13,573 fills (identified, q <= 0.01, but blanked by Spectronaut) can't be told
+    apart from flagged measured values in a global/run-wise export (2% false calls if the fill range is used). In a background export those
+    13,573 hold real extracted signal (median 0.58 log2 below the precursor's level, between measured and q > 0.01 fills).
   - To settle the rest: Spectronaut analysis settings (identification cutoffs incl. PEP and run-wise protein q; quantification filtering,
     minimum fragments, interference correction), per-run EG.PEP, per-run PG.Quantity in the none vs global exports, fragment-level columns
     for a subset.

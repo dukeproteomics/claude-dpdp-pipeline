@@ -20,3 +20,4 @@ Run from the project root with plain `Rscript` (needs data.table). Inputs: `$SPN
 | 10_protein_level_fdr.R | identified (q <= 0.01) but blanked values | ~15% from whole protein groups blanked in a run (protein-level FDR) |
 | 11_flag_vs_own_level.R | flagged values vs their precursor's own level | centred (-0.06 log2) but noisier (IQR +/-0.5 vs +/-0.2) |
 | 12_background_gaps.R | gaps background could not fill | 3,956; RT/q known for 3,943 (no usable signal) |
+| 13_single_export_rules.R | can ONE export tell measured from filled? (scored against the no-imputation export) | q > 0.01 finds 81% of fills with no false calls; the 13,573 identified-but-blanked fills can't be separated exactly |
