@@ -3,10 +3,25 @@
 analyst has answered since the last such command. One decision per answer: Claude cannot chain several applies, or
 apply before the analyst has said anything.
 
-"Answered" = a user message typed by the analyst, or an AskUserQuestion answer, in the session transcript.
+"Answered" = a user message typed by the analyst, or an AskUserQuestion answer, in the session transcript, or a decision for
+this step sent from the review page (<run>/review/pending_decision.json, written by pipeline/review_server.py).
 Exit 2 blocks the tool call; the message on stderr goes back to Claude.
 """
-import json, sys
+import json, os, re, sys
+
+
+def page_decision_for(cmd):
+    """True if the command's run has a pending review-page decision for the command's step."""
+    m = re.search(r"--db=(\S+)", cmd)
+    if not m:
+        return False
+    run_dir = os.path.dirname(os.path.abspath(m.group(1).strip("'\"")))
+    s = re.search(r"steps/(\d\d)_\w+\.R", cmd) or re.search(r"--step=(\d\d)_\w+", cmd)
+    try:
+        rec = json.load(open(os.path.join(run_dir, "review", "pending_decision.json")))
+    except Exception:
+        return False
+    return bool(s) and str(rec.get("step", "")).startswith(s.group(1) + "_")
 
 def main():
     try:
@@ -17,6 +32,8 @@ def main():
         return 0
     cmd = (data.get("tool_input") or {}).get("command", "")
     if "--decided_by=user" not in cmd or "pipeline/" not in cmd:
+        return 0
+    if page_decision_for(cmd):
         return 0
     path = data.get("transcript_path")
     if not path:

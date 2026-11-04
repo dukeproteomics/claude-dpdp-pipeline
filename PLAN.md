@@ -107,6 +107,12 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   `tools/renv/README.md` (restore steps, Ubuntu system libraries). Copied into the plugin as `renv/`. Partial restore tested.
   Not locked: rmotifx, PTMphinder (Phos only, not installed).
 
+## In-page decisions (option B, built 2026-11-04)
+- `pipeline/review_server.py` (localhost only, per-start token, writes only `review/pending_decision.json`), a form on every page
+  (`pipeline/review.R`: `decision_spec()` + `DECISION_JS`), `pipeline/wait_decision.py`, `log_decision()` archives the page decision and logs
+  `source`. The plugin hook accepts a pending page decision for the same step. Tested end to end with curl + headless Chrome; not yet
+  clicked by the user.
+
 ## App issues found (not fixed; the app is reference only)
 - `table_exists()` uses unqualified `dbConnect` (works only because the app loads RSQLite).
 - `create_dir()` deletes an existing folder.

@@ -37,11 +37,11 @@ review_stats <- function(db_path) {
   cres <- if (!is.null(summ$comparisons)) setNames(summ$comparisons, vapply(summ$comparisons, function(x) x$comparison, "")) else list()
 
   status <- if (applied) "Stats calculated: review the results" else "Waiting for approval of the settings"
-  status_class <- if (applied) "done" else "waiting"
+  status_class <- "waiting"
   dec <- read_decisions(run_dir, "10_stats")
   acc_dec <- Filter(function(r) identical(r$settings$accepted, TRUE), dec); last_acc <- if (length(acc_dec)) acc_dec[[length(acc_dec)]] else NULL
   if (!is.null(last_acc) && !is.null(summ$generated) && last_acc$time < summ$generated) last_acc <- NULL
-  if (!is.null(last_acc)) { status <- "Results accepted"; }
+  if (!is.null(last_acc)) { status <- "Results accepted"; status_class <- "done" }
 
   set_df <- data.frame(Setting = c("Normalization tested", "Pooled QC carried along", "p-value cutoff", "Fold change cutoff",
                                    "Up/Down calls use", "Adjusted p column", "Missing factor", "Peptide refilter"),
@@ -111,7 +111,8 @@ review_stats <- function(db_path) {
   extra_css <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; --up:#e34948; --down:#2a78d6; } td.flag { color:var(--warn-ink); font-weight:600; } section h3 { font-size:15px; margin:14px 0 4px; }
 .control select { font:inherit; font-size:13px; } .control input[type=range] { width:160px; } .control .val { min-width:60px; }</style>'
   body <- paste0(decision_html, res_html, volc_html, pca_html, graphs_html, js)
-  write_review_page(run_dir, "10_stats", "Step 10 - Stats", status, status_class, body, extra_head = extra_css)
+  write_review_page(run_dir, "10_stats", "Step 10 - Stats", status, status_class, body, extra_head = extra_css,
+                    decision_variant = if (applied) "results" else "")
 }
 
 STATS_JS <- '

@@ -120,6 +120,9 @@ function spikeDraw() {
     tiles += `<div class="tile"><div class="v">${fmt(mP)}</div><div class="l">${D.pool} mean</div></div><div class="tile"><div class="v">${fmt(mS)}</div><div class="l">mean of the study samples (what a pool should show)</div></div><div class="tile"><div class="v">${(mP / mS).toFixed(2)}</div><div class="l">${D.pool} / study mean</div></div>`; }
   tiles += `<div class="tile"><div class="v">${flag.filter(f => f).length} of ${flag.length}</div><div class="l">samples outside ±${tol}%</div></div>`;
   document.getElementById("spiketiles").innerHTML = tiles;
+  const flagged = D.samples.filter((s, i) => flag[i] && !(isPool[i] && D.pool)).join(",");
+  window.DPDP_PREFILL = Object.assign(window.DPDP_PREFILL || {}, { flag_samples: flagged });
+  if (window.dpdpSetField) window.dpdpSetField("flag_samples", flagged);
   document.getElementById("spiketable").innerHTML = "<table><thead><tr><th>Sample</th><th>Group</th><th class=num>level</th><th class=num>measured</th><th class=num>expected</th><th class=num>measured / expected</th><th class=num>precursors measured</th><th></th></tr></thead><tbody>" +
     D.samples.map((s, i) => `<tr><td>${s}</td><td>${D.groups[i]}</td><td class=num>${isPool[i] && D.pool ? "pool" : S.level[i]}</td><td class=num>${fmt(S.intensity[i])}</td><td class=num>${fmt(exp[i])}</td><td class=num>${ratio[i].toFixed(2)}</td><td class=num>${D.spike_prec.measured[i]} of ${D.spike_prec.total}</td><td class="${flag[i] ? "flag" : ""}">${flag[i] ? (ratio[i] > 1 ? "high" : "low") + (isPool[i] && D.pool ? " vs study mean" : " - check sample") : ""}</td></tr>`).join("") + "</tbody></table>";
 }

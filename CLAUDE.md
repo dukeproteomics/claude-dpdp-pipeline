@@ -10,8 +10,9 @@ Read `PLAN.md` first: it has the plan, the status of each step, and the test dat
   `data/<prefix>/steps/NN_<step>/summary.json` and appends to `data/<prefix>/decisions.jsonl`.
 - `pipeline/compare.R`: compares tables/params against a Shiny reference `.db`.
 - `.claude/skills/dpdp-<step>/SKILL.md`: how to run and read each step, including the user's rules. `dpdp-run`: start to end.
-- Every step builds an HTML review page in `data/<prefix>/review/` (`pipeline/reviews/NN_<step>.R`). Give the analyst the path, ask
-  the decision with AskUserQuestion, then apply with `--decided_by=user --analyst=<name>`. One decision per answer.
+- Every step builds an HTML review page in `data/<prefix>/review/` (`pipeline/reviews/NN_<step>.R`) with a decision form. Serve the pages
+  with `pipeline/review_server.py` (localhost:8765); the analyst clicks **Send to Claude**, and `pipeline/wait_decision.py` (run in the
+  background) returns the choice. Or ask in the chat. Then apply with `--decided_by=user`. One decision per answer. See skill `dpdp-run`.
 - `tools/build_plugin.sh` builds the shareable plugin in `dist/dpdp-marketplace/`. Edit sources here, not in `dist/`.
 - Run R with plain `Rscript`, never `--vanilla` (packages are in `/home/R_Packages`).
 - Work one step at a time. Show results, recommend options, and let the user decide before

@@ -58,8 +58,23 @@ write_summary <- function(summary, dir) {
 
 # Append every option choice to <run_dir>/decisions.jsonl.
 log_decision <- function(run_dir, step, settings, note = "", analyst = NULL) {
+  # A decision sent from the review page (review/pending_decision.json, written by pipeline/review_server.py) for this step is
+  # archived to review/decisions_done/ and noted in the log. Its analyst/note fill in when the command line didn't give them.
+  pend <- file.path(run_dir, "review", "pending_decision.json")
+  page <- NULL
+  if (file.exists(pend)) {
+    pd <- tryCatch(fromJSON(pend), error = function(e) NULL)
+    if (!is.null(pd) && identical(pd$step, step)) {
+      done <- file.path(run_dir, "review", "decisions_done"); dir.create(done, showWarnings = FALSE)
+      file.rename(pend, file.path(done, paste0(format(Sys.time(), "%Y%m%d_%H%M%S"), "_", step, ".json")))
+      page <- list(choice = pd$choice, submitted = pd$submitted)
+      if (is.null(analyst) && nzchar(pd$analyst %||% "")) analyst <- pd$analyst
+      if (!nzchar(note %||% "") && nzchar(pd$note %||% "")) note <- pd$note
+    }
+  }
   rec <- list(time = format(Sys.time(), "%Y-%m-%d %H:%M:%S"), step = step,
-              analyst = analyst %||% Sys.getenv("USER"), settings = settings, note = note)
+              analyst = analyst %||% Sys.getenv("USER"), settings = settings, note = note,
+              source = if (is.null(page)) "chat" else "review page", page_choice = page$choice)
   cat(toJSON(rec, auto_unbox = TRUE), "\n", file = file.path(run_dir, "decisions.jsonl"),
       append = TRUE, sep = "")
 }

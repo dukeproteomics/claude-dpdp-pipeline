@@ -71,32 +71,119 @@ pre { background:var(--grid); padding:10px; border-radius:6px; overflow-x:auto; 
 .control { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:6px 0 10px; }
 .control input[type=range] { width:420px; } .control .val { font-weight:600; font-variant-numeric: tabular-nums; min-width:200px; }
 .nextbox { border:2px solid var(--warn-ink); background:var(--warn-bg); } .nextbox h2 { color:var(--warn-ink); }
+.dchoice { margin:6px 0; } .dfield { margin-left:18px; color:var(--text-secondary); font-size:14px; } .dfield input, .dfield select, .dbar input { font:inherit; font-size:14px; padding:2px 6px; }
+.dbar { margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; } .dsend { font:inherit; font-weight:600; padding:6px 16px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; } .dsend:disabled { opacity:0.5; cursor:default; }
+.dmsg { font-weight:600; color:var(--text-primary); }
 .nextbox.done { border-color:var(--ok-ink); background:var(--ok-bg); } .nextbox.done h2 { color:var(--ok-ink); }
 .control button { font:inherit; font-size:13px; padding:3px 10px; border:1px solid var(--rule); border-radius:6px; background:var(--surface-1); color:var(--text-primary); cursor:pointer; }
 "
 
-# What the analyst does next, shown at the top of every page. Options match the AskUserQuestion choices in each step's skill.
-NEXT_STEP <- list(
-  "01_load"       = list(q = "Does the design match the data?", opts = c("Yes, continue", "No, fix the sample sheet"), nxt = "Step 3 - Parameters"),
-  "03_parameters" = list(q = "Keep these parameters?", opts = c("Yes, continue", "Change settings"), nxt = "Step 4 - Noise"),
-  "04_noise"      = list(q = "Which noise setting? Then: use noise_keep?", opts = c("none", "dynamic", "fixed (give a value)"), nxt = "Step 5 - Filter"),
-  "05_filter"     = list(q = "Apply these filter settings?", opts = c("Apply as shown", "Change settings"), nxt = "Step 6 - Normalize"),
-  "06_normalize"  = list(q = "Which proteins to leave out of the factors, and which method?", opts = c("Exclude: pipeline default / keep current / your regex", "Method: sltmm / sl / tmm / other"), nxt = "Step 7 - Impute"),
-  "07_impute"     = list(q = "How should the data be imputed?", opts = c("duke as shown", "bottomx only", "Change values"), nxt = "Step 8 - Rollup"),
-  "08_rollup"     = list(q = "Which rollup?", opts = c("iq_maxlfq, scaled", "iq_maxlfq, not scaled", "sum"), nxt = "Step 9 - QC"),
-  "09_qc"         = list(q = "Accept the QC and continue to Stats?", opts = c("Accept", "Accept and flag samples", "Stop here"), nxt = "Step 10 - Stats"),
-  "10_stats"      = list(q = "Run stats with these settings (then: accept the results)?", opts = c("Run as shown / Accept", "Change settings or cutoffs", "Change comparisons"), nxt = "Finished (Pathway and Report are not built yet)"))
+# What the analyst does next, shown at the top of every page: the decision form (sent to Claude through pipeline/review_server.py)
+# while the step waits, or what comes next when it is done. Choices match the AskUserQuestion options in each step's skill.
+ch <- function(value, label, fields = list()) list(value = value, label = label, fields = fields)
+fld <- function(name, label, type = "text", default = "", options = NULL) list(name = name, label = label, type = type, default = default, options = options)
 
-next_step_box <- function(step, status_class) {
-  n <- NEXT_STEP[[step]]; if (is.null(n)) return("")
-  if (identical(status_class, "waiting"))
-    sprintf('<section class="nextbox"><h2>Next step: answer in the Claude window</h2><p>Go back to the Claude session. It is asking: <b>%s</b></p><p>Options: %s. You can also type your own answer there.</p></section>',
-            esc(n$q), paste0("<b>", esc(n$opts), "</b>", collapse = " / "))
-  else sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude continues in the session.</p></section>', esc(n$nxt))
+decision_spec <- function(step, variant, p) {
+  g <- function(k, d = "") { v <- p[[k]]; if (is.null(v) || length(v) == 0 || is.na(v[1])) d else as.character(v[1]) }
+  switch(paste0(step, if (nzchar(variant)) paste0(":", variant) else ""),
+    "01_load" = list(q = "Does the design match the data?", nxt = "Step 3 - Parameters", choices = list(
+      ch("accept", "Yes, continue"), ch("fix", "No, fix the sample sheet", list(fld("problem", "What is wrong?"))))),
+    "03_parameters" = list(q = "Keep these parameters?", nxt = "Step 4 - Noise", choices = list(
+      ch("accept", "Yes, continue"), ch("change", "Change settings", list(fld("change", "Which setting and value?"))))),
+    "04_noise" = list(q = "Which noise setting?", nxt = "Step 5 - Filter", choices = list(
+      ch("none", "none - keep every value"),
+      ch("dynamic", paste0("dynamic - remove values below the inflection (", g("noise_inflection"), ")"), list(fld("noise_keep", "noise_keep (put values back for precursors that pass the filter)", "checkbox", "false"))),
+      ch("fixed", "fixed - remove values below a baseline", list(fld("noise_baseline_value", "baseline intensity", "number", g("noise_baseline_value", "1")),
+                                                              fld("noise_keep", "noise_keep (put values back for precursors that pass the filter)", "checkbox", "false"))))),
+    "05_filter" = list(q = "Apply these filter settings?", nxt = "Step 6 - Normalize", choices = list(
+      ch("apply", "Apply as shown"), ch("change", "Change settings", list(fld("change", "Which filter and value? (e.g. misaligned_cutoff=60)"))))),
+    "06_normalize" = list(q = "Which proteins to leave out of the factors, and which method?", nxt = "Step 7 - Impute",
+      global = list(fld("norm_type", "Method", "select", "sltmm", c("sltmm", "sl", "tmm", "quantile", "loess", "vsn", "lr"))),
+      choices = list(ch("default_exclude", "Exclude: pipeline default (added material only)"), ch("current_exclude", "Exclude: keep the current rule"),
+                     ch("custom_exclude", "Exclude: my own regex", list(fld("norm_exclude_grep", "description regex", "text", g("norm_exclude_grep")))))),
+    "07_impute" = list(q = "How should the data be imputed?", nxt = "Step 8 - Rollup", choices = list(
+      ch("duke", "duke (near the group mean), bottom-X for the rest", list(fld("missing_cutoff", "missing_cutoff %", "number", g("missing_cutoff", "50")), fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
+      ch("bottomx", "bottomx only", list(fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))))),
+    "08_rollup" = list(q = "Which rollup?", nxt = "Step 9 - QC", choices = list(
+      ch("iq_maxlfq_scaled", "iq_maxlfq, scaled"), ch("iq_maxlfq", "iq_maxlfq, not scaled"), ch("sum", "sum"))),
+    "09_qc" = list(q = "Accept the QC and continue to Stats?", nxt = "Step 10 - Stats", choices = list(
+      ch("accept_flag", "Accept and flag samples", list(fld("flag_samples", "samples to flag (comma separated)", "text", ""))),
+      ch("accept", "Accept"), ch("stop", "Stop here"))),
+    "10_stats" = list(q = "Run stats with these settings?", nxt = "Stats results", choices = list(
+      ch("run", "Run as shown"), ch("run_adjp", "Run, with Up/Down calls by adjusted p"),
+      ch("change", "Change settings or comparisons", list(fld("change", "What to change?"))))),
+    "10_stats:results" = list(q = "Accept the stats results?", nxt = "Finished (Pathway and Report are not built yet)", choices = list(
+      ch("accept", "Accept"), ch("change", "Change cutoffs and re-run", list(fld("change", "New p type / p cutoff / FC cutoff"))),
+      ch("plots", "Add protein plots", list(fld("proteins", "accessions (comma separated)"))))),
+    NULL)
 }
 
-write_review_page <- function(run_dir, step, title, status, status_class, body, extra_head = "") {
-  body <- paste0(next_step_box(step, status_class), body)
+next_step_box <- function(run_dir, step, status_class, variant = "") {
+  db <- file.path(run_dir, paste0(basename(run_dir), ".db"))
+  if (!file.exists(db)) db <- list.files(run_dir, pattern = "\\.db$", full.names = TRUE)[1]
+  p <- if (!is.na(db) && file.exists(db)) tryCatch(get_params(db), error = function(e) list()) else list()
+  spec <- decision_spec(step, variant, p)
+  if (is.null(spec)) return("")
+  if (!identical(status_class, "waiting"))
+    return(sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude continues in the session.</p></section>', esc(spec$nxt)))
+  sprintf('<section class="nextbox" id="decision"><h2>Your decision: %s</h2><div id="dform"></div>
+<p class="note" id="dhelp">Pick an option and press <b>Send to Claude</b>, or answer in the Claude window instead.</p></section>
+<script>window.DPDP_DECISION = %s;</script>', esc(spec$q),
+    toJSON(list(run = basename(run_dir), step = step, spec = spec), auto_unbox = TRUE, null = "null"))
+}
+
+DECISION_JS <- '
+(function () {
+  const S = window.DPDP_DECISION; if (!S) return;
+  const box = document.getElementById("dform"), help = document.getElementById("dhelp");
+  const token = document.querySelector("meta[name=dpdp-token]").content, served = location.protocol.startsWith("http") && token !== "__DPDP_" + "TOKEN__";
+  const el = (t, a = {}, h = "") => { const e = document.createElement(t); Object.entries(a).forEach(([k, v]) => e.setAttribute(k, v)); e.innerHTML = h; return e; };
+  const field = (f, pre) => { const w = el("label", { class: "dfield" }, f.label + " ");
+    let inp;
+    if (f.type === "select") { inp = el("select"); (f.options || []).forEach(o => inp.appendChild(el("option", o === f.default ? { selected: "" } : {}, o))); }
+    else if (f.type === "checkbox") { inp = el("input", { type: "checkbox" }); inp.checked = f.default === "true"; }
+    else { inp = el("input", { type: f.type === "number" ? "number" : "text", step: "any", size: "40" }); inp.value = f.default || ""; }
+    inp.dataset.name = f.name; inp.dataset.pre = pre; w.appendChild(inp); return w; };
+  S.spec.choices.forEach((c, i) => {
+    const row = el("div", { class: "dchoice" }), lab = el("label");
+    const r = el("input", { type: "radio", name: "dchoice", value: c.value }); if (i === 0) r.checked = true;
+    lab.appendChild(r); lab.appendChild(document.createTextNode(" " + c.label)); row.appendChild(lab);
+    (c.fields || []).forEach(f => row.appendChild(field(f, c.value))); box.appendChild(row); });
+  (S.spec.global || []).forEach(f => box.appendChild(field(f, "")));
+  const note = el("input", { type: "text", size: "60", placeholder: "optional: why (goes in the decision log)" });
+  const who = el("input", { type: "text", size: "20", placeholder: "your name" }); who.value = localStorage.getItem("dpdp_analyst") || "";
+  const bar = el("div", { class: "dbar" }); bar.appendChild(el("span", {}, "Note ")); bar.appendChild(note); bar.appendChild(el("span", {}, " Analyst ")); bar.appendChild(who);
+  const btn = el("button", { type: "button", class: "dsend" }, "Send to Claude"); bar.appendChild(btn); box.appendChild(bar);
+  const msg = el("p", { class: "dmsg" }); box.appendChild(msg);
+  window.dpdpSetField = (name, value) => { box.querySelectorAll("[data-name=\\"" + name + "\\"]").forEach(i => { if (!i.dataset.edited) i.value = value; }); };
+  Object.entries(window.DPDP_PREFILL || {}).forEach(([k, v]) => window.dpdpSetField(k, v));
+  box.addEventListener("input", e => { if (e.target.dataset) e.target.dataset.edited = "1"; });
+  if (!served) { btn.disabled = true; msg.innerHTML = "Buttons need the review server. Ask Claude to start it, then open <code>http://127.0.0.1:8765/" + S.run + "/review/" + S.step + ".html</code>. Or answer in the Claude window."; return; }
+  let mtime0 = null;
+  const poll = () => fetch("/api/status?run=" + encodeURIComponent(S.run) + "&step=" + S.step).then(r => r.json()).then(st => {
+    if (mtime0 === null) mtime0 = st.page_mtime; else if (st.page_mtime > mtime0) { location.reload(); return; }
+    if (st.pending_step === S.step && !btn.disabled) { btn.disabled = true; msg.textContent = "A decision for this step is waiting for Claude."; }
+  }).catch(() => {});
+  poll(); setInterval(poll, 2000);
+  btn.addEventListener("click", () => {
+    const choice = box.querySelector("input[name=dchoice]:checked").value, fields = {};
+    box.querySelectorAll("[data-name]").forEach(i => { if (i.dataset.pre === "" || i.dataset.pre === choice) fields[i.dataset.name] = i.type === "checkbox" ? String(i.checked) : i.value; });
+    localStorage.setItem("dpdp_analyst", who.value);
+    btn.disabled = true; msg.textContent = "Sending...";
+    fetch("/api/decision", { method: "POST", headers: { "Content-Type": "application/json", "X-DPDP-Token": token },
+      body: JSON.stringify({ run: S.run, step: S.step, choice: choice, fields: fields, note: note.value, analyst: who.value }) })
+      .then(r => r.json().then(j => ({ ok: r.ok, j }))).then(({ ok, j }) => {
+        if (!ok) { btn.disabled = false; msg.textContent = "Not sent: " + (j.error || "error"); return; }
+        msg.textContent = "Sent to Claude at " + j.submitted.slice(11, 16) + ". This page reloads when Claude has applied it.";
+        help.textContent = ""; })
+      .catch(() => { btn.disabled = false; msg.textContent = "Not sent: is the review server running?"; });
+  });
+})();
+'
+
+write_review_page <- function(run_dir, step, title, status, status_class, body, extra_head = "", decision_variant = "") {
+  body <- paste0(next_step_box(run_dir, step, status_class, decision_variant), body, '<script>', DECISION_JS, '</script>')
+  extra_head <- paste0('<meta name="dpdp-token" content="__DPDP_TOKEN__"/>', extra_head)
   p_prefix <- basename(run_dir)
   html <- sprintf('<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>%s - %s</title><style>%s</style>%s</head><body><div class="viz-root">

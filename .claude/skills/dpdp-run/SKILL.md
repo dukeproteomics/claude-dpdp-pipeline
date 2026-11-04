@@ -6,9 +6,34 @@ description: Start-to-end guide for the DPDP proteomics pipeline (Claude version
 # DPDP pipeline: start to end
 
 The analyst makes every decision. At each step: run the preview, give the analyst the **review page** path (offer `xdg-open <path>`),
-summarize what it shows in neutral terms, ask with **AskUserQuestion** (no option marked as recommended unless they ask for an opinion),
-then apply with `--decided_by=user --analyst=<name>` and the reason in `--note`. **One decision per answer.** The plugin's hook blocks a
+summarize what it shows in neutral terms, let the analyst decide on the page (below) or ask in the chat with **AskUserQuestion**
+(no option marked as recommended unless they ask for an opinion), then apply with `--decided_by=user --analyst=<name>` and the reason in `--note`. **One decision per answer.** The plugin's hook blocks a
 second `--decided_by=user` command if the analyst has not answered in between.
+
+## In-page decisions (default)
+The analyst can decide **on the review page** (radio buttons, fields, a note, and **Send to Claude**) or in the chat. Both work.
+1. Once per session, start the server in the background: `python3 pipeline/review_server.py` (http://127.0.0.1:8765, localhost only).
+2. Open each page through it: `xdg-open http://127.0.0.1:8765/<prefix>/review/<step>.html`. Opened as a file, the buttons are disabled.
+3. Start the wait in the background: `python3 pipeline/wait_decision.py --run=<run_dir> --step=<step>`. Then tell the analyst
+   "choose on the page, or reply here" and **end your turn**. Don't call AskUserQuestion at the same time: it blocks the session.
+4. When the wait finishes, read its JSON (`choice`, `fields`, `note`, `analyst`) and run the matching command below with
+   `--decided_by=user`. The analyst and note come from the page automatically. `log_decision()` archives the page decision to
+   `review/decisions_done/` and logs `source: "review page"`; the page then reloads itself.
+5. If the analyst replies in the chat instead, stop the background wait and use their answer.
+6. A choice that needs discussion ("change": free text) goes back to the chat. Show what you would run, and confirm first.
+
+| Step | choice -> command |
+|---|---|
+| 01_load | `accept` -> `accept.R --step=01_load`; `fix` -> stop, discuss `fields.problem` |
+| 03_parameters | `accept` -> `accept.R --step=03_parameters`; `change` -> re-run 03 with the change, then ask again |
+| 04_noise | `none` / `dynamic` / `fixed` -> `04_noise.R --action=apply --noise_type=<choice>` [`--noise_baseline_value`] [`--noise_keep=TRUE` if `fields.noise_keep` is true] |
+| 05_filter | `apply` -> `05_filter.R --action=apply` with the previewed settings; `change` -> re-preview with the change |
+| 06_normalize | `default_exclude` -> default rule; `current_exclude` -> current `norm_exclude_grep`; `custom_exclude` -> preview with `fields.norm_exclude_grep` first, then apply. Method = `fields.norm_type` |
+| 07_impute | `duke` / `bottomx` -> `07_impute.R --action=apply --impute_type=<choice> --missing_cutoff --bottom_x` from the fields (re-preview first if they changed) |
+| 08_rollup | `iq_maxlfq_scaled` -> `--rollup_method=iq_maxlfq --maxlfq_scale=TRUE`; `iq_maxlfq` -> `... --maxlfq_scale=FALSE`; `sum` -> `--rollup_method=sum` |
+| 09_qc | `accept_flag` -> `09_qc.R --action=accept --flag_samples=<fields.flag_samples>`; `accept` -> `--action=accept`; `stop` -> stop |
+| 10_stats (settings) | `run` -> `10_stats.R --action=apply`, then 10b and 10c; `run_adjp` -> the same with `--checkbox_filter_adjpval=TRUE`; `change` -> discuss |
+| 10_stats (results) | `accept` -> `10_stats.R --action=accept`; `change` -> discuss, then re-run; `plots` -> `10c --proteins=<fields.proteins>`, then ask again |
 
 ## Setup (once per machine)
 - R with the app's packages. On the lab Linux PC they are in `/home/R_Packages`. **Run plain `Rscript`, never `--vanilla`.**
