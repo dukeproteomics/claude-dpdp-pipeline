@@ -84,14 +84,22 @@ Without noise_keep, removed values stay missing and are imputed later.</p>',
     '</div></section>')
 
   qc <- p$qc_path
-  graphs <- paste0('<section><h2>Graphs</h2><div class="grid2">',
-    embed_png(file.path(qc, "Inflection_Point.png"), "Inflection point plot",
-              "App plot: sorted log2 intensities with the inflection point. Values below it are what 'dynamic' removes."),
-    embed_png(file.path(qc, "Precursor_Start_Histogram.png"), "Start histogram",
-              "App plot: log2 intensity histogram of the starting data. A noise population shows as a shoulder or second peak at the low end."),
-    if (!is.null(applied)) embed_png(file.path(qc, "Precursor_NoiseFiltered_Histogram.png"), "Noise filtered histogram",
-                                     "App plot: histogram after the noise step.") else "",
-    '</div></section>')
+  # Interactive version of the app's inflection plot: every data point sorted from highest to lowest log2 intensity
+  # (every 50th point drawn), with the inflection (dynamic) and fixed baseline marked.
+  sv <- sort(lg[!is.na(lg)], decreasing = TRUE); keep <- unique(c(seq(1, length(sv), by = 50), length(sv)))
+  curve <- list(x = keep, y = round(sv[keep], 3), n = length(sv),
+                infl_log2 = if (have_infl) log2(infl) else NA, infl_rank = if (have_infl) sum(sv >= log2(infl)) else NA,
+                fixed_log2 = if (fixed > 0) log2(fixed) else NA)
+  graphs <- paste0('<section><h2>Graphs</h2><h3>Sorted intensities (inflection plot)</h3>',
+    '<p class="note">Every measured value, sorted from highest to lowest. The curve drops steeply at the low end; the inflection is where that drop starts. ',
+    'Values right of the orange line are what <b>dynamic</b> removes; zoom into the tail to see it.</p>',
+    '<div id="inflplot" style="height:380px" role="img" aria-label="Sorted log2 intensities with the inflection point"></div>',
+    sprintf('<script>window.DPDP_CURVE = %s;</script>', toJSON(curve, auto_unbox = TRUE, digits = NA, na = "null")),
+    '<details><summary>The app&apos;s original plots</summary><div class="grid2">',
+    embed_png(file.path(qc, "Inflection_Point.png"), "Inflection point plot", "App plot: inflection point."),
+    embed_png(file.path(qc, "Precursor_Start_Histogram.png"), "Start histogram", "App plot: start histogram."),
+    if (!is.null(applied)) embed_png(file.path(qc, "Precursor_NoiseFiltered_Histogram.png"), "Noise filtered histogram", "App plot: histogram after the noise step.") else "",
+    '</div></details></section>')
 
   explorer_html <- sprintf('<section><h2>Cutoff explorer</h2>
 <p class="note">Move the slider to see what any cutoff would remove. It is a guide for choosing; the exact counts for fixed and
@@ -150,6 +158,18 @@ slider.addEventListener("input", update);
 document.querySelectorAll("[data-jump]").forEach(b => b.addEventListener("click", () => {
   const v = b.dataset.jump === "inflection" ? D.inflection : D.fixed; if (v > 0) { slider.value = idxFor(v); update(); } }));
 slider.value = D.inflection > 0 ? idxFor(D.inflection) : 0; update();
+(function () { const K = window.DPDP_CURVE; if (!K) return;
+  const sh = [], an = [];
+  if (K.infl_rank !== null) { sh.push({ type: "line", x0: K.infl_rank, x1: K.infl_rank, y0: 0, y1: 1, yref: "paper", line: { color: C("--ref-dynamic"), width: 2 } });
+    an.push({ x: K.infl_rank, y: 0.95, yref: "paper", xanchor: "right", xshift: -4, showarrow: false, text: "dynamic: " + fmt(K.n - K.infl_rank) + " values below " + D.inflection, font: { size: 12, color: C("--text-primary") } }); }
+  if (K.fixed_log2 !== null) { sh.push({ type: "line", x0: 0, x1: 1, xref: "paper", y0: K.fixed_log2, y1: K.fixed_log2, line: { color: C("--ref-fixed"), width: 2, dash: "dot" } });
+    an.push({ x: 0.02, xref: "paper", y: K.fixed_log2, yanchor: "bottom", showarrow: false, text: "fixed baseline " + D.fixed, font: { size: 12, color: C("--text-primary") } }); }
+  Plotly.newPlot("inflplot", [{ type: "scattergl", mode: "lines", x: K.x, y: K.y, line: { width: 2, color: C("--series-1") },
+    hovertemplate: "rank %%{x:,}<br>log2 %%{y:.2f}<extra></extra>" }],
+    { paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 }, margin: { l: 60, r: 20, t: 10, b: 50 },
+      showlegend: false, shapes: sh, annotations: an, xaxis: { title: "rank (highest to lowest)", gridcolor: C("--grid"), zeroline: false },
+      yaxis: { title: "log2 intensity", gridcolor: C("--grid"), zeroline: false } }, { displaylogo: false, responsive: true });
+})();
 </script>', plotly_js(), toJSON(explorer, auto_unbox = TRUE, digits = NA))
 
   body <- paste0(decision_html, tiles, graphs, explorer_html, js)
