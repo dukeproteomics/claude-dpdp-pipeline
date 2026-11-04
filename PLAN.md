@@ -165,12 +165,23 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   from run-wise q-values, needs `--sp_fill=raw` when there are none (background without q refused), writes `precursor_fill` + param
   `sp_fill_mode`. 11488: raw 0 filled / 72,245 empty; background 55,705 filled / 3,956 empty; global and run-wise refused (151,779 flagged).
   Triple-spike `_MOD` exports have no q-values (raw loads with `--sp_fill=raw`; the background one can't be loaded).
-  **Next:** Steps 4-7 use the mask (filter decisions and normalization factors from measured values, Impute keeps background values and
-  fills only the empty gaps); until then they stop on background runs.
+- **Steps 3-7 use the mask (built 2026-11-04, `pipeline/background.R`; user rule: background = signal, not identification):**
+  Step 3 moves background values out of `precursor_start` (kept in `precursor_start_bg`), so Parameters, Noise and Filter see measured
+  values only; Step 5 puts them back for precursors that pass (not where the misaligned filter blanked, not below the noise baseline
+  unless noise_keep); Step 6 builds the factor subset from `precursor_filter_measured` and allows only sl/tmm/sltmm on background runs;
+  Step 7 imputes only empty values and writes `precursor_missing`/`protein_missing` with background = not detected (stats missing factor).
+- **sltmm, all runs:** the app computes TMM after imputation on the imputed table; the pipeline now computes it from measured values
+  (Step 7, `tmm_measured_factors`). 11488 raw: factors differ by up to 1.14%; triple-spike background: 3.83%.
+- Tested end to end on the new triple-spike background export (10658, 15 runs, no SPQC): all steps ran, measured and background values
+  only rescaled, only empty values imputed. Normalize on human only for this design (`--norm_include=description
+  --norm_include_grep="org=Homo sapiens$"`): SL on all proteins pushes human E45/E5 to +0.67 log2 because total signal isn't constant.
+- **No SPQC:** Stats defaults to no pool (`comp_spqc=0`) when there's no SPQC group; Noise/QC/07b already handle it. A one-sample group
+  breaks the app's filter (Shiny_Filter.R:274), so Load now warns STOP. New sheets: `10658_SampleList_noSPQC.xlsx` (true groups, E30
+  alone) and `_noSPQC_mix.xlsx` (E20 x2 + E30 x1 as group Mix_E20_E30).
 
 ## Imputation benchmark (2026-11-04)
 - 11488 (step 07b, no known truth) and the triple-spike known-ratio data (`tools/impute_benchmark/triple_spike.R`, data
-  `data/input/triple_spike`, 10658, design after Guzman et al. 2024; the SPQC columns in the `_MOD` files are synthetic and dropped).
+  `data/input/triple_spike`, 10658, design after Guzman et al. 2024; the "SPQC" columns in the `_MOD` files are the E20H50Y30 x2 + E30H50Y20 x1 runs, renamed because the app needs an SPQC; dropped).
 - Triple-spike, 6 comparisons, adj p <= 0.05 and FC >= 1.5: limpa observed FDR 3.2% mean / 4.8% worst, background 3.5 / 6.2,
   Perseus 3.9 / 9.4, duke+bottom-X 8.6 / 22.7 (most true calls), kNN and group-blind mixed compress ratios (dropped).
 - Proposed Impute options (not yet decided by the user): raw default limpa; background default Spectronaut background + Perseus for

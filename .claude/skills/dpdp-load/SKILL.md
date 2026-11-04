@@ -24,7 +24,9 @@ Rscript pipeline/steps/01_load.R --design=<xlsx> --data=<report> --prefix=<prefi
   - No run-wise `EG.Qvalue`: Load stops and asks. If the user says it is raw, rerun with `--sp_fill=raw`. A background export without
     q-values is refused (re-export with `EG.Qvalue`).
   - Output: param `sp_fill_mode` (raw/background) and table `precursor_fill` (same rows as `precursor_raw`, 1 = background signal).
-  - **Steps 4-7 refuse background runs for now** (`stop_if_background()` in `common.R`) until they use the mask.
+  - Background runs: Step 3 sets background values aside (measured only through Filter), Step 5 puts them back, Steps 6-7 use measured
+    values for factors and detection (`pipeline/background.R`).
+- **No SPQC is fine.** A group with **one** sample is not: the app's filter fails on it (Load warns STOP). Merge it into another group.
 - Use plain `Rscript` (not `--vanilla`); packages are in `/home/R_Packages`.
 - Output folder: `data/<prefix>/` with `<prefix>.db`, `Backup/` (design copy + archived app code), `QC/`, `Error/`, etc.
 - **`--overwrite` deletes the existing project folder.** Only use it with the user's OK.

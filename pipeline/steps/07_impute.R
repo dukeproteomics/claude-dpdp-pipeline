@@ -18,15 +18,15 @@ args0 <- commandArgs(trailingOnly = FALSE)
 here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value = TRUE))))
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
+source(file.path(here, "..", "background.R"))
 source(file.path(here, "..", "reviews", "07_impute.R"))
 
 args <- parse_args()
 need(args, c("db", "action"))
 if (!args$action %in% c("preview", "apply")) stop("--action must be preview or apply")
 db_path <- normalizePath(args$db, mustWork = TRUE)
-stop_if_background(db_path, "07_impute")
 run_dir <- dirname(db_path)
-use_app(c("Shiny_File.R", "Shiny_Data.R", "Shiny_Impute.R", "Shiny_MVA_Functions.R", "Shiny_Plots.R"))
+use_app(c("Shiny_File.R", "Shiny_Data.R", "Shiny_Impute.R", "Shiny_MVA_Functions.R", "Shiny_Plots.R", "Shiny_Norm_Functions.R"))
 if (get_param("raw_data_format", db_path) != "precursor") stop("Impute step is only wired up for precursor data so far.")
 
 spec <- list(impute_type = "duke", bottom_x = 2, missing_cutoff = 50)
@@ -87,8 +87,28 @@ if (args$action == "preview") {
 
 # --- apply -----------------------------------------------------------------------
 if (!identical(args$decided_by, "user")) stop("Apply needs the analyst's approval: run --action=preview, show the review page, then pass --decided_by=user.")
-run_bg(impute_apply_bg, list(as.list(norms), p, db_path), "impute_bg", db_path)
+# sltmm: impute under a temporary name so the app doesn't apply TMM from the imputed table; the pipeline applies TMM factors
+# calculated from measured values instead (pipeline/background.R::tmm_measured_factors).
+run_norms <- ifelse(norms == "sltmm", "sltmmpre", norms)
+if ("sltmm" %in% norms) write_table_try("precursor_norm_sltmmpre", read_table("precursor_norm_sltmm", db_path), db_path)
+run_bg(impute_apply_bg, list(as.list(run_norms), p, db_path), "impute_bg", db_path)
+tmm_info <- NULL
+if ("sltmm" %in% norms) {
+  pre <- read_table("precursor_impute_sltmmpre", db_path); info <- ncol(pre) - n_s
+  f_app <- { X <- samples_of(norm_filter_exclude_include(pre, p), n_s); X[is.na(X)] <- 0; edgeR::calcNormFactors(X, method = "TMM", sumTrim = 0.1) }
+  f_meas <- tmm_measured_factors(db_path, p)
+  pre[(info + 1):ncol(pre)] <- sweep(pre[(info + 1):ncol(pre)], 2, f_meas, "/")
+  write_table_try("precursor_impute_sltmm", pre, db_path)
+  con <- RSQLite::dbConnect(RSQLite::SQLite(), db_path)
+  for (t in c("precursor_norm_sltmmpre", "precursor_impute_sltmmpre")) if (RSQLite::dbExistsTable(con, t)) RSQLite::dbRemoveTable(con, t)
+  RSQLite::dbDisconnect(con)
+  tmm_info <- list(factors_measured = as.list(setNames(round(f_meas, 4), names(pre)[(info + 1):ncol(pre)])),
+                   factors_app_from_imputed = as.list(setNames(round(f_app, 4), names(pre)[(info + 1):ncol(pre)])),
+                   max_difference_pct = round(100 * max(abs(f_app / f_meas - 1)), 2))
+  cat(sprintf("sltmm: TMM factors from measured values (app would use imputed values; largest difference %.2f%%)\n", tmm_info$max_difference_pct))
+}
 run_bg(create_imputed_df, list(p, db_path), "impute_df", db_path)
+if (is_background_run(db_path)) bg_detected_tables(db_path)   # background counts as not detected
 for (n in norms) run_bg(bar_plot, list(str_c("precursor_impute_", n), str_c("Precursor_impute_", n), qc_path, db_path),
                         str_c("imputebar_", n), db_path)
 
@@ -98,8 +118,10 @@ check <- lapply(norms, function(n) {
   list(table = str_c("precursor_impute_", n), rows = nrow(d), remaining_na = sum(is.na(s)),
        total_cv_pct = round(sd(tot) / mean(tot) * 100, 2))
 })
-summary <- c(base_summary, list(action = "apply", imputed_tables = check,
-             note = if ("sltmm" %in% norms) "precursor_impute_sltmm has TMM applied after imputation (app behavior)." else NULL,
+summary <- c(base_summary, list(action = "apply", imputed_tables = check, tmm = tmm_info,
+             background = if (is_background_run(db_path)) list(kept_values = sum(samples_of(read_table("precursor_filter_bgmask", db_path), n_s) == 1),
+                                                               note = "Background values kept; only empty values imputed. They count as not detected in precursor_missing / protein_missing.") else NULL,
+             note = if ("sltmm" %in% norms) "precursor_impute_sltmm: TMM applied after imputation, with factors from measured values (the app uses the imputed table)." else NULL,
              plots = existing_plots(qc_path, c("missing_bar_plot.png", "missing_percent_plot.png",
                                                str_c("Precursor_impute_", norms, "_barplot.png"))),
              pipeline_added_plots = existing_plots(qc_path, str_c("Precursor_impute_", norms, "_barplot.png"))))

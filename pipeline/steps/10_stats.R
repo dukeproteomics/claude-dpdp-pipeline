@@ -65,7 +65,8 @@ if (!is.null(args$settings_from)) {
   RSQLite::dbDisconnect(con)
 }
 stat_norm <- args$stats_norm_type %||% (if (!is.null(args$settings_from)) rp$stat_norm else norms[1])
-comp_spqc <- args$comp_spqc %||% (if (!is.null(args$settings_from)) rp$comp_spqc else "SPQC")
+# Pooled QC group: SPQC when the design has one; otherwise none ("0"). The pipeline works without a pool.
+comp_spqc <- args$comp_spqc %||% (if (!is.null(args$settings_from)) rp$comp_spqc else if ("SPQC" %in% groups$Group) "SPQC" else "0")
 comp_args <- grep("^comp[0-9]+_[ND]$", names(args), value = TRUE)
 if (length(comp_args)) {
   ids <- sort(unique(as.integer(sub("^comp([0-9]+)_.*", "\\1", comp_args))))

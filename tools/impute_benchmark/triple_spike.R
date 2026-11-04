@@ -3,7 +3,8 @@
 #
 # Input: a raw Spectronaut precursor export (empty/"Filtered" = missing) and, optionally, the background export of the same analysis
 # (filled = empty in raw, present in background), plus the sample list (ID, Label, Group). Group names must look like E5H50Y45.
-# Columns whose ID is not in the sample list's real groups (for example a synthetic SPQC) are dropped.
+# Columns whose group is not a spike design (e.g. "SPQC") are dropped. (In the 10658 _MOD files the "SPQC" columns are the E20H50Y30 x2
+# and E30H50Y20 x1 runs, renamed for the app.)
 #
 # Same processing for every method:
 #   filter: precursor measured in >= 2 of 3 replicates in at least one group; single-species protein groups only.

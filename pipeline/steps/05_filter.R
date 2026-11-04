@@ -19,6 +19,7 @@ args0 <- commandArgs(trailingOnly = FALSE)
 here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value = TRUE))))
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "noise_keep.R"))
+source(file.path(here, "..", "background.R"))
 source(file.path(here, "..", "review.R"))
 source(file.path(here, "..", "reviews", "05_filter.R"))
 
@@ -26,7 +27,6 @@ args <- parse_args()
 need(args, c("db", "action"))
 if (!args$action %in% c("preview", "apply")) stop("--action must be preview or apply")
 db_path <- normalizePath(args$db, mustWork = TRUE)
-stop_if_background(db_path, "05_filter")
 run_dir <- dirname(db_path)
 use_app(c("Shiny_File.R", "Shiny_Filter.R", "Shiny_Plots.R"))
 if (get_param("raw_data_format", db_path) != "precursor") stop("Filter step is only wired up for precursor data so far.")
@@ -87,6 +87,13 @@ if (as_flag(get_param("noise_keep", db_path)) && get_param("noise_type", db_path
   cat(sprintf("noise_keep: put back %d measured values (in %d precursors) that the noise step removed\n",
               noise_keep_info$values_restored, noise_keep_info$precursors_with_restored_values))
 }
+bg_info <- NULL
+if (is_background_run(db_path)) {
+  bg_info <- bg_restore(db_path)
+  cat(sprintf("Background export: put back %d background values in the precursors that passed (%d left out: misaligned %d, below noise %d)\n",
+              bg_info$background_values_restored, bg_info$background_in_kept_rows - bg_info$background_values_restored,
+              bg_info$left_out_misaligned, bg_info$left_out_below_noise))
+}
 run_bg(bar_plot, list("precursor_filter", "Precursor_Filter", qc_path, db_path), "filterbarplot", db_path)
 run_bg(box_plot, list("precursor_filter", "Precursor_Filter", qc_path, db_path), "filterboxplot", db_path)
 
@@ -122,6 +129,7 @@ summary <- list(
   counts_final = final,
   app_reported_counts = list(proteins = p$meta_protein_filter, peptides = p$meta_peptide_filter, precursors = p$meta_precursor_filter),
   noise_keep = noise_keep_info,
+  background = bg_info,
   missing_after_filter_per_sample = as.list(miss),
   missing_after_filter_pct = as.list(round(miss / nrow(df) * 100, 2)),
   plots = existing_plots(qc_path, c("Precursor_NoiseFiltered_Histogram.png", "Precursor_Filter_barplot.png", "Precursor_Filter_boxplot.png")),

@@ -16,6 +16,9 @@ description: Step 6 of the DPDP proteomics pipeline (same as the Shiny app's Nor
 
 - Exclude/include only changes which precursors are used to **calculate** the factors (`precursor_normdata`).
   All filtered precursors are normalized and kept.
+- **Factors from measured values only.** Background exports: the subset is built from `precursor_filter_measured` (background
+  blanked), and only `sl`, `tmm`, `sltmm` are allowed (the others transform the whole table). Spike-in designs where half the proteome
+  changes (e.g. triple-spike): normalize on the constant proteome with `--norm_include=description --norm_include_grep="org=Homo sapiens$"`.
 - `sltmm`: SL is applied at this step; **TMM is applied after imputation** (`Shiny_Impute.R`). So `precursor_norm_sltmm` holds SL-only values.
 - `mti` is in the app's dropdown, but `mti_normalize()` doesn't exist. The pipeline refuses it.
 - `directlfq` needs a Python path that isn't set up yet.

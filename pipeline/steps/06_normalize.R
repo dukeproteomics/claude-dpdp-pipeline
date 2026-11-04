@@ -21,13 +21,13 @@ args0 <- commandArgs(trailingOnly = FALSE)
 here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value = TRUE))))
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
+source(file.path(here, "..", "background.R"))
 source(file.path(here, "..", "reviews", "06_normalize.R"))
 
 args <- parse_args()
 need(args, c("db", "action"))
 if (!args$action %in% c("preview", "apply")) stop("--action must be preview or apply")
 db_path <- normalizePath(args$db, mustWork = TRUE)
-stop_if_background(db_path, "06_normalize")
 run_dir <- dirname(db_path)
 use_app(c("Shiny_File.R", "Shiny_Norm.R", "Shiny_Plots.R"))
 if (get_param("raw_data_format", db_path) != "precursor") stop("Normalize step is only wired up for precursor data so far.")
@@ -59,7 +59,9 @@ sample_cols <- function(df) df[(info_columns + 1):ncol(df)]
 col_totals <- function(df) colSums(sample_cols(df), na.rm = TRUE)
 
 # --- preview: build normalization subset (always rebuilt so it matches the current settings) ---
-run_bg(norm_filter_bg, list("precursor_filter", "precursor_normdata", p, db_path), "normfilter", db_path)
+# Factors from measured values only: for background runs the subset is built from precursor_filter_measured (background blanked).
+bg_run <- is_background_run(db_path)
+run_bg(norm_filter_bg, list(if (bg_run) "precursor_filter_measured" else "precursor_filter", "precursor_normdata", p, db_path), "normfilter", db_path)
 run_bg(bar_plot, list("precursor_normdata", "Precursor_NormData", qc_path, db_path), "normdatabarplot", db_path)
 
 filt <- read_table("precursor_filter", db_path)
@@ -69,6 +71,7 @@ top_excluded <- if (nrow(excluded)) {
   t <- sort(table(excluded$Description), decreasing = TRUE)
   head(data.frame(description = names(t), precursors = as.integer(t)), 15)
 } else NULL
+if (bg_run) filt <- read_table("precursor_filter_measured", db_path)   # same rows; exclusion list from the measured table
 sl_target <- mean(col_totals(normdata))
 sl_factors <- round(sl_target / col_totals(normdata), 4)
 
@@ -103,6 +106,9 @@ if (!method %in% methods) stop("--norm_type must be one of: ", paste(methods, co
                                "  (the app's 'mti' option has no mti_normalize() function)")
 if (method %in% c("ai", "mi")) stop("--norm_type=", method, ": the app's norm_apply_bg() calls ", method,
                                     "_normalize() with the wrong arguments, so it fails. Choose another method.")
+if (bg_run && !method %in% c("sl", "tmm", "sltmm"))
+  stop("--norm_type=", method, ": on a background export only factor methods (sl, tmm, sltmm) are allowed, because only they can be ",
+       "calculated from measured values and then applied to the background values. ", method, " transforms the data as a whole.")
 if (method == "directlfq") warning("directlfq needs python_path, which isn't set up in the pipeline yet.")
 
 # app: norm_apply_widget_save -> new method is put in front of the existing list
@@ -121,12 +127,13 @@ run_bg(norm_apply_bg, list("precursor_filter", "precursor_normdata", new_table, 
 run_bg(bar_plot, list(new_table, str_c("Precursor_", method), qc_path, db_path), "normbarplot", db_path)
 
 normed <- read_table(new_table, db_path)
-before <- col_totals(filt); after <- col_totals(normed)
+before <- col_totals(read_table("precursor_filter", db_path)); after <- col_totals(normed)
 summary <- list(
   step = "06_normalize", action = "apply", db_path = db_path, settings = settings,
   norm_type = method, norm_type_list = p$norm_type, table = new_table,
   note = if (method == "sltmm") "SL applied now; the app applies TMM after imputation (Shiny_Impute.R)." else NULL,
   normalization_subset = norm_subset,
+  factors_from = if (bg_run) "measured values only; background values excluded, then normalized with the same factors" else "measured values",
   totals_before = as.list(round(before)), totals_after = as.list(round(after)),
   total_cv_pct_before = round(sd(before) / mean(before) * 100, 2),
   total_cv_pct_after = round(sd(after) / mean(after) * 100, 2),

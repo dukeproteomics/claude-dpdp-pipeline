@@ -101,7 +101,8 @@ short_id <- gsub("_.+", "", d$ID)
 full_ok <- mapply(function(id, col) {
   parts <- strsplit(id, "_")[[1]]
   pat <- if (length(parts) > 1) str_c(parts[1], "_0*", parts[2]) else parts[1]
-  grepl(pat, col)
+  # also accept the replicate number at the end of the run name (e.g. ..._E5H50Y45_180K_2Th3p5ms_01.htrms)
+  grepl(pat, col) || (length(parts) > 1 && grepl(parts[1], col, fixed = TRUE) && grepl(str_c("_0*", parts[2], "\\.(htrms|raw)"), col))
 }, d$ID, qcols[seq_len(nrow(d))])
 id_table <- data.frame(Raw_Order = d$Raw_Order, Label = d$Label, Group = d$Group, ID = d$ID,
                        data_column = sub("\\.htrms.*|\\.raw.*", "", qcols[seq_len(nrow(d))]),
@@ -117,9 +118,9 @@ org <- if ("PG.Organisms" %in% names(df)) {
 } else NULL
 
 warnings_out <- character(0)
+one <- names(which(table(design$Group) == 1))
+if (length(one)) warnings_out <- c(warnings_out, sprintf("STOP: group(s) with one sample: %s. The app's filter fails on a one-sample group (Shiny_Filter.R:274 drops to a vector). Merge it into another group or give it more samples in the sample sheet.", paste(one, collapse = ", ")))
 if (!is.null(sp_fill)) warnings_out <- c(warnings_out, sp_fill$notes)
-if (identical(sp_fill$mode, "background")) warnings_out <- c(warnings_out,
-  "Background export: Steps 4-7 don't use the filled-value mask yet, so they stop on this run until that is built.")
 if (length(qcols) != nrow(design)) warnings_out <- c(warnings_out, sprintf("Design has %d samples but data has %d sample columns.", nrow(design), length(qcols)))
 if (!all(id_table$app_check)) warnings_out <- c(warnings_out, "Sample IDs do not match the data columns in Raw_Order.")
 if (!all(id_table$full_id_check)) warnings_out <- c(warnings_out, "Full-ID check failed for some samples (replicate suffix differs; OK for pooled QC).")

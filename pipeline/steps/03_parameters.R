@@ -16,6 +16,7 @@ args0 <- commandArgs(trailingOnly = FALSE)
 here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value = TRUE))))
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
+source(file.path(here, "..", "background.R"))
 source(file.path(here, "..", "reviews", "01_load.R"))
 source(file.path(here, "..", "reviews", "03_parameters.R"))
 
@@ -68,6 +69,9 @@ invisible(write_params(params, db_path))
 res <- run_bg(order_rename_columns_bg, list("precursor_start", db_path), "orderrename", db_path)
 param_update("info_col_precursor", res[[1]], db_path)
 sample_id_alert <- isTRUE(res[[2]])
+# Background export: precursor_start keeps measured values only; background values wait in precursor_start_bg until Step 5.
+bg_info <- if (is_background_run(db_path)) bg_split(db_path) else NULL
+if (!is.null(bg_info)) cat(sprintf("Background export: %d background values set aside (measured only from here to the filter)\n", bg_info$background_values))
 
 # --- 3e. Counts + plots (app: meta_data("start"), parameter_create_plots, filter_histogram_plot)
 run_bg(meta_data_bg, list("precursor_start", "start", db_path), "start_meta", db_path)
@@ -110,6 +114,7 @@ summary <- list(
   intensity = list(log2_mean = params$intensity_mean, log2_sd = params$intensity_sd,
                    intensity_cutoff = params$intensity_cutoff, intensity_cutoff_sd = params$intensity_cutoff_sd,
                    bottom_x = params$bottom_x, total_na = params$total_na, total_misaligned = params$total_misaligned),
+  background = bg_info,
   sample_id_alert = sample_id_alert, sample_error = isTRUE(sample_error),
   plots = plots[file.exists(plots)],
   warnings = warnings_out

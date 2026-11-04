@@ -73,3 +73,7 @@ Rscript pipeline/compare.R --run=<db> --ref=<shiny>.db --tables=precursor_filter
 
 ## Next
 Step 6 — Normalize.
+
+## Background exports
+Background values count as not detected for every filter rule; after the filter they are put back for the precursors that passed
+(not where the misaligned filter blanked a group, not below the noise baseline unless noise_keep). Report the summary's `background` counts.

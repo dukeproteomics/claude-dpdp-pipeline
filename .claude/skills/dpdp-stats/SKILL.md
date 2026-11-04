@@ -11,7 +11,7 @@ description: Step 10 of the DPDP proteomics pipeline (same as the Shiny app's St
 | Setting | 11488 reference | Notes |
 |---|---|---|
 | `stats_norm_type` | sltmm | which normalization to test |
-| `comp_spqc` | SPQC | pooled QC group carried into the tables and plots (`0` = none) |
+| `comp_spqc` | SPQC if the design has one, else `0` | pooled QC group carried into the tables and plots (`0` = none; no SPQC is fine) |
 | comparisons | `--comp1_N=B --comp1_D=A` → `B_v_A` | several groups per side: comma separated. Names must be ≤ 31 characters (Excel) |
 | `pvalue_cutoff` / `foldchange_cutoff` | 0.05 / 1.5 | |
 | `checkbox_adjpval` / `padjust_options` | TRUE / fdr | **only adds an `_adjpval` column** |

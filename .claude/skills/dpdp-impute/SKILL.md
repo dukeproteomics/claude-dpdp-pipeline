@@ -26,7 +26,10 @@ Rscript pipeline/steps/07_impute.R --db=<db> --action=preview [--settings_from=<
 Rscript pipeline/steps/07_impute.R --db=<db> --action=apply   [--settings_from=<db>] ... --decided_by=user --analyst=<name> [--note="<reason>"]
 ```
 Apply imputes every table in `norm_type` (e.g. `precursor_norm_sltmm` → `precursor_impute_sltmm`, plus the impute-only table).
-For `sltmm`, **TMM is applied here**, after imputation, on the exclude/include subset. Imputed values are included in that subset.
+For `sltmm`, **TMM is applied here**, after imputation, with factors from **measured values only** (user rule 2026-11-04; the app uses
+the imputed table). The summary has both sets of factors (`tmm.factors_measured`, `tmm.factors_app_from_imputed`); report the largest
+difference. **Background exports:** background values are kept and only empty values are imputed; `precursor_missing` /
+`protein_missing` count background as not detected, so the stats missing factor uses identified values.
 Duke runs in parallel (`detectCores() - 2` workers). Keep this in mind on shared or cluster nodes.
 
 ## Review page and decision
