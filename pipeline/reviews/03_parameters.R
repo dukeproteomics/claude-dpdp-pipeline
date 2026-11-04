@@ -18,7 +18,16 @@ review_parameters <- function(db_path) {
   pdat <- list(s = if (length(lab) == length(ps)) lab else vapply(ps, function(x) x$sample, ""), g = grp,
                rel = vapply(ps, function(x) as.numeric(x$total_vs_median), 0), miss = vapply(ps, function(x) as.numeric(x$missing), 0),
                med = vapply(ps, function(x) as.numeric(x$median_log2), 0))
-  qc <- get_params(db_path)$qc_path
+  pp <- get_params(db_path); qc <- pp$qc_path
+  st <- read_table("precursor_start", db_path); sm <- as.matrix(st[, (ncol(st) - length(pdat$s) + 1):ncol(st)])
+  lmean <- as.numeric(pp$intensity_mean); lsd <- as.numeric(pp$intensity_sd)
+  b2 <- as.numeric(quantile(log2(sm[!is.na(sm) & sm > 0]), 0.02))
+  ref <- list()
+  if (is.finite(lmean) && is.finite(lsd)) ref <- list(`mean` = list(x = lmean, color = "--text-primary", dash = "solid"),
+    `-1 SD` = list(x = lmean - lsd), `+1 SD` = list(x = lmean + lsd),
+    `misaligned cutoff` = list(x = log2(as.numeric(pp$intensity_cutoff)), color = "--series-3", dash = "dash"))
+  ref$`bottom 2%` <- list(x = b2, color = "--series-2", dash = "dash")
+  start_charts <- sample_charts(sm, pdat$s, grp, "start", ref)
   body <- paste0('<section><h2>', if (is.null(a)) "Review needed" else "Review recorded", '</h2>', html_table(set_df), accept_note(a), '</section>',
     '<section><h2>Start data</h2><div class="tiles">',
     sprintf('<div class="tile"><div class="v">%s</div><div class="l">precursors</div></div>', fmt_n(summ$counts_start$precursors)),
@@ -29,11 +38,14 @@ review_parameters <- function(db_path) {
     '<div id="rel" style="height:280px" role="img" aria-label="Total intensity relative to the median per sample"></div>',
     '<details><summary>Table view</summary>', html_table(data.frame(Sample = pdat$s, Group = grp, `Total vs median` = sprintf("%.3f", pdat$rel),
       `Median log2` = sprintf("%.2f", pdat$med), Missing = fmt_n(pdat$miss), check.names = FALSE), 3:5), '</details></section>',
-    '<section><h2>Graphs</h2><div class="grid2">',
+    '<section><h2>Graphs</h2>', start_charts,
+    '<p class="note">Histogram lines as in the app: mean, &plusmn; 1 SD, the misaligned intensity cutoff (mean + ', esc(pp$intensity_cutoff_sd %||% "0.5"),
+    ' SD, used in Filter) and the bottom 2% (the bottom-X fill range in Impute). A noise population would show as a shoulder or second peak at the low end.</p>',
+    '<details><summary>The app&apos;s original plots</summary><div class="grid2">',
     embed_png(file.path(qc, "Precursor_Start_barplot.png"), "Start bar plot", "App plot: total intensity per sample."),
     embed_png(file.path(qc, "Precursor_Start_boxplot.png"), "Start box plot", "App plot: log2 intensity distribution per sample."),
-    embed_png(file.path(qc, "Precursor_Start_Histogram.png"), "Start histogram", "App plot: log2 intensity histogram (a low-end shoulder would suggest noise)."),
-    '</div></section>',
+    embed_png(file.path(qc, "Precursor_Start_Histogram.png"), "Start histogram", "App plot: log2 intensity histogram."),
+    '</div></details></section>',
     '<script>', plotly_js(), '</script><script>const D = ', toJSON(pdat, digits = NA), ';
 const css = getComputedStyle(document.querySelector(".viz-root")), C = n => css.getPropertyValue(n).trim(), cols = ["--series-1", "--series-2", "--series-3"];
 Plotly.newPlot("rel", [...new Set(D.g)].map((g, k) => { const i = D.g.map((x, j) => x === g ? j : -1).filter(j => j >= 0);

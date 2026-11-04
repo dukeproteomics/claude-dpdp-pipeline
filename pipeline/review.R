@@ -183,6 +183,10 @@ DECISION_JS <- '
 
 write_review_page <- function(run_dir, step, title, status, status_class, body, extra_head = "", decision_variant = "") {
   body <- paste0(next_step_box(run_dir, step, status_class, decision_variant), body, '<script>', DECISION_JS, '</script>')
+  if (grepl("DPDP_CHARTS", body, fixed = TRUE)) {
+    if (!grepl("Plotly.newPlot", body, fixed = TRUE) && !grepl("plotly", extra_head, fixed = TRUE)) body <- paste0(body, '<script>', plotly_js(), '</script>')
+    body <- paste0(body, '<script>', SAMPLE_CHARTS_JS, '</script>')
+  }
   extra_head <- paste0('<meta name="dpdp-token" content="__DPDP_TOKEN__"/>', extra_head)
   p_prefix <- basename(run_dir)
   html <- sprintf('<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -215,3 +219,56 @@ write_review_index <- function(run_dir) {
     esc(basename(run_dir)), REVIEW_CSS, esc(basename(run_dir)), format(Sys.time(), "%Y-%m-%d %H:%M"), body)
   writeLines(html, file.path(d, "index.html"), useBytes = TRUE)
 }
+
+# --- Shared interactive sample charts (replace the app's static bar / box / histogram PNGs) ---------------------------------
+# sample_charts(m, labels, groups, id, ref) -> HTML + data for: total intensity per sample (bars by group), log2 intensity per
+# sample (box plots from precomputed quantiles), and the log2 histogram of all values with reference lines.
+# m: matrix of raw intensities (samples in columns). ref: named list of vertical lines for the histogram (log2 values).
+sample_charts <- function(m, labels, groups, id, ref = list(), title_suffix = "") {
+  m[!is.na(m) & m <= 0] <- NA
+  lx <- log2(m)
+  q <- t(apply(lx, 2, function(v) as.numeric(quantile(v, c(0.05, 0.25, 0.5, 0.75, 0.95), na.rm = TRUE))))
+  edges <- seq(floor(min(lx, na.rm = TRUE) * 5) / 5, ceiling(max(lx, na.rm = TRUE) * 5) / 5, by = 0.2)
+  h <- tabulate(findInterval(lx[!is.na(lx)], edges, rightmost.closed = TRUE), nbins = length(edges) - 1)
+  d <- list(samples = labels, groups = groups, total = as.numeric(colSums(m, na.rm = TRUE)), measured = as.integer(colSums(!is.na(m))),
+            q = unname(split(round(q, 3), row(q))), edges = edges, hist = h, ref = ref)
+  sprintf('<div class="grid2"><div><h3>Total intensity per sample%s</h3><div id="%s_bar" style="height:320px" role="img" aria-label="Total intensity per sample"></div></div>
+<div><h3>log2 intensity per sample%s</h3><div id="%s_box" style="height:320px" role="img" aria-label="log2 intensity distribution per sample"></div></div></div>
+<h3>log2 intensity histogram, all values%s</h3><div id="%s_hist" style="height:340px" role="img" aria-label="Histogram of log2 intensities"></div>
+<details><summary>Table view</summary><div id="%s_table"></div></details>
+<script>window.DPDP_CHARTS = (window.DPDP_CHARTS || []).concat([{ id: "%s", d: %s }]);</script>',
+    title_suffix, id, title_suffix, id, title_suffix, id, id, id, toJSON(d, auto_unbox = TRUE, digits = NA))
+}
+
+SAMPLE_CHARTS_JS <- '
+(function () {
+  const css = getComputedStyle(document.querySelector(".viz-root")), C = n => css.getPropertyValue(n).trim();
+  const GC = ["--series-1", "--series-2", "--series-3", "--series-4"], fmt = n => Math.round(n).toLocaleString("en-US");
+  const base = () => ({ paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 } });
+  const ax = t => ({ title: t, gridcolor: C("--grid"), zeroline: false });
+  (window.DPDP_CHARTS || []).forEach(({ id, d }) => {
+    const gs = [...new Set(d.groups)], col = g => C(GC[gs.indexOf(g) % GC.length]), idx = g => d.groups.map((x, i) => x === g ? i : -1).filter(i => i >= 0);
+    const med = d.total.slice().sort((a, b) => a - b)[Math.floor(d.total.length / 2)];
+    Plotly.newPlot(id + "_bar", gs.map(g => ({ type: "bar", name: g, x: idx(g).map(i => d.samples[i]), y: idx(g).map(i => d.total[i]), marker: { color: col(g) },
+      customdata: idx(g).map(i => (d.total[i] / med).toFixed(3)), hovertemplate: "%{x}<br>total %{y:.3s}<br>%{customdata} x median<extra></extra>" })),
+      Object.assign(base(), { margin: { l: 60, r: 10, t: 10, b: 50 }, legend: { orientation: "h", y: 1.12 }, bargap: 0.25,
+        xaxis: { categoryorder: "array", categoryarray: d.samples }, yaxis: Object.assign(ax("total intensity"), { rangemode: "tozero" }) }), { displaylogo: false, responsive: true });
+    Plotly.newPlot(id + "_box", gs.map(g => ({ type: "box", name: g, x: idx(g).map(i => d.samples[i]),
+      lowerfence: idx(g).map(i => d.q[i][0]), q1: idx(g).map(i => d.q[i][1]), median: idx(g).map(i => d.q[i][2]), q3: idx(g).map(i => d.q[i][3]), upperfence: idx(g).map(i => d.q[i][4]),
+      marker: { color: col(g) }, fillcolor: col(g) + "55", line: { width: 1.5 }, hoverinfo: "y+x" })),
+      Object.assign(base(), { margin: { l: 60, r: 10, t: 10, b: 50 }, legend: { orientation: "h", y: 1.12 },
+        xaxis: { categoryorder: "array", categoryarray: d.samples }, yaxis: ax("log2 intensity (box 25-75%, whiskers 5-95%)") }), { displaylogo: false, responsive: true });
+    const centers = d.hist.map((_, i) => (d.edges[i] + d.edges[i + 1]) / 2), refs = Object.entries(d.ref || {});
+    const top = Math.max(...d.hist);
+    Plotly.newPlot(id + "_hist", [{ type: "bar", x: centers, y: d.hist, width: 0.2, marker: { color: C("--series-1") },
+      customdata: centers.map(c => Math.pow(2, c).toPrecision(3)), hovertemplate: "log2 %{x:.1f} (intensity ~%{customdata}): %{y:,} values<extra></extra>" }],
+      Object.assign(base(), { margin: { l: 60, r: 20, t: 10, b: 50 }, showlegend: false, bargap: 0.02,
+        shapes: refs.map(([k, r]) => ({ type: "line", x0: r.x, x1: r.x, y0: 0, y1: 1, yref: "paper", line: { color: C(r.color || "--text-muted"), width: 2, dash: r.dash || "dot" } })),
+        annotations: refs.map(([k, r], j) => ({ x: r.x, y: 1 - j * 0.08, yref: "paper", xanchor: "left", xshift: 4, showarrow: false,
+          text: k + " " + r.x.toFixed(1) + " (" + fmt(Math.pow(2, r.x)) + ")", font: { size: 11, color: C("--text-primary") } })),
+        xaxis: ax("log2 intensity"), yaxis: Object.assign(ax("values"), { rangemode: "tozero" }) }), { displaylogo: false, responsive: true });
+    document.getElementById(id + "_table").innerHTML = "<table><thead><tr><th>Sample</th><th>Group</th><th class=num>total</th><th class=num>x median</th><th class=num>values</th><th class=num>median log2</th></tr></thead><tbody>" +
+      d.samples.map((s, i) => `<tr><td>${s}</td><td>${d.groups[i]}</td><td class=num>${d.total[i].toPrecision(4)}</td><td class=num>${(d.total[i] / med).toFixed(3)}</td><td class=num>${fmt(d.measured[i])}</td><td class=num>${d.q[i][2].toFixed(2)}</td></tr>`).join("") + "</tbody></table>";
+  });
+})();
+'
