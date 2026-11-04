@@ -107,6 +107,28 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   `tools/renv/README.md` (restore steps, Ubuntu system libraries). Copied into the plugin as `renv/`. Partial restore tested.
   Not locked: rmotifx, PTMphinder (Phos only, not installed).
 
+## Spectronaut imputation path (discussion 2026-11-04, next major piece of work)
+- The lab finds Spectronaut's imputation gives better data quality than the app's duke/bottom-X. Plan: use Spectronaut's filled
+  values (not replicate them) and track which values were measured vs filled.
+- Spectronaut options: **background signal** (signal extracted at the expected RT/m/z in runs where the precursor wasn't identified;
+  not imputation, so `EG.IsImputed` is False for these, confirmed by the user), **global** and **run-wise** imputation (random draws from
+  low-abundance signals of the experiment / the run; these do set `EG.IsImputed`, per the user).
+- Tracking: global/run-wise -> `EG.IsImputed`; background -> per-run `EG.Qvalue` (identified = q <= 0.01). Check the q-value rule once
+  against a paired export of the same analysis with no imputation and q-value filtering (filled = present in A, empty in B).
+- Order: factors from identified values only, applied to all values, so "impute first, normalize second" is safe. Check whether
+  Spectronaut cross-run normalization was on (11488 looks un-normalized: medians 9.53-9.91, totals 0.91-1.20x) to avoid normalizing twice.
+- Pipeline changes: Load reads quantity + IsImputed/Qvalue per run and stores a measured/filled mask; Noise mostly redundant
+  (q-value is the noise criterion); Filter and Stats (missing factor, Detected_Imputed, one-group-only) use the mask; Impute skipped.
+- Then compare on 11488: app imputation vs Spectronaut background / global / run-wise, scored by SPQC CV, ADH CV, casein level
+  agreement, one-group-only calls and the p-value histogram.
+- Waiting on the user: exports of 11488 with per-run EG.Qvalue (+ EG.IsImputed), the imputation setting, normalization setting and
+  Spectronaut version for each; a no-imputation q-value-filtered export of the same analysis.
+
+## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize)
+- Decisions so far made on the review pages: Load accept, Parameters accept, Noise fixed 26.91 (log2 4.75, from the replicate
+  reproducibility panel) with noise_keep on, Filter as the Shiny run (125,923 precursors / 7,142 proteins; 14,074 values put back).
+- Resume: preview is done; start `wait_decision.py --step=06_normalize` (server: `python3 pipeline/review_server.py`).
+
 ## In-page decisions (option B, built 2026-11-04)
 - `pipeline/review_server.py` (localhost only, per-start token, writes only `review/pending_decision.json`), a form on every page
   (`pipeline/review.R`: `decision_spec()` + `DECISION_JS`), `pipeline/wait_decision.py`, `log_decision()` archives the page decision and logs
