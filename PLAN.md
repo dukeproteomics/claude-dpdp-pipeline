@@ -152,6 +152,14 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   - The app's bottom-X 2% fills lower (min to 2nd percentile, log2 0-4.7) than Spectronaut (1.5-9%); duke fills missing-at-random gaps
     near the group mean, which Spectronaut's global/run-wise don't do.
 
+## Decision: how to tell measured from filled in a Spectronaut export (user, 2026-11-04)
+One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` and `EG.IsImputed`.
+- **Background signal export:** filled = `EG.Qvalue > 0.01` (or no q-value). Values with q <= 0.01 count as measured (this includes the
+  identified-but-blanked ones, which hold real extracted signal). Gaps with no value at all are still missing and the pipeline fills them.
+- **Global or run-wise imputation export:** filled = `EG.IsImputed == TRUE`. We trust Spectronaut's flag ("put our faith in the software").
+  Known effect for 11488: it also marks 79,547 measured, unchanged values (weak peaks), so measured counts are more conservative.
+- No-imputation exports keep working as now (empty = missing; the app's imputation step fills them).
+
 ## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize)
 - Decisions so far made on the review pages: Load accept, Parameters accept, Noise fixed 26.91 (log2 4.75, from the replicate
   reproducibility panel) with noise_keep on, Filter as the Shiny run (125,923 precursors / 7,142 proteins; 14,074 values put back).
