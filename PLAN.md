@@ -184,6 +184,12 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   `data/input/triple_spike`, 10658, design after Guzman et al. 2024; the "SPQC" columns in the `_MOD` files are the E20H50Y30 x2 + E30H50Y20 x1 runs, renamed because the app needs an SPQC; dropped).
 - Triple-spike, 6 comparisons, adj p <= 0.05 and FC >= 1.5: limpa observed FDR 3.2% mean / 4.8% worst, background 3.5 / 6.2,
   Perseus 3.9 / 9.4, duke+bottom-X 8.6 / 22.7 (most true calls), kNN and group-blind mixed compress ratios (dropped).
+- Rerun on the new exports (2026-11-04, `data/10658_triplespike_bench2`, 5 groups, E30 dropped as a one-sample group, 10 comparisons):
+  same ranking. Observed FDR mean / worst: limpa 3.1 / 5.1, background 3.5 / 6.8, Perseus 3.7 / 9.0, duke+bottom-X 8.3 / 22.5.
+- **Open question (identified-but-blanked):** 84,753 values are empty in the raw export but have q <= 0.01 in the background export
+  (Load counts them as measured). Their accuracy is between measured and background (spread vs true level: measured MAD 0.43-0.65 log2,
+  these 1.18-1.41, background 1.55-1.91; S/N medians 18.7 / 6.4 / 2.1). Nothing in one background export separates them from
+  measured values (IsImputed all False, PG.Qvalue global). Ask the user whether a Spectronaut setting/column explains the blanking.
 - Proposed Impute options (not yet decided by the user): raw default limpa; background default Spectronaut background + Perseus for
   empty gaps; Perseus / MinProb baselines; duke+bottom-X for comparison with old runs.
 

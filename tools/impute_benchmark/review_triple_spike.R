@@ -5,7 +5,7 @@ review_triple_spike <- function(out_dir) {
   cols <- list(
     list(k = "mask_rmse", lab = "Masking error (RMSE, log2)", low = TRUE),
     list(k = "proteins", lab = "Proteins", low = NA),
-    list(k = "tp_total", lab = "True calls (6 comparisons)", low = FALSE),
+    list(k = "tp_total", lab = "True calls (all comparisons)", low = FALSE),
     list(k = "fp_total", lab = "False calls", low = TRUE),
     list(k = "fdr_mean", lab = "Observed FDR %, mean (target 5)", low = TRUE),
     list(k = "fdr_max", lab = "Observed FDR %, worst comparison", low = TRUE),
@@ -38,7 +38,7 @@ review_triple_spike <- function(out_dir) {
     if (length(odd)) sprintf('<p class="missing">Sample %s has %s gaps, more than twice the median sample (%s). It is kept, so comparisons with its group are harder for every method.</p>',
                             esc(paste(odd, collapse = ", ")), fmt_n(max(gaps[odd])), fmt_n(med_g)) else "",
     '</section>',
-    '<section><h2>Scores (all 6 comparisons)</h2>', tbl, '<p class="note">The best value in each scored column is marked. Masking error is not possible for background, no imputation or limpa.</p></section>',
+    '<section><h2>Scores (all comparisons)</h2>', tbl, '<p class="note">The best value in each scored column is marked. Masking error is not possible for background, no imputation or limpa.</p></section>',
     '<section><h2>By comparison</h2><div class="control"><label>Comparison <select id="cmpSel">', opts, '</select></label></div>',
     '<div class="grid2"><div><h3>True calls (higher is better)</h3><div id="c_tp" style="height:340px"></div></div>',
     '<div><h3>Observed FDR % (target 5)</h3><div id="c_fdr" style="height:340px"></div></div></div>',

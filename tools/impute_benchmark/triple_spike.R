@@ -34,15 +34,25 @@ FC <- log2(1.5); t0 <- Sys.time()
 # --- read ---
 sl_tab <- as.data.frame(readxl::read_excel(abs_path(args$samples)))
 sl_tab <- sl_tab[grepl("^E\\d+H\\d+Y\\d+$", sl_tab$Group), ]
+small <- names(which(table(sl_tab$Group) < 2))      # one-sample groups can't be tested
+if (length(small)) { message("Dropping one-sample group(s): ", paste(small, collapse = ", ")); sl_tab <- sl_tab[!sl_tab$Group %in% small, ] }
 read_q <- function(f) {
   d <- fread(abs_path(f), sep = "\t", na.strings = c("", "NA", "NaN", "Filtered"), showProgress = FALSE)
   qc <- grep("EG.TotalQuantity", names(d), value = TRUE)
-  id <- sub("^\\[\\d+\\] ID(\\d+)_\\d+\\..*$", "\\1", qc)
-  keep <- match(as.character(sl_tab$ID), id)
+  # column for each sample: old exports name runs ID<number>_NN (sheet ID = number); new ones end in _<group>_..._NN.htrms
+  # (sheet ID = <group>_NN)
+  keep <- vapply(as.character(sl_tab$ID), function(id) {
+    parts <- strsplit(id, "_")[[1]]
+    h <- if (length(parts) == 1) grep(paste0("ID", id, "_"), qc, fixed = TRUE)
+         else which(grepl(paste0("_", parts[1], "_"), qc, fixed = TRUE) & grepl(paste0("_0*", parts[2], "\\.htrms"), qc))
+    if (length(h) == 1) h else NA_integer_ }, 1L)
   if (anyNA(keep)) stop("Sample list IDs not found in the export: ", paste(sl_tab$ID[is.na(keep)], collapse = ", "))
   M <- as.matrix(d[, qc[keep], with = FALSE][, lapply(.SD, function(x) suppressWarnings(as.numeric(x)))])
   M[!is.na(M) & M <= 0] <- NA; colnames(M) <- sl_tab$Label
-  list(info = d[, .(PrecursorId = EG.PrecursorId, Accession = PG.ProteinAccessions, Organisms = PG.Organisms)], M = M,
+  vq <- grep("\\.EG\\.Qvalue$", names(d), value = TRUE)
+  V <- if (length(vq)) { k <- match(sub("\\.EG\\.TotalQuantity.*$", "", qc[keep]), sub("\\.EG\\.Qvalue$", "", vq))
+    as.matrix(d[, vq[k], with = FALSE][, lapply(.SD, function(x) suppressWarnings(as.numeric(x)))]) } else NULL
+  list(V = V, info = d[, .(PrecursorId = EG.PrecursorId, Accession = PG.ProteinAccessions, Organisms = PG.Organisms)], M = M,
        dropped = setdiff(qc, qc[keep]))
 }
 R <- read_q(args$raw)
@@ -73,6 +83,11 @@ if ("background" %in% methods) {
   idx <- match(info$PrecursorId, Bx$info$PrecursorId)
   bg <- log2(sweep(Bx$M[idx, , drop = FALSE], 2, nf, "*"))
   meas_same <- !is.na(L) & !is.na(bg)
+  if (!is.null(Bx$V)) { Vq <- Bx$V[idx, , drop = FALSE]; filled_raw <- is.na(L) & !is.na(bg); qfill <- !is.na(bg) & (is.na(Vq) | Vq > 0.01)
+    bg_q <- list(filled_by_raw_comparison = sum(filled_raw), filled_by_q_rule = sum(qfill), agree = sum(filled_raw & qfill),
+                 raw_gap_but_q_le_0.01 = sum(filled_raw & !qfill), raw_measured_but_q_gt_0.01 = sum(!is.na(L) & qfill))
+    cat(sprintf("q-value rule (q > 0.01 = background) vs raw export gaps: %s by raw, %s by q, agree %s; raw gaps with q <= 0.01 (identified but blanked): %s; raw values with q > 0.01: %s\n",
+      bg_q[[1]], bg_q[[2]], bg_q[[3]], bg_q[[4]], bg_q[[5]])) } else bg_q <- NULL
   cat(sprintf("Background export: %d of %d gaps filled; measured values identical: %s (max |diff| %.2g log2)\n",
               sum(is.na(L) & !is.na(bg)), sum(is.na(L)), all(abs(L[meas_same] - bg[meas_same]) < 1e-6), max(abs(L[meas_same] - bg[meas_same]))))
 }
@@ -165,12 +180,13 @@ labels_m <- c(sapply(IMPUTE_METHODS, `[[`, "label"), background = "Spectronaut b
 out <- list(raw = abs_path(args$raw), background = if (!is.null(args$background)) abs_path(args$background) else NULL,
             groups = glev, comparisons = comps, gaps_per_sample = as.list(gaps_per_sample), norm_factors = as.list(setNames(round(nf, 4), labels)),
             start = list(precursors = nrow(L), proteins = length(unique(prot)), species = as.list(table(sp_prot)), gaps = sum(is.na(L))),
+            background_q_rule = if (exists("bg_q")) bg_q else NULL,
             masking = list(hidden = sum(mask), complete_precursors = length(complete)),
             methods = lapply(setNames(methods, methods), function(m) c(list(label = unname(labels_m[m])), res[[m]], masked = list(masked[[m]]))),
             seconds = round(as.numeric(difftime(Sys.time(), t0, units = "secs"))))
 write_json(out, file.path(out_dir, "benchmark.json"), auto_unbox = TRUE, pretty = TRUE, digits = NA, null = "null")
 
-cat("\n==== Triple-spike benchmark (adj p <= 0.05, |FC| >= 1.5; 6 comparisons) ====\n")
+cat("\n==== Triple-spike benchmark (adj p <= 0.05, |FC| >= 1.5; all group pairs) ====\n")
 tab <- do.call(rbind, lapply(methods, function(m) { r <- res[[m]]
   data.frame(method = m, mask_rmse = masked[[m]]$rmse %||% NA, proteins = r$proteins, true_calls = r$tp_total, false_calls = r$fp_total,
              fdr_mean = r$fdr_mean, fdr_max = r$fdr_max, sens_mean = r$sensitivity_mean, human_p01 = r$human_p01_mean,
