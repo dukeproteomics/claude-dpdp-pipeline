@@ -15,3 +15,10 @@ Read `PLAN.md` first: it has the plan, the status of each step, and the test dat
 - Work one step at a time. Show results, recommend options, and let the user decide before
   running the next step.
 - Data stays under `data/`. Never commit it or push it to GitHub.
+
+## Git
+- Repo: https://github.com/dukeproteomics/claude-dpdp-pipeline (public). Commit as the repo-local identity `dukeproteomics`
+  (already set in `.git/config`), never the global identity, which belongs to the app's GitHub account.
+- `.gitignore` keeps out `data/`, the app clones (`shiny_DPDP*/`, which also hold a credentials file), `dist/`, and data file types.
+  Check `git status` before committing; never force-add those.
+- Commit after each finished piece of work and push to `origin main` when the user asks to back up.
