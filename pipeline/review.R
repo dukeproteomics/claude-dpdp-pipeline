@@ -70,10 +70,33 @@ pre { background:var(--grid); padding:10px; border-radius:6px; overflow-x:auto; 
 .note { color:var(--text-secondary); font-size:13px; } .missing { color:var(--warn-ink); }
 .control { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin:6px 0 10px; }
 .control input[type=range] { width:420px; } .control .val { font-weight:600; font-variant-numeric: tabular-nums; min-width:200px; }
+.nextbox { border:2px solid var(--warn-ink); background:var(--warn-bg); } .nextbox h2 { color:var(--warn-ink); }
+.nextbox.done { border-color:var(--ok-ink); background:var(--ok-bg); } .nextbox.done h2 { color:var(--ok-ink); }
 .control button { font:inherit; font-size:13px; padding:3px 10px; border:1px solid var(--rule); border-radius:6px; background:var(--surface-1); color:var(--text-primary); cursor:pointer; }
 "
 
+# What the analyst does next, shown at the top of every page. Options match the AskUserQuestion choices in each step's skill.
+NEXT_STEP <- list(
+  "01_load"       = list(q = "Does the design match the data?", opts = c("Yes, continue", "No, fix the sample sheet"), nxt = "Step 3 - Parameters"),
+  "03_parameters" = list(q = "Keep these parameters?", opts = c("Yes, continue", "Change settings"), nxt = "Step 4 - Noise"),
+  "04_noise"      = list(q = "Which noise setting? Then: use noise_keep?", opts = c("none", "dynamic", "fixed (give a value)"), nxt = "Step 5 - Filter"),
+  "05_filter"     = list(q = "Apply these filter settings?", opts = c("Apply as shown", "Change settings"), nxt = "Step 6 - Normalize"),
+  "06_normalize"  = list(q = "Which proteins to leave out of the factors, and which method?", opts = c("Exclude: pipeline default / keep current / your regex", "Method: sltmm / sl / tmm / other"), nxt = "Step 7 - Impute"),
+  "07_impute"     = list(q = "How should the data be imputed?", opts = c("duke as shown", "bottomx only", "Change values"), nxt = "Step 8 - Rollup"),
+  "08_rollup"     = list(q = "Which rollup?", opts = c("iq_maxlfq, scaled", "iq_maxlfq, not scaled", "sum"), nxt = "Step 9 - QC"),
+  "09_qc"         = list(q = "Accept the QC and continue to Stats?", opts = c("Accept", "Accept and flag samples", "Stop here"), nxt = "Step 10 - Stats"),
+  "10_stats"      = list(q = "Run stats with these settings (then: accept the results)?", opts = c("Run as shown / Accept", "Change settings or cutoffs", "Change comparisons"), nxt = "Finished (Pathway and Report are not built yet)"))
+
+next_step_box <- function(step, status_class) {
+  n <- NEXT_STEP[[step]]; if (is.null(n)) return("")
+  if (identical(status_class, "waiting"))
+    sprintf('<section class="nextbox"><h2>Next step: answer in the Claude window</h2><p>Go back to the Claude session. It is asking: <b>%s</b></p><p>Options: %s. You can also type your own answer there.</p></section>',
+            esc(n$q), paste0("<b>", esc(n$opts), "</b>", collapse = " / "))
+  else sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude continues in the session.</p></section>', esc(n$nxt))
+}
+
 write_review_page <- function(run_dir, step, title, status, status_class, body, extra_head = "") {
+  body <- paste0(next_step_box(step, status_class), body)
   p_prefix <- basename(run_dir)
   html <- sprintf('<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>%s - %s</title><style>%s</style>%s</head><body><div class="viz-root">

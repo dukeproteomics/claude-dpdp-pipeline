@@ -28,6 +28,7 @@ review_load <- function(db_path) {
   body <- paste0('<section><h2>', if (is.null(a)) "Review needed: does the design match the data?" else "Review recorded", '</h2>',
     '<p>Check that every sample in the sample sheet found its data column, the groups are right, and the detected format is what you expect.</p>',
     if (all_ok) '<p><b>All sample IDs matched their data columns.</b></p>' else '<p class="missing"><b>Some sample IDs did not match a data column.</b> Fix the sample sheet before going on.</p>',
+    if (length(unlist(summ$warnings))) paste0('<p class="missing"><b>Warnings:</b> ', paste(esc(unlist(summ$warnings)), collapse = '; '), '</p>') else '',
     accept_note(a), '</section>',
     '<section><h2>Detected format</h2><div class="tiles">',
     sprintf('<div class="tile"><div class="v">%s</div><div class="l">source (SP = Spectronaut)</div></div>', esc(det$data_source)),
