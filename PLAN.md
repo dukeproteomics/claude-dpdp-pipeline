@@ -124,9 +124,20 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
 - **Exports received 2026-11-04** (data/input, no Spectronaut normalization): `..._Report.tsv` (no imputation; identical to the original
   11488 report), `_background_`, `_impute_global_`, `_impute_runwise_`. Same 131,975 precursors and run order in all four.
 - Findings:
-  - `EG.IsImputed` is unreliable: in global/run-wise it is TRUE for the 72,232 filled values but also for 79,547 measured values that are
-    unchanged (ratio 1.00). The q-value rule misses 13,573 values that are identified (q <= 0.01) but have no quantity.
-    **Reliable mask = missing in the no-imputation export.** Values that weren't filled are identical across all exports.
+  - `EG.IsImputed` (revisited after the user's pushback): TRUE for all 72,232 filled values and also for 79,547 measured values whose
+    quantity is unchanged. Those flagged-but-measured values are **not random**: flag rate rises with run q-value (2% -> 21%) and falls with
+    intensity (40% below log2 4, 0.1% above 12); they sit at their precursor's own level (median -0.06 log2) but are noisier (IQR +/-0.5 vs
+    +/-0.2). The flag is set run by run, not per peptide or protein. Best explanation: Spectronaut treats them as not fully meeting its
+    quantification/FDR criteria (weak or partial peaks) and flags them, but keeps the measured precursor quantity. Untested guesses: a
+    fragment-level fill, or a protein-level use. The q-values and RTs are identical in all four exports.
+  - Why identified values (q <= 0.01) are blanked in the no-imputation export (13,573): ~15% are protein-group x run combinations where the
+    whole protein group is blanked (1,499 of 2,256 such combinations still had an identified precursor, so likely a run-wise protein FDR
+    cutoff). The other ~11,500 need another rule (candidates: precursor PEP cutoff, minimum fragments for quantification).
+  - Background can't fill 3,956 gaps although RT and q exist for 3,943 of them: no usable signal at the expected position.
+  - **Mask for the pipeline: filled = empty in the no-imputation export (exact). Keep `EG.IsImputed` as a second flag for "weak measured value".**
+  - To settle the rest: Spectronaut analysis settings (identification cutoffs incl. PEP and run-wise protein q; quantification filtering,
+    minimum fragments, interference correction), per-run EG.PEP, per-run PG.Quantity in the none vs global exports, fragment-level columns
+    for a subset.
   - Global: uniform on log2 between the ~1.5th and ~9th percentile of all measured values (4.43-6.58), the same in every run.
     Run-wise: the same rule per run (1.48-1.54% / 8.98-9.19%). Fills are unrelated to the precursor (cor 0.00). **Replicable.**
   - Background: fills 68,289 of 72,245 gaps (3,956 stay empty); median log2 6.3 (measured 9.6); **correlates with the precursor's level in
