@@ -156,8 +156,10 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
 One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` and `EG.IsImputed`.
 - **Background signal export:** filled = `EG.Qvalue > 0.01` (or no q-value). Values with q <= 0.01 count as measured (this includes the
   identified-but-blanked ones, which hold real extracted signal). Gaps with no value at all are still missing and the pipeline fills them.
-- **Global or run-wise imputation export:** filled = `EG.IsImputed == TRUE`. We trust Spectronaut's flag ("put our faith in the software").
-  Known effect for 11488: it also marks 79,547 measured, unchanged values (weak peaks), so measured counts are more conservative.
+- ~~Global or run-wise imputation export: filled = EG.IsImputed~~ **Dropped (user, 2026-11-04):** the flag has false positives (it marks
+  79,547 measured, unchanged values in 11488, some strong and well identified), and rule-bending workarounds aren't acceptable.
+  **Accepted inputs: background-signal exports, or raw exports (no background, no imputation). For raw input the pipeline imputes, with
+  several improved, best-practice methods to choose from (to be designed and tested).**
 - No-imputation exports keep working as now (empty = missing; the app's imputation step fills them).
 
 ## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize)
