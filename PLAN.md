@@ -190,6 +190,9 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   (Load counts them as measured). Their accuracy is between measured and background (spread vs true level: measured MAD 0.43-0.65 log2,
   these 1.18-1.41, background 1.55-1.91; S/N medians 18.7 / 6.4 / 2.1). Nothing in one background export separates them from
   measured values (IsImputed all False, PG.Qvalue global). Ask the user whether a Spectronaut setting/column explains the blanking.
+- **Impute step options built (2026-11-04):** perseus, minprob, qrilc next to the app's duke/bottomx (measured-only fill distribution,
+  background never overwritten). limpa not yet: DPC-Quant values + plain limma lose most of its advantage (triple-spike 4.2 / 8.3% vs
+  3.1 / 5.1% with dpcDE), so it needs Rollup (dpcQuant) and Stats (dpcDE p-values) changes.
 - Proposed Impute options (not yet decided by the user): raw default limpa; background default Spectronaut background + Perseus for
   empty gaps; Perseus / MinProb baselines; duke+bottom-X for comparison with old runs.
 

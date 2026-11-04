@@ -1,5 +1,5 @@
 # Review page for Step 7 - Impute.
-# Decisions: impute_type (duke / bottomx), missing_cutoff (which rows get duke), bottom_x (bottom-X fill range).
+# Decisions: impute_type (duke / bottomx / perseus / minprob / qrilc), missing_cutoff (which rows get duke), bottom_x (bottom-X fill range).
 # Rules (app: impute_duke, impute_bottomx, impute_meta_data_bg):
 #   duke     per group, rows with 0 < missing <= Count * (100 - missing_cutoff)/100 get group mean (log2) + U(-1,1) * SD,
 #            SD from 20 intensity bins of the group (built from precursor_filter). All other missing values -> bottom-X.
@@ -34,6 +34,7 @@ review_impute <- function(db_path) {
   # bottom-X range for X = 1..25, from the first normalized table (the app imputes each norm table separately)
   tab1 <- paste0("precursor_norm_", norms[1])
   lv <- sort(log2(smat(read_table(tab1, db_path)))); lv <- lv[lv > 0]; nn <- length(lv)
+  pers <- list(mu = mean(lv) - as.numeric(s$perseus_shift %||% 1.8) * sd(lv), sd = as.numeric(s$perseus_width %||% 0.3) * sd(lv))
   bx_grid <- 1:25
   bx_max <- vapply(bx_grid, function(x) lv[ceiling(x * nn / 100)], 0); bx_min <- lv[1]
   step <- 0.1; edges <- seq(floor(min(lv) / step) * step, ceiling(max(lv) / step) * step, by = step)
@@ -54,8 +55,10 @@ review_impute <- function(db_path) {
     }
     bot_mask <- na_mask & !duke_mask
     li <- log2(imp)
+    bgm <- if (table_exists("precursor_filter_bgmask", db_path)) smat(read_table("precursor_filter_bgmask", db_path)) == 1 else matrix(FALSE, nrow(filt), ncol(filt))
+    bgm[is.na(bgm)] <- FALSE
     hb <- function(v) tabulate(findInterval(v[!is.na(v) & v > 0], edges, rightmost.closed = TRUE), nbins = length(edges) - 1)
-    after <- list(meas = hb(li[!na_mask]), duke = hb(li[duke_mask]), bot = hb(li[bot_mask]),
+    after <- list(meas = hb(li[!na_mask & !bgm]), bg = if (any(bgm)) hb(li[bgm]) else NULL, duke = hb(li[duke_mask]), bot = hb(li[bot_mask]),
                   duke_pct = round(colSums(duke_mask) / nrow(filt) * 100, 2), bot_pct = round(colSums(bot_mask) / nrow(filt) * 100, 2),
                   duke_n = colSums(duke_mask), bot_n = colSums(bot_mask))
     if ("sltmm" %in% norms && table_exists("precursor_impute_sltmm", db_path) && table_exists("precursor_norm_sltmm", db_path)) {
@@ -69,36 +72,50 @@ review_impute <- function(db_path) {
   status_class <- if (applied) "done" else "waiting"
   dec <- read_decisions(run_dir, "07_impute"); last_dec <- if (length(dec)) dec[[length(dec)]] else NULL
   tot_missing <- sum(na_mask)
+  pipe_opts <- sprintf('<li><b>perseus</b> - per sample, a normal distribution shifted down from that sample&apos;s measured values
+(mean &minus; <b>%s</b> SD, width <b>%s</b> SD). Every empty value is treated as low.</li>
+<li><b>minprob</b> - per sample, random values around the <b>%s</b> quantile of the measured values (imputeLCMD MinProb).</li>
+<li><b>qrilc</b> - per sample, values from the low tail of a normal fitted to the measured values by quantile regression (imputeLCMD QRILC).</li>',
+    esc(s$perseus_shift %||% 1.8), esc(s$perseus_width %||% 0.3), esc(s$minprob_q %||% 0.01))
+  evidence <- '<p class="note"><b>Benchmark</b> (three-species spike-in with known ratios, 10 comparisons, calls adj p &le; 0.05 and FC &ge; 1.5;
+<code>tools/impute_benchmark</code>): false call rate mean / worst comparison: perseus 3.7 / 9.0%, minprob 4.0 / 10.5%, qrilc 3.7 / 9.8%,
+duke + bottom-X 8.3 / 22.5%, Spectronaut background (+ perseus for empty values) 3.5 / 6.8%. Duke finds the most changes but fills
+from the group&apos;s own mean, which shrinks the within-group spread and inflates false calls. The pipeline methods take their fill
+distribution from measured values only and never overwrite background values.</p>'
   options_html <- sprintf('<ul class="options">
 <li><b>duke</b> - a precursor missing in only a few samples of a group is filled near that group&apos;s mean (mean &plusmn; random &times; the SD of
 precursors at that intensity). Everything else gets bottom-X. <code>missing_cutoff</code> = %s%% decides &quot;only a few&quot;: duke is used when the group has
 at least %s%% of its samples measured.</li>
 <li><b>bottomx</b> - every missing value is filled with a random value between the lowest intensity and the bottom <b>%s%%</b> of all data
-(<code>bottom_x</code>), i.e. treated as below detection.</li></ul>
+(<code>bottom_x</code>), i.e. treated as below detection.</li>%s</ul>%s
 <p class="note">Other methods in the app&apos;s list are not implemented in <code>impute_apply_bg2()</code>. The random numbers are seeded
-(set.seed(123)), so a re-run gives the same values.</p>', esc(mc), esc(mc), esc(bx))
+(set.seed(123)), so a re-run gives the same values.</p>', esc(mc), esc(mc), esc(bx), pipe_opts, evidence)
   decision_html <- paste0('<section><h2>', if (applied) "Decision" else "Decision needed", '</h2>',
     if (applied) paste0('<div class="tiles">',
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">impute_type</div></div>', esc(itype)),
-      sprintf('<div class="tile"><div class="v">%s%%</div><div class="l">missing_cutoff</div></div>', esc(mc)),
-      sprintf('<div class="tile"><div class="v">%s%%</div><div class="l">bottom_x</div></div>', esc(bx)),
+      if (itype == "duke") sprintf('<div class="tile"><div class="v">%s%%</div><div class="l">missing_cutoff</div></div>', esc(mc)) else "",
+      if (itype %in% c("duke", "bottomx")) sprintf('<div class="tile"><div class="v">%s%%</div><div class="l">bottom_x</div></div>', esc(bx)) else "",
+      if (itype == "perseus") sprintf('<div class="tile"><div class="v">%s / %s</div><div class="l">shift / width (SD)</div></div>', esc(s$perseus_shift), esc(s$perseus_width)) else "",
+      if (itype == "minprob") sprintf('<div class="tile"><div class="v">%s</div><div class="l">quantile</div></div>', esc(s$minprob_q)) else "",
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">values filled (%s of all)</div></div>', fmt_n(tot_missing), fmt_pct(tot_missing / length(na_mask) * 100)),
+      if (!is.null(summ$background)) sprintf('<div class="tile"><div class="v">%s</div><div class="l">Spectronaut background values kept</div></div>', fmt_n(summ$background$kept_values)) else "",
       '</div>', if (!is.null(summ$note)) paste0('<p class="note">', esc(summ$note), '</p>') else "",
       if (!is.null(last_dec)) sprintf('<p class="note">Recorded %s%s. %s</p>', esc(last_dec$time), if (!is.null(last_dec$analyst)) paste0(" by ", esc(last_dec$analyst)) else "", esc(last_dec$note %||% "")) else "",
       '<details><summary>Options</summary>', options_html, '</details>') else options_html,
     if (!applied) '<p class="note">Use the explorers below, then give the choice in the Claude session.</p>' else "",
     '</section>')
 
-  plan_html <- '<section><h2>Fill plan: duke vs bottom-X by group</h2>
+  plan_html <- '<section><h2>Fill plan by group</h2>
 <p class="note">How the missing values of each group would be filled at the chosen <code>missing_cutoff</code>. A group with a large bottom-X share has many
 precursors missing in most of its samples; those get low values, which can create large fold changes.</p>
 <div class="control"><label for="mc">missing_cutoff</label><input type="range" id="mc" min="0" max="100" step="1"/><span class="val" id="mcv"></span>
-<label for="itype">impute_type</label><select id="itype"><option>duke</option><option>bottomx</option></select></div>
+<label for="itype">impute_type</label><select id="itype"><option>duke</option><option>bottomx</option><option>perseus</option><option>minprob</option><option>qrilc</option></select></div>
 <div id="planplot" style="height:260px" role="img" aria-label="Missing values per group, filled by duke or bottom-X"></div>
 <details><summary>Table view</summary><div id="plantable"></div></details></section>'
 
-  bx_html <- sprintf('<section><h2>Bottom-X fill range</h2>
-<p class="note">Bottom-X values are drawn evenly between the lowest measured intensity and the X-th percentile of <code>%s</code> (shaded band).</p>
+  bx_html <- sprintf('<section><h2>Where the low fills go</h2>
+<p class="note">Bottom-X values are drawn evenly between the lowest measured intensity and the X-th percentile of <code>%s</code> (orange band).
+Perseus fills (green band: mean &plusmn; 2 SD of its down-shifted normal, from all samples together; the real fill is per sample).</p>
 <div class="control"><label for="bx">bottom_x</label><input type="range" id="bx" min="0" max="%d" step="1"/><span class="val" id="bxv"></span></div>
 <div id="bxplot" style="height:340px" role="img" aria-label="Intensity histogram with the bottom-X fill range"></div></section>', esc(tab1), length(bx_grid) - 1)
 
@@ -107,8 +124,8 @@ precursors missing in most of its samples; those get low values, which can creat
 <div id="dukeplot" style="height:300px" role="img" aria-label="Duke SD by intensity bin per group"></div></section>'
 
   after_html <- if (!is.null(after)) paste0('<section><h2>Result: where the filled values sit</h2>',
-    '<p class="note">log2 intensities of the impute-only table (before TMM): measured values vs duke fills vs bottom-X fills. Bottom-X should sit at the low end;
-duke fills should look like the measured distribution.</p><div id="afterhist" style="height:340px" role="img" aria-label="Histogram of measured, duke and bottom-X values"></div>',
+    '<p class="note">log2 intensities of the impute-only table (before TMM): measured values, Spectronaut background values (background exports) and the filled values.
+Low fills (bottom-X, perseus, minprob, qrilc) should sit at the low end; duke fills should look like the measured distribution.</p><div id="afterhist" style="height:340px" role="img" aria-label="Histogram of measured, duke and bottom-X values"></div>',
     '<h2>Filled values per sample</h2><div id="afterbar" style="height:300px" role="img" aria-label="Percent of values filled per sample"></div>',
     '<details><summary>Table view</summary>', html_table(data.frame(Sample = labels, Group = grp_of, Duke = fmt_n(after$duke_n), `Duke %` = fmt_pct(after$duke_pct),
       `Bottom-X` = fmt_n(after$bot_n), `Bottom-X %` = fmt_pct(after$bot_pct), check.names = FALSE), 3:6), '</details>',
@@ -126,7 +143,7 @@ duke fills should look like the measured distribution.</p><div id="afterhist" st
 
   js_data <- list(groups = groups$Group, counts = as.integer(groups$Count), rows_by_k = rows_by_k, mc = mc, itype = itype,
                   edges = edges, hist = hist_meas, bx_grid = bx_grid, bx_max = bx_max, bx_min = bx_min, bx = bx,
-                  bins = bins, samples = labels, sample_group = grp_of, after = after)
+                  bins = bins, pers = pers, samples = labels, sample_group = grp_of, after = after)
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA), ';', IMPUTE_JS, '</script>')
   extra_css <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; } .control select { font:inherit; font-size:13px; }
 .control input[type=range] { width:260px; }</style>'
@@ -149,12 +166,13 @@ function plan() {
   const cut = +mc.value, duke = [], bot = [];
   D.groups.forEach((g, i) => { const maxm = D.counts[i] * (100 - cut) / 100; let d = 0, b = 0;
     D.rows_by_k[i].forEach((rows, j) => { const k = j + 1, v = k * rows; if (it.value === "duke" && k <= maxm) d += v; else b += v; }); duke.push(d); bot.push(b); });
-  document.getElementById("mcv").textContent = cut + "%: duke when at least " + (100 - cut) + "% of a group is measured" + (it.value === "bottomx" ? " (not used for bottomx)" : "");
+  const low = it.value === "duke" || it.value === "bottomx" ? "bottom-X" : it.value;
+  document.getElementById("mcv").textContent = cut + "%: duke when at least " + (100 - cut) + "% of a group is measured" + (it.value !== "duke" ? " (not used for " + it.value + ")" : "");
   const tr = (name, x, col) => ({ type: "bar", orientation: "h", name: name, y: D.groups, x: x, marker: { color: C(col), line: { width: 2, color: C("--surface-1") } },
     hovertemplate: "%{y}: %{x:,} " + name + "<extra></extra>" });
-  Plotly.react("planplot", [tr("duke", duke, "--series-3"), tr("bottom-X", bot, "--series-2")], Object.assign(base(), { barmode: "stack", showlegend: true,
+  Plotly.react("planplot", it.value === "duke" ? [tr("duke", duke, "--series-3"), tr(low, bot, "--series-2")] : [tr(low, bot, "--series-2")], Object.assign(base(), { barmode: "stack", showlegend: true,
     legend: { orientation: "h", y: 1.15 }, margin: { l: 70, r: 20, t: 10, b: 44 }, xaxis: ax("missing values"), yaxis: { autorange: "reversed" } }), cfg);
-  document.getElementById("plantable").innerHTML = "<table><thead><tr><th>Group</th><th class=num>missing</th><th class=num>duke</th><th class=num>bottom-X</th><th class=num>bottom-X %</th></tr></thead><tbody>" +
+  document.getElementById("plantable").innerHTML = "<table><thead><tr><th>Group</th><th class=num>missing</th><th class=num>duke</th><th class=num>${low}</th><th class=num>${low} %</th></tr></thead><tbody>" +
     D.groups.map((g, i) => `<tr><td>${g}</td><td class=num>${fmt(duke[i] + bot[i])}</td><td class=num>${fmt(duke[i])}</td><td class=num>${fmt(bot[i])}</td><td class=num>${(100 * bot[i] / Math.max(1, duke[i] + bot[i])).toFixed(1)}%</td></tr>`).join("") + "</tbody></table>";
 }
 mc.addEventListener("input", plan); it.addEventListener("change", plan); plan();
@@ -165,8 +183,10 @@ function bxdraw() {
   document.getElementById("bxv").textContent = x + "%: fill between log2 " + D.bx_min.toFixed(2) + " and " + hi.toFixed(2) + " (intensity " + Math.pow(2, D.bx_min).toPrecision(3) + " to " + Math.pow(2, hi).toPrecision(4) + ")";
   Plotly.react("bxplot", [{ type: "bar", x: centers, y: D.hist, width: 0.1, marker: { color: C("--series-1") }, hovertemplate: "log2 %{x:.2f}: %{y:,} values<extra></extra>" }],
     Object.assign(base(), { margin: { l: 70, r: 20, t: 10, b: 50 }, showlegend: false, bargap: 0.05,
-      shapes: [{ type: "rect", x0: D.bx_min, x1: hi, y0: 0, y1: 1, yref: "paper", fillcolor: C("--series-2"), opacity: 0.25, line: { width: 0 } }],
-      annotations: [{ x: hi, y: 0.95, yref: "paper", text: "bottom " + x + "%", showarrow: false, xanchor: "left", xshift: 4, font: { color: C("--text-primary") } }],
+      shapes: [{ type: "rect", x0: D.bx_min, x1: hi, y0: 0, y1: 1, yref: "paper", fillcolor: C("--series-2"), opacity: 0.25, line: { width: 0 } },
+               { type: "rect", x0: D.pers.mu - 2 * D.pers.sd, x1: D.pers.mu + 2 * D.pers.sd, y0: 0, y1: 1, yref: "paper", fillcolor: C("--series-3"), opacity: 0.25, line: { width: 0 } }],
+      annotations: [{ x: hi, y: 0.95, yref: "paper", text: "bottom " + x + "%", showarrow: false, xanchor: "left", xshift: 4, font: { color: C("--text-primary") } },
+                    { x: D.pers.mu, y: 0.85, yref: "paper", text: "perseus", showarrow: false, font: { color: C("--text-primary") } }],
       xaxis: ax("log2 intensity"), yaxis: Object.assign(ax("measured values"), { rangemode: "tozero" }) }), cfg);
 }
 bxr.addEventListener("input", bxdraw); bxdraw();
@@ -179,12 +199,15 @@ Plotly.newPlot("dukeplot", D.groups.map((g, i) => ({ type: "scatter", mode: "lin
 // after
 if (D.after) {
   const A = D.after, h = (y, name, col) => ({ type: "bar", x: centers, y: y, width: 0.1, name: name, marker: { color: C(col) }, hovertemplate: name + " log2 %{x:.2f}: %{y:,}<extra></extra>" });
-  Plotly.newPlot("afterhist", [h(A.meas, "measured", "--series-1"), h(A.duke, "duke fill", "--series-3"), h(A.bot, "bottom-X fill", "--series-2")],
+  const lowname = D.itype === "duke" || D.itype === "bottomx" ? "bottom-X" : D.itype;
+  const tr = [h(A.meas, "measured", "--series-1")]; if (A.bg && A.bg.length) tr.push(h(A.bg, "Spectronaut background", "--series-4"));
+  if (D.itype === "duke") tr.push(h(A.duke, "duke fill", "--series-3")); tr.push(h(A.bot, lowname + " fill", "--series-2"));
+  Plotly.newPlot("afterhist", tr,
     Object.assign(base(), { barmode: "stack", bargap: 0, showlegend: true, legend: { orientation: "h", y: 1.1 }, margin: { l: 70, r: 20, t: 10, b: 50 },
       xaxis: ax("log2 intensity"), yaxis: Object.assign(ax("values"), { rangemode: "tozero" }) }), cfg);
   const b = (y, name, col, n) => ({ type: "bar", name: name, x: D.samples, y: y, customdata: n, marker: { color: C(col), line: { width: 2, color: C("--surface-1") } },
     hovertemplate: "%{x}<br>" + name + ": %{y:.2f}% (%{customdata:,})<extra></extra>" });
-  Plotly.newPlot("afterbar", [b(A.duke_pct, "duke", "--series-3", A.duke_n), b(A.bot_pct, "bottom-X", "--series-2", A.bot_n)],
+  Plotly.newPlot("afterbar", D.itype === "duke" ? [b(A.duke_pct, "duke", "--series-3", A.duke_n), b(A.bot_pct, lowname, "--series-2", A.bot_n)] : [b(A.bot_pct, lowname, "--series-2", A.bot_n)],
     Object.assign(base(), { barmode: "stack", showlegend: true, legend: { orientation: "h", y: 1.12 }, margin: { l: 60, r: 20, t: 10, b: 50 },
       xaxis: { categoryorder: "array", categoryarray: D.samples }, yaxis: Object.assign(ax("% of values filled"), { rangemode: "tozero" }) }), cfg);
 }

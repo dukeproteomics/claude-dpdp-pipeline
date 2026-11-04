@@ -171,12 +171,15 @@ for (m in methods) {
     res[[m]] <- score(lfq(L), lim)
   } else if (m == "limpa") {
     Q <- limpa::dpcQuant(L, protein.id = prot, dpc = limpa::dpc(L), verbose = FALSE); res[[m]] <- score(Q, lim_limpa)
+  } else if (m == "limpa_limma") {   # DPC-Quant protein values, plain limma (no precision weights)
+    Q <- limpa::dpcQuant(L, protein.id = prot, dpc = limpa::dpc(L), verbose = FALSE); res[[m]] <- score(Q$E, lim)
   }
   cat(sprintf("%.0f s\n", as.numeric(difftime(Sys.time(), t1, units = "secs"))))
 }
 
 labels_m <- c(sapply(IMPUTE_METHODS, `[[`, "label"), background = "Spectronaut background (+ Perseus for empty gaps)",
-              none = "no imputation (MaxLFQ with gaps)", limpa = "limpa DPC-Quant (no imputation)")
+              none = "no imputation (MaxLFQ with gaps)", limpa = "limpa DPC-Quant (no imputation)",
+              limpa_limma = "limpa DPC-Quant values, plain limma (no weights)")
 out <- list(raw = abs_path(args$raw), background = if (!is.null(args$background)) abs_path(args$background) else NULL,
             groups = glev, comparisons = comps, gaps_per_sample = as.list(gaps_per_sample), norm_factors = as.list(setNames(round(nf, 4), labels)),
             start = list(precursors = nrow(L), proteins = length(unique(prot)), species = as.list(table(sp_prot)), gaps = sum(is.na(L))),

@@ -29,7 +29,7 @@ The analyst can decide **on the review page** (radio buttons, fields, a note, an
 | 04_noise | `none` / `dynamic` / `fixed` -> `04_noise.R --action=apply --noise_type=<choice>` [`--noise_baseline_value`] [`--noise_keep=TRUE` if `fields.noise_keep` is true] |
 | 05_filter | `apply` -> `05_filter.R --action=apply` with the previewed settings; `change` -> re-preview with the change |
 | 06_normalize | `default_exclude` -> default rule; `current_exclude` -> current `norm_exclude_grep`; `custom_exclude` -> preview with `fields.norm_exclude_grep` first, then apply. Method = `fields.norm_type` |
-| 07_impute | `duke` / `bottomx` -> `07_impute.R --action=apply --impute_type=<choice> --missing_cutoff --bottom_x` from the fields (re-preview first if they changed) |
+| 07_impute | `duke` / `bottomx` / `perseus` / `minprob` / `qrilc` -> `07_impute.R --action=apply --impute_type=<choice>` plus that choice's fields (`--missing_cutoff --bottom_x`, `--perseus_shift --perseus_width`, `--minprob_q`); re-preview first if they changed |
 | 08_rollup | `iq_maxlfq_scaled` -> `--rollup_method=iq_maxlfq --maxlfq_scale=TRUE`; `iq_maxlfq` -> `... --maxlfq_scale=FALSE`; `sum` -> `--rollup_method=sum` |
 | 09_qc | `accept_flag` -> `09_qc.R --action=accept --flag_samples=<fields.flag_samples>`; `accept` -> `--action=accept`; `stop` -> stop |
 | 10_stats (settings) | `run` -> `10_stats.R --action=apply`, then 10b and 10c; `run_adjp` -> the same with `--checkbox_filter_adjpval=TRUE`; `change` -> discuss |
@@ -57,7 +57,7 @@ Ask for anything missing. Ask which spike-ins the project uses if they aren't th
 | 4 | Noise | dpdp-noise | none / fixed / dynamic, noise_keep |
 | 5 | Filter | dpdp-filter | filter settings |
 | 6 | Normalize | dpdp-normalize | exclude rule, method |
-| 7 | Impute | dpdp-impute | duke / bottomx, cutoffs |
+| 7 | Impute | dpdp-impute | duke / bottomx / perseus / minprob / qrilc, settings |
 | 8 | Rollup | dpdp-rollup | sum / iq_maxlfq |
 | 9 | QC | dpdp-qc | accept, flag samples |
 | 10 | Stats | dpdp-stats | settings + comparisons, then accept results |

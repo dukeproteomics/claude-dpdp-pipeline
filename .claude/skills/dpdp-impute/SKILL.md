@@ -1,6 +1,6 @@
 ---
 name: dpdp-impute
-description: Step 7 of the DPDP proteomics pipeline (same as the Shiny app's Impute tab). Use after dpdp-normalize. Builds per-group intensity bins and a seeded random table, shows missing value plots, imputes every normalized table (duke or bottom-X), applies TMM after imputation for sltmm, and shows the imputed bar plots. The user approves the settings and reviews every plot.
+description: Step 7 of the DPDP proteomics pipeline (same as the Shiny app's Impute tab). Use after dpdp-normalize. Builds per-group intensity bins and a seeded random table, shows missing value plots, imputes every normalized table (app: duke or bottom-X; pipeline: perseus, minprob, qrilc), applies TMM after imputation for sltmm, and shows the imputed bar plots. The user approves the settings and reviews every plot.
 ---
 
 # DPDP Step 7 — Impute
@@ -10,7 +10,9 @@ description: Step 7 of the DPDP proteomics pipeline (same as the Shiny app's Imp
 ## Settings
 | Setting | App default | 11488 reference | Meaning |
 |---|---|---|---|
-| `impute_type` | duke | duke | `duke` or `bottomx` (only these two are implemented in the app's `impute_apply_bg2()`, although the dropdown lists more) |
+| `impute_type` | duke | duke | app: `duke`, `bottomx` (the only two in `impute_apply_bg2()`); pipeline: `perseus`, `minprob`, `qrilc` |
+| `perseus_shift`, `perseus_width` | 1.8, 0.3 | - | Perseus: per sample N(mean - shift x SD, (width x SD)^2) of the measured log2 values |
+| `minprob_q` | 0.01 | - | MinProb: quantile of each sample's measured values the fills centre on |
 | `bottom_x` | 2 | 2 | bottom-X percentile range used for bottom-X fills |
 | `missing_cutoff` | 50 | 50 | % measured in a group needed for a duke fill |
 
@@ -18,6 +20,13 @@ description: Step 7 of the DPDP proteomics pipeline (same as the Shiny app's Imp
 gets duke fills (group mean + random × bin SD). Precursors with more missing values get bottom-X fills (random value in the lowest `bottom_x`%).
 With 3 samples per group and cutoff 50, a precursor missing 1 of 3 gets duke, and one missing 2 or 3 of 3 gets bottom-X.
 The random numbers are seeded (`set.seed(123)`), so results are reproducible.
+
+**Pipeline methods** (`pipeline/impute_methods.R`): on log2, per sample, the fill distribution from **measured values only**
+(background blanked); only empty values get fills, background values are never overwritten. All three treat every empty value as low.
+**Evidence** (`tools/impute_benchmark`, triple-spike, 10 comparisons; false call rate mean / worst): perseus 3.7 / 9.0%,
+minprob 4.0 / 10.5%, qrilc 3.7 / 9.8%, duke + bottom-X 8.3 / 22.5% (most true calls, but group-mean fills inflate false calls),
+background export + perseus 3.5 / 6.8%. Show these on the page; the analyst chooses. `limpa` is not an Impute option yet (it needs
+Rollup and Stats: without its precision weights in the test it loses most of its advantage, 4.2 / 8.3%).
 
 ## Run
 ```bash

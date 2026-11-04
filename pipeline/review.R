@@ -103,7 +103,10 @@ decision_spec <- function(step, variant, p) {
                      ch("custom_exclude", "Exclude: my own regex", list(fld("norm_exclude_grep", "description regex", "text", g("norm_exclude_grep")))))),
     "07_impute" = list(q = "How should the data be imputed?", nxt = "Step 8 - Rollup", choices = list(
       ch("duke", "duke (near the group mean), bottom-X for the rest", list(fld("missing_cutoff", "missing_cutoff %", "number", g("missing_cutoff", "50")), fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
-      ch("bottomx", "bottomx only", list(fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))))),
+      ch("bottomx", "bottomx only", list(fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
+      ch("perseus", "perseus (down-shifted normal per sample)", list(fld("perseus_shift", "shift (SD)", "number", g("perseus_shift", "1.8")), fld("perseus_width", "width (SD)", "number", g("perseus_width", "0.3")))),
+      ch("minprob", "minprob", list(fld("minprob_q", "quantile", "number", g("minprob_q", "0.01")))),
+      ch("qrilc", "qrilc"))),
     "08_rollup" = list(q = "Which rollup?", nxt = "Step 9 - QC", choices = list(
       ch("iq_maxlfq_scaled", "iq_maxlfq, scaled"), ch("iq_maxlfq", "iq_maxlfq, not scaled"), ch("sum", "sum"))),
     "09_qc" = list(q = "Accept the QC and continue to Stats?", nxt = "Step 10 - Stats", choices = list(
