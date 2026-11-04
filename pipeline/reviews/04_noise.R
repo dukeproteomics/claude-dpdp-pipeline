@@ -12,6 +12,8 @@ review_noise <- function(db_path) {
   labels <- if (!is.null(design$Label) && length(design$Label) == n_s) design$Label else names(start)[cols]
   m <- as.matrix(start[, cols]); m[m <= 0] <- NA
   lg <- log2(m)
+  groups_tbl <- read_table("sample_groups", db_path)
+  gcols_n <- setNames(lapply(seq_len(nrow(groups_tbl)), function(i) as.integer(groups_tbl$start[i]):as.integer(groups_tbl$end[i])), groups_tbl$Group)
   sd_dir <- file.path(run_dir, "steps", "04_noise")
   applied <- if (file.exists(file.path(sd_dir, "summary.json"))) fromJSON(file.path(sd_dir, "summary.json")) else NULL
   if (!is.null(applied) && !identical(applied$action, "apply")) applied <- NULL
@@ -101,6 +103,41 @@ Without noise_keep, removed values stay missing and are imputed later.</p>',
     if (!is.null(applied)) embed_png(file.path(qc, "Precursor_NoiseFiltered_Histogram.png"), "Noise filtered histogram", "App plot: histogram after the noise step.") else "",
     '</div></details></section>')
 
+  # --- replicate reproducibility: does a value at this intensity repeat in the other replicates? ---
+  pool <- if (!is.null(p$comp_spqc) && p$comp_spqc %in% groups_tbl$Group) p$comp_spqc else if ("SPQC" %in% groups_tbl$Group) "SPQC" else NA
+  rep_sets <- if (!is.na(pool)) list(gcols_n[[pool]]) else Filter(function(cc) length(cc) >= 3, gcols_n)
+  rep_src <- if (!is.na(pool)) sprintf("the %d %s injections (one pooled sample run %d times: pure technical replicates)", length(gcols_n[[pool]]), pool, length(gcols_n[[pool]]))
+             else "replicates within each group (biological + technical variation)"
+  rb <- seq(floor(min(lg, na.rm = TRUE) * 2) / 2, ceiling(max(lg, na.rm = TRUE) * 2) / 2, by = 0.5)
+  acc <- list(n = 0, all = 0, none = 0); cvl <- list(); mnl <- list()
+  for (cc in rep_sets) {
+    sub_lg <- lg[, cc, drop = FALSE]; k <- length(cc)
+    for (j in seq_len(k)) { v <- sub_lg[, j]; ok <- !is.na(v); oth <- rowSums(!is.na(sub_lg[ok, -j, drop = FALSE]))
+      b <- findInterval(v[ok], rb, rightmost.closed = TRUE)
+      acc$n <- acc$n + tabulate(b, length(rb) - 1); acc$all <- acc$all + tabulate(b[oth == k - 1], length(rb) - 1); acc$none <- acc$none + tabulate(b[oth == 0], length(rb) - 1) }
+    full <- rowSums(!is.na(sub_lg)) == k; raw <- 2^sub_lg[full, , drop = FALSE]
+    cvl[[length(cvl) + 1]] <- apply(raw, 1, stats::sd) / rowMeans(raw) * 100; mnl[[length(mnl) + 1]] <- rowMeans(sub_lg[full, , drop = FALSE])
+  }
+  cvv <- unlist(cvl); mnv <- unlist(mnl); cb <- findInterval(mnv, rb, rightmost.closed = TRUE)
+  med_cv <- vapply(seq_len(length(rb) - 1), function(i) { x <- cvv[cb == i]; if (length(x) >= 20) round(stats::median(x), 1) else NA_real_ }, 0)
+  ok_bin <- acc$n >= 50
+  redet <- ifelse(ok_bin, round(100 * acc$all / pmax(acc$n, 1), 1), NA); never <- ifelse(ok_bin, round(100 * acc$none / pmax(acc$n, 1), 1), NA)
+  cross <- function(y, bad) { i <- which(!is.na(y) & bad(y)); if (!length(i)) NA else rb[max(i) + 1] }   # lowest log2 above which every bin is fine
+  repro <- list(centers = (head(rb, -1) + tail(rb, -1)) / 2, n = acc$n, redet = redet, never = never, cv = med_cv, src = rep_src,
+                cv50 = cross(med_cv, function(y) y >= 50), redet70 = cross(redet, function(y) y < 70),
+                infl = if (have_infl) log2(infl) else NA)
+  repro_html <- paste0('<section id="repro"><h2>Replicate reproducibility</h2>',
+    sprintf('<p class="note">Noise is signal that does not repeat. Using %s: for each intensity, the share of values that are also measured in <b>all</b> the other replicates, and the replicate CV. ', esc(rep_src)),
+    'A noise floor shows as the point where re-detection falls and CV climbs. Move the slider to pick a cutoff; <b>Use as fixed baseline</b> puts it in the decision form above.</p>',
+    '<div class="control"><label for="rcut">Cutoff (log2)</label><input id="rcut" type="range" min="0" max="', length(rb) * 4, '" step="1"/><span class="val" id="rcutv"></span>',
+    '<button type="button" id="ruse">Use as fixed baseline</button><button type="button" data-rjump="cv50">CV 50% point</button><button type="button" data-rjump="redet70">re-detected 70% point</button><button type="button" data-rjump="infl">current inflection</button></div>',
+    '<div class="tiles" id="rtiles"></div><div class="grid2"><div><h3>Re-detected in all other replicates</h3><div id="rredet" style="height:300px" role="img" aria-label="Share of values re-detected by intensity"></div></div>',
+    '<div><h3>Median replicate CV</h3><div id="rcv" style="height:300px" role="img" aria-label="Replicate CV by intensity"></div></div></div>',
+    '<details><summary>Table view</summary>', html_table(data.frame(`log2 intensity` = sprintf("%.1f-%.1f", head(rb, -1), tail(rb, -1)), Values = fmt_n(acc$n),
+      `Re-detected in all others` = ifelse(is.na(redet), "-", paste0(redet, "%")), `In no other` = ifelse(is.na(never), "-", paste0(never, "%")),
+      `Median CV` = ifelse(is.na(med_cv), "-", paste0(med_cv, "%")), check.names = FALSE)[acc$n > 0, ], 2:5), '</details>',
+    sprintf('<script>window.DPDP_REPRO = %s;</script>', toJSON(repro, auto_unbox = TRUE, digits = NA, na = "null")), '</section>')
+
   explorer_html <- sprintf('<section><h2>Cutoff explorer</h2>
 <p class="note">Move the slider to see what any cutoff would remove. It is a guide for choosing; the exact counts for fixed and
 dynamic are in the options above. Precursors with fewer than %d values left would fail the filter&apos;s minimum-measured rule
@@ -172,6 +209,46 @@ slider.value = D.inflection > 0 ? idxFor(D.inflection) : 0; update();
 })();
 </script>', plotly_js(), toJSON(explorer, auto_unbox = TRUE, digits = NA))
 
-  body <- paste0(decision_html, tiles, graphs, explorer_html, js)
+  body <- paste0(decision_html, tiles, graphs, repro_html, explorer_html, js, '<script>', REPRO_JS, '</script>')
   write_review_page(run_dir, "04_noise", "Step 4 - Noise", status, status_class, body)
 }
+
+REPRO_JS <- '
+(function () {
+  const R = window.DPDP_REPRO; if (!R) return;
+  const css = getComputedStyle(document.querySelector(".viz-root")), C = n => css.getPropertyValue(n).trim();
+  const fmt = n => Math.round(n).toLocaleString("en-US");
+  const lo = R.centers[0] - 0.25, step = 0.125, sl = document.getElementById("rcut");
+  const xOf = k => lo + k * step, kOf = x => Math.max(0, Math.min(+sl.max, Math.round((x - lo) / step)));
+  const at = (arr, x) => { let i = R.centers.findIndex(c => x < c + 0.25); if (i < 0) i = R.centers.length - 1; return arr[i]; };
+  const base = () => ({ paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 }, margin: { l: 55, r: 15, t: 10, b: 45 }, showlegend: false });
+  const refs = [["CV 50%", R.cv50, "--series-3", "dash"], ["re-detected 70%", R.redet70, "--ref-fixed", "dash"], ["inflection", R.infl, "--ref-dynamic", "solid"]].filter(r => r[1] !== null);
+  function draw() {
+    const x = xOf(+sl.value), raw = Math.pow(2, x);
+    document.getElementById("rcutv").textContent = "log2 " + x.toFixed(2) + " = intensity " + raw.toPrecision(3);
+    const shapes = refs.map(r => ({ type: "line", x0: r[1], x1: r[1], y0: 0, y1: 1, yref: "paper", line: { color: C(r[2]), width: 2, dash: r[3] } }))
+      .concat([{ type: "line", x0: x, x1: x, y0: 0, y1: 1, yref: "paper", line: { color: C("--text-primary"), width: 2, dash: "dot" } }]);
+    const anns = refs.map((r, j) => ({ x: r[1], y: 0.98 - j * 0.1, yref: "paper", xanchor: "left", xshift: 3, showarrow: false, text: r[0], font: { size: 11, color: C("--text-primary") } }));
+    const tr = (y, name, fmtY) => [{ type: "scatter", mode: "lines+markers", x: R.centers, y: y, line: { width: 2, color: C("--series-1") }, marker: { size: 6, color: C("--series-1") },
+      customdata: R.n, hovertemplate: "log2 %{x:.2f}: " + fmtY + "<br>%{customdata:,} values<extra></extra>" }];
+    Plotly.react("rredet", tr(R.redet, "re-detected", "%{y:.1f}% re-detected"), Object.assign(base(), { shapes, annotations: anns,
+      xaxis: { title: "log2 intensity", gridcolor: C("--grid"), zeroline: false, range: [lo, 16] }, yaxis: { title: "% of values", range: [0, 100], gridcolor: C("--grid") } }), { displayModeBar: false, responsive: true });
+    Plotly.react("rcv", tr(R.cv, "CV", "median CV %{y:.1f}%"), Object.assign(base(), { shapes, annotations: anns,
+      xaxis: { title: "log2 intensity", gridcolor: C("--grid"), zeroline: false, range: [lo, 16] }, yaxis: { title: "median CV %", rangemode: "tozero", gridcolor: C("--grid") } }), { displayModeBar: false, responsive: true });
+    let below = 0; if (typeof D !== "undefined") { const ki = D.edges.findIndex(e => e >= x - 1e-9); const kk = ki < 0 ? D.edges.length - 1 : ki; below = D.per_sample.reduce((s, c) => s + c[kk], 0); }
+    const tot = (typeof D !== "undefined") ? D.sample_values.reduce((a, b) => a + b, 0) : 0;
+    const rd = at(R.redet, x), cv = at(R.cv, x);
+    document.getElementById("rtiles").innerHTML =
+      `<div class="tile"><div class="v">${rd === null ? "-" : rd + "%"}</div><div class="l">re-detected in all other replicates at this intensity</div></div>` +
+      `<div class="tile"><div class="v">${cv === null ? "-" : cv + "%"}</div><div class="l">median replicate CV at this intensity</div></div>` +
+      `<div class="tile"><div class="v">${fmt(below)}</div><div class="l">values below this cutoff (${tot ? (100 * below / tot).toFixed(2) : "-"}% of all)</div></div>`;
+  }
+  sl.addEventListener("input", draw);
+  document.querySelectorAll("[data-rjump]").forEach(b => { const v = R[b.dataset.rjump]; if (v === null) { b.disabled = true; return; } b.addEventListener("click", () => { sl.value = kOf(v); draw(); }); });
+  document.getElementById("ruse").addEventListener("click", () => {
+    const raw = Math.round(Math.pow(2, xOf(+sl.value)) * 100) / 100;
+    if (window.dpdpChoose) window.dpdpChoose("fixed"); if (window.dpdpSetField) window.dpdpSetField("noise_baseline_value", String(raw), true);
+    const d = document.getElementById("decision"); if (d) d.scrollIntoView({ behavior: "smooth" }); });
+  sl.value = kOf(R.cv50 !== null ? R.cv50 : (R.infl !== null ? R.infl : R.centers[0])); draw();
+})();
+'

@@ -53,6 +53,17 @@ This writes `precursor_noise` and `QC/Precursor_NoiseFiltered_Histogram.png`, an
 analyst's name (default `$USER`). It also rebuilds the review page, which now shows the decision and the values removed per sample.
 Show the analyst the page path again, plus the counts of values removed.
 
+## Replicate reproducibility panel (added 2026-11-04)
+The page also shows, for each intensity, the share of values re-detected in **all** other replicates and the median replicate CV.
+It uses the pool (SPQC) injections when the run has them, or replicates within each group otherwise. Reference lines mark where CV
+passes 50% and where re-detection drops below 70%, plus the current inflection. **Use as fixed baseline** puts the slider's intensity
+into the form's fixed option. Noise is signal that doesn't repeat, so this measures it directly.
+
+Why it's there: the app's inflection rule finds a "knee" in any bell-shaped distribution. On simulated noise-free data with
+11488's size and spread it removed 0.81% (11488 itself: 0.90%), so the inflection alone doesn't show that noise exists. For 11488 the
+SPQC curve falls off smoothly (CV 50% at log2 5.0, intensity 32; 70% re-detection at log2 4.5), with no distinct noise floor.
+Describe the curve neutrally; the analyst picks the cutoff (or none).
+
 ## noise_keep (user's rule, 2026-11-04; pipeline fix)
 1. Step 4 removes every value below the noise baseline, so the filter treats noise as missing.
 2. Step 5 filters as usual. A precursor that is mostly noise fails the filter and is removed from the analysis.

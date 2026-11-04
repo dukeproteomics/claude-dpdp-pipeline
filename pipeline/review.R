@@ -155,7 +155,8 @@ DECISION_JS <- '
   const bar = el("div", { class: "dbar" }); bar.appendChild(el("span", {}, "Note ")); bar.appendChild(note); bar.appendChild(el("span", {}, " Analyst ")); bar.appendChild(who);
   const btn = el("button", { type: "button", class: "dsend" }, "Send to Claude"); bar.appendChild(btn); box.appendChild(bar);
   const msg = el("p", { class: "dmsg" }); box.appendChild(msg);
-  window.dpdpSetField = (name, value) => { box.querySelectorAll("[data-name=\\"" + name + "\\"]").forEach(i => { if (!i.dataset.edited) i.value = value; }); };
+  window.dpdpSetField = (name, value, force) => { box.querySelectorAll("[data-name=\\"" + name + "\\"]").forEach(i => { if (force || !i.dataset.edited) { i.value = value; if (force) i.dataset.edited = "1"; } }); };
+  window.dpdpChoose = value => { const r = box.querySelector("input[name=dchoice][value=\\"" + value + "\\"]"); if (r) r.checked = true; };
   Object.entries(window.DPDP_PREFILL || {}).forEach(([k, v]) => window.dpdpSetField(k, v));
   box.addEventListener("input", e => { if (e.target.dataset) e.target.dataset.edited = "1"; });
   if (!served) { btn.disabled = true; msg.innerHTML = "Buttons need the review server. Ask Claude to start it, then open <code>http://127.0.0.1:8765/" + S.run + "/review/" + S.step + ".html</code>. Or answer in the Claude window."; return; }
