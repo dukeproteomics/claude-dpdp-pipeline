@@ -239,10 +239,8 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   +3.17): app FC is the ratio of linear means, inflated by noisy background values. Open question for the user: app t-test / ratio-of-means
   vs limma or limpa as the Stats default.
 
-## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize)
-- Decisions so far made on the review pages: Load accept, Parameters accept, Noise fixed 26.91 (log2 4.75, from the replicate
-  reproducibility panel) with noise_keep on, Filter as the Shiny run (125,923 precursors / 7,142 proteins; 14,074 values put back).
-- Resume: preview is done; start `wait_decision.py --step=06_normalize` (server: `python3 pipeline/review_server.py`).
+## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize; deleted 2026-11-05)
+- Paused before the Spectronaut/limpa/phospho changes; run folder deleted at the user's request.
 
 ## In-page decisions (option B, built 2026-11-04)
 - `pipeline/review_server.py` (localhost only, per-start token, writes only `review/pending_decision.json`), a form on every page
