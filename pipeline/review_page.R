@@ -7,6 +7,7 @@ here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value 
 source(file.path(here, "common.R"))
 source(file.path(here, "review.R"))
 source(file.path(here, "contaminants.R"))
+source(file.path(here, "background.R")); source(file.path(here, "limpa.R"))
 args <- parse_args()
 need(args, c("db", "step"))
 db_path <- normalizePath(args$db, mustWork = TRUE)

@@ -11,6 +11,7 @@
 #       [--perseus_shift=1.8 --perseus_width=0.3] [--minprob_q=0.01]
 #   duke, bottomx: the app's methods (impute_apply_bg). perseus, minprob, qrilc: pipeline methods (pipeline/impute_methods.R), on log2,
 #   per sample, with the fill distribution taken from measured values only; background values are never overwritten.
+#   limpa: no imputation; the gaps stay for DPC-Quant in Step 8 and dpcDE in Step 10 (pipeline/limpa.R).
 #   Evidence for the choice: tools/impute_benchmark (triple-spike) and step 07b.
 #   apply also needs --decided_by=user (after the analyst approves); optional --analyst=<name> --note="<why>"
 # Both actions (re)build the review page <run_dir>/review/07_impute.html.
@@ -38,9 +39,9 @@ spec <- list(impute_type = "duke", bottom_x = 2, missing_cutoff = 50, perseus_sh
 settings <- resolve_settings(spec, args)
 APP_METHODS <- c("duke", "bottomx")            # impute_apply_bg2() implements only these two of the app's list
 PIPE_METHODS <- c("perseus", "minprob", "qrilc")
-if (!settings$impute_type %in% c(APP_METHODS, PIPE_METHODS))
-  stop("--impute_type must be one of: ", paste(c(APP_METHODS, PIPE_METHODS), collapse = ", "),
-       ". (limpa needs Rollup and Stats changes and is not built yet.)")
+NO_IMPUTE <- "limpa"
+if (!settings$impute_type %in% c(APP_METHODS, PIPE_METHODS, NO_IMPUTE))
+  stop("--impute_type must be one of: ", paste(c(APP_METHODS, PIPE_METHODS, NO_IMPUTE), collapse = ", "))
 
 p <- get_params(db_path)
 for (k in names(settings)) p[[k]] <- settings[[k]]
@@ -86,7 +87,7 @@ if (args$action == "preview") {
                decision_needed = "User reviews the missing value plots and fill plan, then approves --action=apply."))
   write_summary(summary, sd)
   cat("\n==== Impute preview ====\n")
-  for (f in fill_plan) if (settings$impute_type %in% PIPE_METHODS) cat(sprintf("  %-6s missing %6d  -> %s\n", f$group, f$missing_total, settings$impute_type)) else
+  for (f in fill_plan) if (settings$impute_type %in% c(PIPE_METHODS, NO_IMPUTE)) cat(sprintf("  %-6s missing %6d  -> %s\n", f$group, f$missing_total, if (settings$impute_type == "limpa") "kept as gaps (limpa)" else settings$impute_type)) else
   cat(sprintf("  %-6s missing %6d  -> duke %6d, bottom-X %6d\n", f$group, f$missing_total, f$duke_values, f$bottomx_values))
   page <- review_impute(db_path)
   cat("Plots:\n", paste0("  ", summary$plots, collapse = "\n"), "\nReview page:", page, "\n>>> Waiting for the user's approval.\n")
@@ -99,7 +100,9 @@ if (!identical(args$decided_by, "user")) stop("Apply needs the analyst's approva
 # calculated from measured values instead (pipeline/background.R::tmm_measured_factors).
 run_norms <- ifelse(norms == "sltmm", "sltmmpre", norms)
 if ("sltmm" %in% norms) write_table_try("precursor_norm_sltmmpre", read_table("precursor_norm_sltmm", db_path), db_path)
-if (settings$impute_type %in% APP_METHODS) {
+if (settings$impute_type == "limpa") {
+  for (rn in run_norms) write_table_try(str_c("precursor_impute_", rn), read_table(str_c("precursor_norm_", rn), db_path), db_path)
+} else if (settings$impute_type %in% APP_METHODS) {
   run_bg(impute_apply_bg, list(as.list(run_norms), p, db_path), "impute_bg", db_path)
 } else {
   # pipeline methods: log2; the method sees measured values only (background blanked), and only empty values take its fill
@@ -156,7 +159,7 @@ log_decision(run_dir, "07_impute", settings, analyst = args$analyst,
              note = paste(c(args$note, if (!is.null(args$settings_from)) paste("settings copied from", args$settings_from)), collapse = "; "))
 
 cat("\n==== Imputation applied ====\n")
-for (f in fill_plan) if (settings$impute_type %in% PIPE_METHODS) cat(sprintf("  %-6s missing %6d  -> %s\n", f$group, f$missing_total, settings$impute_type)) else
+for (f in fill_plan) if (settings$impute_type %in% c(PIPE_METHODS, NO_IMPUTE)) cat(sprintf("  %-6s missing %6d  -> %s\n", f$group, f$missing_total, if (settings$impute_type == "limpa") "kept as gaps (limpa)" else settings$impute_type)) else
   cat(sprintf("  %-6s missing %6d  -> duke %6d, bottom-X %6d\n", f$group, f$missing_total, f$duke_values, f$bottomx_values))
 for (c in check) cat(sprintf("  %s: %d rows, %d NA left, sample total CV %.2f%%\n", c$table, c$rows, c$remaining_na, c$total_cv_pct))
 cat("Plots:\n", paste0("  ", summary$plots, collapse = "\n"), "\n")

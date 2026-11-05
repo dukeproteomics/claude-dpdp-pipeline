@@ -106,9 +106,11 @@ decision_spec <- function(step, variant, p) {
       ch("bottomx", "bottomx only", list(fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
       ch("perseus", "perseus (down-shifted normal per sample)", list(fld("perseus_shift", "shift (SD)", "number", g("perseus_shift", "1.8")), fld("perseus_width", "width (SD)", "number", g("perseus_width", "0.3")))),
       ch("minprob", "minprob", list(fld("minprob_q", "quantile", "number", g("minprob_q", "0.01")))),
-      ch("qrilc", "qrilc"))),
-    "08_rollup" = list(q = "Which rollup?", nxt = "Step 9 - QC", choices = list(
-      ch("iq_maxlfq_scaled", "iq_maxlfq, scaled"), ch("iq_maxlfq", "iq_maxlfq, not scaled"), ch("sum", "sum"))),
+      ch("qrilc", "qrilc"),
+      ch("limpa", "limpa: no imputation (DPC-Quant rollup and dpcDE stats follow)"))),
+    "08_rollup" = list(q = "Which rollup?", nxt = "Step 9 - QC", choices = if (identical(g("impute_type"), "limpa"))
+      list(ch("limpa", "limpa DPC-Quant (Impute was limpa, so this is the only rollup)", list(fld("limpa_background", "Spectronaut background values (background exports)", "select", g("limpa_background", "missing"), c("missing", "use")))))
+      else list(ch("iq_maxlfq_scaled", "iq_maxlfq, scaled"), ch("iq_maxlfq", "iq_maxlfq, not scaled"), ch("sum", "sum"))),
     "09_qc" = list(q = "Accept the QC and continue to Stats?", nxt = "Step 10 - Stats", choices = list(
       ch("accept_flag", "Accept and flag samples", list(fld("flag_samples", "samples to flag (comma separated)", "text", ""))),
       ch("accept", "Accept"), ch("stop", "Stop here"))),

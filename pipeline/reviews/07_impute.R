@@ -35,6 +35,14 @@ review_impute <- function(db_path) {
   tab1 <- paste0("precursor_norm_", norms[1])
   lv <- sort(log2(smat(read_table(tab1, db_path)))); lv <- lv[lv > 0]; nn <- length(lv)
   pers <- list(mu = mean(lv) - as.numeric(s$perseus_shift %||% 1.8) * sd(lv), sd = as.numeric(s$perseus_width %||% 0.3) * sd(lv))
+  # detection probability curve (limpa::dpc) from measured values of the first table (background blanked)
+  dpc_info <- tryCatch({
+    Lt <- log2(smat(read_table(tab1, db_path)))
+    if (table_exists("precursor_filter_bgmask", db_path)) { bm <- smat(read_table("precursor_filter_bgmask", db_path)) == 1; bm[is.na(bm)] <- FALSE; Lt[bm] <- NA }
+    b <- limpa::dpc(Lt)$dpc; xs <- seq(0, 20, by = 0.25)
+    list(b0 = unname(b[1]), b1 = unname(b[2]), x = xs, y = round(100 * plogis(b[1] + b[2] * xs), 2),
+         at = as.list(setNames(round((qlogis(c(0.5, 0.9, 0.99)) - b[1]) / b[2], 2), c("p50", "p90", "p99"))))
+  }, error = function(e) NULL)
   bx_grid <- 1:25
   bx_max <- vapply(bx_grid, function(x) lv[ceiling(x * nn / 100)], 0); bx_min <- lv[1]
   step <- 0.1; edges <- seq(floor(min(lv) / step) * step, ceiling(max(lv) / step) * step, by = step)
@@ -75,7 +83,10 @@ review_impute <- function(db_path) {
   pipe_opts <- sprintf('<li><b>perseus</b> - per sample, a normal distribution shifted down from that sample&apos;s measured values
 (mean &minus; <b>%s</b> SD, width <b>%s</b> SD). Every empty value is treated as low.</li>
 <li><b>minprob</b> - per sample, random values around the <b>%s</b> quantile of the measured values (imputeLCMD MinProb).</li>
-<li><b>qrilc</b> - per sample, values from the low tail of a normal fitted to the measured values by quantile regression (imputeLCMD QRILC).</li>',
+<li><b>qrilc</b> - per sample, values from the low tail of a normal fitted to the measured values by quantile regression (imputeLCMD QRILC).</li>
+<li><b>limpa</b> - no imputation. The gaps stay; Rollup estimates each protein with DPC-Quant (using the detection curve below and giving
+every value a standard error) and Stats tests with limpa&apos;s dpcDE (limma with precision weights). Best false-call control in both benchmarks
+(triple-spike 3.1 / 5.1%%; 11488 no-difference splits 0.21%% vs 1%% expected).</li>',
     esc(s$perseus_shift %||% 1.8), esc(s$perseus_width %||% 0.3), esc(s$minprob_q %||% 0.01))
   evidence <- '<p class="note"><b>Benchmark</b> (three-species spike-in with known ratios, 10 comparisons, calls adj p &le; 0.05 and FC &ge; 1.5;
 <code>tools/impute_benchmark</code>): false call rate mean / worst comparison: perseus 3.7 / 9.0%, minprob 4.0 / 10.5%, qrilc 3.7 / 9.8%,
@@ -97,7 +108,7 @@ at least %s%% of its samples measured.</li>
       if (itype %in% c("duke", "bottomx")) sprintf('<div class="tile"><div class="v">%s%%</div><div class="l">bottom_x</div></div>', esc(bx)) else "",
       if (itype == "perseus") sprintf('<div class="tile"><div class="v">%s / %s</div><div class="l">shift / width (SD)</div></div>', esc(s$perseus_shift), esc(s$perseus_width)) else "",
       if (itype == "minprob") sprintf('<div class="tile"><div class="v">%s</div><div class="l">quantile</div></div>', esc(s$minprob_q)) else "",
-      sprintf('<div class="tile"><div class="v">%s</div><div class="l">values filled (%s of all)</div></div>', fmt_n(tot_missing), fmt_pct(tot_missing / length(na_mask) * 100)),
+      sprintf('<div class="tile"><div class="v">%s</div><div class="l">%s (%s of all)</div></div>', fmt_n(tot_missing), if (identical(itype, "limpa")) "gaps kept for limpa" else "values filled", fmt_pct(tot_missing / length(na_mask) * 100)),
       if (!is.null(summ$background)) sprintf('<div class="tile"><div class="v">%s</div><div class="l">Spectronaut background values kept</div></div>', fmt_n(summ$background$kept_values)) else "",
       '</div>', if (!is.null(summ$note)) paste0('<p class="note">', esc(summ$note), '</p>') else "",
       if (!is.null(last_dec)) sprintf('<p class="note">Recorded %s%s. %s</p>', esc(last_dec$time), if (!is.null(last_dec$analyst)) paste0(" by ", esc(last_dec$analyst)) else "", esc(last_dec$note %||% "")) else "",
@@ -109,7 +120,7 @@ at least %s%% of its samples measured.</li>
 <p class="note">How the missing values of each group would be filled at the chosen <code>missing_cutoff</code>. A group with a large bottom-X share has many
 precursors missing in most of its samples; those get low values, which can create large fold changes.</p>
 <div class="control"><label for="mc">missing_cutoff</label><input type="range" id="mc" min="0" max="100" step="1"/><span class="val" id="mcv"></span>
-<label for="itype">impute_type</label><select id="itype"><option>duke</option><option>bottomx</option><option>perseus</option><option>minprob</option><option>qrilc</option></select></div>
+<label for="itype">impute_type</label><select id="itype"><option>duke</option><option>bottomx</option><option>perseus</option><option>minprob</option><option>qrilc</option><option>limpa</option></select></div>
 <div id="planplot" style="height:260px" role="img" aria-label="Missing values per group, filled by duke or bottom-X"></div>
 <details><summary>Table view</summary><div id="plantable"></div></details></section>'
 
@@ -126,7 +137,7 @@ Perseus fills (green band: mean &plusmn; 2 SD of its down-shifted normal, from a
   after_html <- if (!is.null(after)) paste0('<section><h2>Result: where the filled values sit</h2>',
     '<p class="note">log2 intensities of the impute-only table (before TMM): measured values, Spectronaut background values (background exports) and the filled values.
 Low fills (bottom-X, perseus, minprob, qrilc) should sit at the low end; duke fills should look like the measured distribution.</p><div id="afterhist" style="height:340px" role="img" aria-label="Histogram of measured, duke and bottom-X values"></div>',
-    '<h2>Filled values per sample</h2><div id="afterbar" style="height:300px" role="img" aria-label="Percent of values filled per sample"></div>',
+    '<h2>', if (identical(itype, "limpa")) "Gaps per sample (left for limpa)" else "Filled values per sample", '</h2><div id="afterbar" style="height:300px" role="img" aria-label="Percent of values filled per sample"></div>',
     '<details><summary>Table view</summary>', html_table(data.frame(Sample = labels, Group = grp_of, Duke = fmt_n(after$duke_n), `Duke %` = fmt_pct(after$duke_pct),
       `Bottom-X` = fmt_n(after$bot_n), `Bottom-X %` = fmt_pct(after$bot_pct), check.names = FALSE), 3:6), '</details>',
     if (!is.null(after$tmm)) paste0('<h2>TMM factors applied here (sltmm)</h2><p class="note">For sltmm the app applies TMM after imputation. Median ratio of <code>precursor_impute_sltmm</code> to <code>precursor_norm_sltmm</code> per sample.</p>',
@@ -143,11 +154,16 @@ Low fills (bottom-X, perseus, minprob, qrilc) should sit at the low end; duke fi
 
   js_data <- list(groups = groups$Group, counts = as.integer(groups$Count), rows_by_k = rows_by_k, mc = mc, itype = itype,
                   edges = edges, hist = hist_meas, bx_grid = bx_grid, bx_max = bx_max, bx_min = bx_min, bx = bx,
-                  bins = bins, pers = pers, samples = labels, sample_group = grp_of, after = after)
+                  bins = bins, pers = pers, dpc = dpc_info, samples = labels, sample_group = grp_of, after = after)
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA), ';', IMPUTE_JS, '</script>')
   extra_css <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; } .control select { font:inherit; font-size:13px; }
 .control input[type=range] { width:260px; }</style>'
-  body <- paste0(decision_html, after_html, plan_html, bx_html, duke_html, graphs, js)
+  dpc_html <- if (!is.null(dpc_info)) sprintf('<section><h2>Detection curve (used by limpa)</h2>
+<p class="note">How likely a precursor is to be detected at a given log2 intensity, estimated from this data (limpa::dpc, measured values only):
+logit P(detected) = %.2f + %.3f &times; log2 intensity. A gap means &quot;probably low&quot;, not &quot;certainly below a limit&quot;: detected 50%% of the time at
+log2 %.1f, 90%% at %.1f, 99%% at %.1f.</p><div id="dpcplot" style="height:300px" role="img" aria-label="Detection probability by intensity"></div></section>',
+    dpc_info$b0, dpc_info$b1, dpc_info$at$p50, dpc_info$at$p90, dpc_info$at$p99) else ""
+  body <- paste0(decision_html, after_html, plan_html, bx_html, dpc_html, duke_html, graphs, js)
   write_review_page(run_dir, "07_impute", "Step 7 - Impute", status, status_class, body, extra_head = extra_css)
 }
 
@@ -196,18 +212,24 @@ Plotly.newPlot("dukeplot", D.groups.map((g, i) => ({ type: "scatter", mode: "lin
   hovertemplate: g + "<br>group mean log2 %{x:.2f}<br>SD %{y:.3f}<extra></extra>" })),
   Object.assign(base(), { margin: { l: 60, r: 20, t: 10, b: 50 }, showlegend: true, legend: { orientation: "h", y: 1.12 },
     xaxis: ax("group mean log2 intensity (bin)"), yaxis: Object.assign(ax("SD used for duke fills (log2)"), { rangemode: "tozero" }) }), cfg);
+// detection curve
+if (D.dpc) Plotly.newPlot("dpcplot", [{ type: "scatter", mode: "lines", x: D.dpc.x, y: D.dpc.y, name: "P(detected)", line: { width: 2, color: C("--series-1") }, hovertemplate: "log2 %{x:.2f}: detected %{y:.1f}% of the time<extra></extra>" }],
+  Object.assign(base(), { margin: { l: 60, r: 20, t: 20, b: 50 }, showlegend: false,
+    shapes: ["p50", "p90", "p99"].map(k => ({ type: "line", x0: D.dpc.at[k], x1: D.dpc.at[k], y0: 0, y1: 1, yref: "paper", line: { dash: "dot", color: C("--text-muted") } })),
+    annotations: ["p50", "p90", "p99"].map(k => ({ x: D.dpc.at[k], y: 1, yref: "paper", text: k.slice(1) + "%", showarrow: false, yanchor: "bottom", font: { color: C("--text-muted") } })),
+    xaxis: ax("log2 intensity"), yaxis: Object.assign(ax("% detected"), { range: [0, 105] }) }), cfg);
 // after
 if (D.after) {
   const A = D.after, h = (y, name, col) => ({ type: "bar", x: centers, y: y, width: 0.1, name: name, marker: { color: C(col) }, hovertemplate: name + " log2 %{x:.2f}: %{y:,}<extra></extra>" });
   const lowname = D.itype === "duke" || D.itype === "bottomx" ? "bottom-X" : D.itype;
   const tr = [h(A.meas, "measured", "--series-1")]; if (A.bg && A.bg.length) tr.push(h(A.bg, "Spectronaut background", "--series-4"));
-  if (D.itype === "duke") tr.push(h(A.duke, "duke fill", "--series-3")); tr.push(h(A.bot, lowname + " fill", "--series-2"));
+  if (D.itype === "duke") tr.push(h(A.duke, "duke fill", "--series-3")); if (D.itype !== "limpa") tr.push(h(A.bot, lowname + " fill", "--series-2"));
   Plotly.newPlot("afterhist", tr,
     Object.assign(base(), { barmode: "stack", bargap: 0, showlegend: true, legend: { orientation: "h", y: 1.1 }, margin: { l: 70, r: 20, t: 10, b: 50 },
       xaxis: ax("log2 intensity"), yaxis: Object.assign(ax("values"), { rangemode: "tozero" }) }), cfg);
   const b = (y, name, col, n) => ({ type: "bar", name: name, x: D.samples, y: y, customdata: n, marker: { color: C(col), line: { width: 2, color: C("--surface-1") } },
     hovertemplate: "%{x}<br>" + name + ": %{y:.2f}% (%{customdata:,})<extra></extra>" });
-  Plotly.newPlot("afterbar", D.itype === "duke" ? [b(A.duke_pct, "duke", "--series-3", A.duke_n), b(A.bot_pct, lowname, "--series-2", A.bot_n)] : [b(A.bot_pct, lowname, "--series-2", A.bot_n)],
+  Plotly.newPlot("afterbar", D.itype === "duke" ? [b(A.duke_pct, "duke", "--series-3", A.duke_n), b(A.bot_pct, lowname, "--series-2", A.bot_n)] : [b(A.bot_pct, D.itype === "limpa" ? "gaps (not filled)" : lowname, "--series-2", A.bot_n)],
     Object.assign(base(), { barmode: "stack", showlegend: true, legend: { orientation: "h", y: 1.12 }, margin: { l: 60, r: 20, t: 10, b: 50 },
       xaxis: { categoryorder: "array", categoryarray: D.samples }, yaxis: Object.assign(ax("% of values filled"), { rangemode: "tozero" }) }), cfg);
 }

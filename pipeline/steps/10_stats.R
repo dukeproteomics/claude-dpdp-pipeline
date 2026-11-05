@@ -20,6 +20,8 @@ here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value 
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
 source(file.path(here, "..", "contaminants.R"))
+source(file.path(here, "..", "background.R"))
+source(file.path(here, "..", "limpa.R"))
 source(file.path(here, "..", "reviews", "10_stats.R"))
 
 args <- parse_args()
@@ -48,7 +50,11 @@ spec <- list(pvalue_cutoff = 0.05, pair_comp = FALSE, checkbox_adjpval = TRUE, p
              checkbox_limmapvalue = FALSE,
              checkbox_report_ptm = FALSE, peptide_report_grep = "Enter value here",
              checkbox_report_accession = FALSE, report_accession = "Enter value")
+is_limpa <- identical(get_param("impute_type", db_path), "limpa")
+if (is_limpa && is.null(args$peptide_refilter)) args$peptide_refilter <- "FALSE"   # refilter re-rolls precursors, bypassing DPC-Quant
 settings <- resolve_settings(spec, args)
+if (is_limpa && as_flag(settings$peptide_refilter)) stop("limpa run: --peptide_refilter must be FALSE (it re-rolls the precursors and bypasses DPC-Quant).")
+if (is_limpa && as_flag(settings$pair_comp)) stop("limpa run: paired comparisons (--pair_comp) are not built for dpcDE yet.")
 padj <- c("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr")
 if (!settings$padjust_options %in% padj) stop("--padjust_options must be one of: ", paste(padj, collapse = ", "))
 
@@ -110,6 +116,8 @@ if (args$action == "preview") {
 # --- stat_calc ---
 for (i in seq_len(nrow(stats_comp)))
   run_bg(stat_calc_bg, list(db_path, i, stats_comp), str_c("stat_calc_", i), db_path)
+# limpa: the app built the tables (layout, CVs, missing factor); FC / pval / adjpval / Stats now come from dpcDE
+limpa_test <- if (is_limpa) lapply(seq_len(nrow(stats_comp)), function(i) limpa_stats(db_path, stats_comp, i, get_params(db_path))) else NULL
 
 # --- Summary ---
 p <- get_params(db_path)
@@ -147,6 +155,8 @@ comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
        top_by_pvalue = top)
 })
 summary <- list(step = "10_stats", action = "apply", db_path = db_path, settings = settings,
+                test = if (is_limpa) "limpa dpcDE: limma with DPC-Quant precision weights; FC from the model (log2 means)" else "app: t-test per protein; FC from the ratio of means",
+                limpa = limpa_test,
                 stat_norm = stat_norm, comp_spqc = comp_spqc, stats_comp = stats_comp, comparisons = comp_results)
 sd <- step_dir(run_dir, "10_stats")
 write_summary(summary, sd)
@@ -155,6 +165,7 @@ log_decision(run_dir, "10_stats", analyst = args$analyst, settings = c(settings,
              note = paste(c(args$note, if (!is.null(args$settings_from)) paste("settings copied from", args$settings_from)), collapse = "; "))
 
 cat("\n==== Stats calculated ====\n")
+cat("Test:", summary$test, "\n")
 cat(sprintf("Normalization: %s | SPQC group: %s | calls use %s p <= %s | FC >= %s | missing factor >= %s\n",
             stat_norm, comp_spqc, comp_results[[1]]$pvalue_used_for_calls, p$pvalue_cutoff, p$foldchange_cutoff, p$missing_factor))
 for (r in comp_results) {

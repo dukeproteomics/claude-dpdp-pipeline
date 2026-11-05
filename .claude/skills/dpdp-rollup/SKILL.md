@@ -16,6 +16,17 @@ description: Step 8 of the DPDP proteomics pipeline (same as the Shiny app's Rol
 
 Only for Protein output. For Peptide output, the app rolls up during Impute; that isn't wired up in the pipeline yet.
 
+## limpa (after `--impute_type=limpa`)
+`--rollup_method=limpa` is then the only allowed rollup (`pipeline/limpa.R`). Preview and apply both run DPC-Quant for every normalization
+(~20 s per table on 11488, ~60 s on triple-spike): every protein gets a value in every sample plus a standard error, saved in
+`steps/08_rollup/limpa_<norm>.rds` for Stats. `protein_<norm>` gets `2^estimate` in the app layout plus a `Detected_Imputed` column
+(measured precursors per sample, background not counted), which the app's Stats reads for the missing factor. `peptide_<norm>` is the
+sum of measured precursors (it can have gaps). The detection curve comes from measured values only.
+`--limpa_background=missing` (default) leaves Spectronaut background values to the detection curve; `use` counts them as measurements.
+Triple-spike background export, false call rate E45/E5 and E10/E5: missing 4.9 / 5.6%, use 6.9 / 9.2%, raw export 4.0 / 5.6%
+(E. coli log2 FC, true 3.17: +2.82, +2.37, +3.03). Recommend `missing`.
+CVs of limpa values are higher than imputed data (11488 SPQC median 8.2% vs 5.4% iq_maxlfq): imputation shrinks spread artificially.
+
 ## Run
 ```bash
 cd /home/user/Claude_Shiny

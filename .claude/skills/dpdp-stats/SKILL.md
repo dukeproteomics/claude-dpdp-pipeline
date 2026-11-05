@@ -22,6 +22,14 @@ description: Step 10 of the DPDP proteomics pipeline (same as the Shiny app's St
 
 `--settings_from=<db>` copies the settings **and** the comparisons from a previous run.
 
+## limpa runs
+After limpa in Impute and Rollup, Stats sets `peptide_refilter=FALSE` (refilter re-rolls precursors and would bypass DPC-Quant) and refuses
+`--pair_comp`. The app's `stat_calc_bg` still builds the tables (layout, CVs, missing factor filter, flags); then `limpa_stats()` replaces
+`<comp>_FC`, `_FC2`, `_pval`, `_adjpval` and `Stats` with limpa's dpcDE (limma with precision weights) on the comparison's samples.
+FC comes from the model (difference of log2 means), not the ratio of means. Adjusted p is over all tested proteins, as in the app.
+The summary's `test` field says which test was used: report it. 11488 B vs A: 229 calls by raw p, 1 by adjusted p (duke run: 221 / 72;
+the duke adjusted calls are mostly false positives, step 07b).
+
 ## Run
 ```bash
 cd /home/user/Claude_Shiny

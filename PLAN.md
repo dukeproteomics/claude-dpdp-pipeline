@@ -193,6 +193,13 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - **Impute step options built (2026-11-04):** perseus, minprob, qrilc next to the app's duke/bottomx (measured-only fill distribution,
   background never overwritten). limpa not yet: DPC-Quant values + plain limma lose most of its advantage (triple-spike 4.2 / 8.3% vs
   3.1 / 5.1% with dpcDE), so it needs Rollup (dpcQuant) and Stats (dpcDE p-values) changes.
+- **limpa built into Impute / Rollup / Stats (2026-11-04, `pipeline/limpa.R`).** Tested end to end on 11488 (raw) and triple-spike
+  (raw and background). Pipeline triple-spike E45/E5, E10/E5 observed FDR: raw 4.0 / 5.6%; background export with background left
+  missing 4.9 / 5.6% (default `limpa_background=missing`), with background used 6.9 / 9.2%. Remaining gap raw vs background is most
+  likely the identified-but-blanked values (open question above). The app's no-refilter Stats path needs a Detected_Imputed column in
+  protein_<norm>, which the app's own Protein rollup doesn't write; the limpa rollup writes it.
+- Phospho / peptide output with limpa: not built. DPC-Quant can group precursors by any id (peptide + site instead of protein), but the
+  pipeline's PTM path (Steps 3+ with data_output=Peptide) hasn't been wired or tested yet; needs a phospho dataset.
 - Proposed Impute options (not yet decided by the user): raw default limpa; background default Spectronaut background + Perseus for
   empty gaps; Perseus / MinProb baselines; duke+bottom-X for comparison with old runs.
 

@@ -29,8 +29,8 @@ The analyst can decide **on the review page** (radio buttons, fields, a note, an
 | 04_noise | `none` / `dynamic` / `fixed` -> `04_noise.R --action=apply --noise_type=<choice>` [`--noise_baseline_value`] [`--noise_keep=TRUE` if `fields.noise_keep` is true] |
 | 05_filter | `apply` -> `05_filter.R --action=apply` with the previewed settings; `change` -> re-preview with the change |
 | 06_normalize | `default_exclude` -> default rule; `current_exclude` -> current `norm_exclude_grep`; `custom_exclude` -> preview with `fields.norm_exclude_grep` first, then apply. Method = `fields.norm_type` |
-| 07_impute | `duke` / `bottomx` / `perseus` / `minprob` / `qrilc` -> `07_impute.R --action=apply --impute_type=<choice>` plus that choice's fields (`--missing_cutoff --bottom_x`, `--perseus_shift --perseus_width`, `--minprob_q`); re-preview first if they changed |
-| 08_rollup | `iq_maxlfq_scaled` -> `--rollup_method=iq_maxlfq --maxlfq_scale=TRUE`; `iq_maxlfq` -> `... --maxlfq_scale=FALSE`; `sum` -> `--rollup_method=sum` |
+| 07_impute | `duke` / `bottomx` / `perseus` / `minprob` / `qrilc` / `limpa` -> `07_impute.R --action=apply --impute_type=<choice>` plus that choice's fields (`--missing_cutoff --bottom_x`, `--perseus_shift --perseus_width`, `--minprob_q`); re-preview first if they changed |
+| 08_rollup | `iq_maxlfq_scaled` -> `--rollup_method=iq_maxlfq --maxlfq_scale=TRUE`; `iq_maxlfq` -> `... --maxlfq_scale=FALSE`; `sum` -> `--rollup_method=sum`; `limpa` -> `--rollup_method=limpa --limpa_background=<field>` (the only choice after limpa in Impute) |
 | 09_qc | `accept_flag` -> `09_qc.R --action=accept --flag_samples=<fields.flag_samples>`; `accept` -> `--action=accept`; `stop` -> stop |
 | 10_stats (settings) | `run` -> `10_stats.R --action=apply`, then 10b and 10c; `run_adjp` -> the same with `--checkbox_filter_adjpval=TRUE`; `change` -> discuss |
 | 10_stats (results) | `accept` -> `10_stats.R --action=accept`; `change` -> discuss, then re-run; `plots` -> `10c --proteins=<fields.proteins>`, then ask again |

@@ -25,8 +25,8 @@ The random numbers are seeded (`set.seed(123)`), so results are reproducible.
 (background blanked); only empty values get fills, background values are never overwritten. All three treat every empty value as low.
 **Evidence** (`tools/impute_benchmark`, triple-spike, 10 comparisons; false call rate mean / worst): perseus 3.7 / 9.0%,
 minprob 4.0 / 10.5%, qrilc 3.7 / 9.8%, duke + bottom-X 8.3 / 22.5% (most true calls, but group-mean fills inflate false calls),
-background export + perseus 3.5 / 6.8%. Show these on the page; the analyst chooses. `limpa` is not an Impute option yet (it needs
-Rollup and Stats: without its precision weights in the test it loses most of its advantage, 4.2 / 8.3%).
+background export + perseus 3.5 / 6.8%. Show these on the page; the analyst chooses. **`limpa`**: no imputation; the gaps stay for DPC-Quant (Rollup) and dpcDE (Stats). Its weights carry the benefit
+(4.2 / 8.3% without them vs 3.1 / 5.1%). The page shows the detection curve (limpa::dpc, measured values) for every run.
 
 ## Run
 ```bash
