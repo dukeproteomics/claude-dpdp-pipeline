@@ -221,6 +221,11 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   KO vs WT 37 C 40 -> 358; KO 37 vs 30 2 -> 31. Null splits (30 C, mixed genotype): 0.40-0.49% p < 0.01, 0 calls.
   ADH (non-phospho standard) CV on sltmm rose 14-15% -> 17-18%, expected when factors come from phosphopeptides.
   Bovine caseins (phospho spike, levels 1/1.5/2 by design) are significant in WT 37 vs 30 and KO vs WT 37: flagged, not removed.
+- **Live run 11517_110526 (phospho, raw export; 2026-11-05, complete, accepted).** Decisions: noise none, filter as shown
+  (146,982 precursors), normalize phospho-only default + sltmm, impute limpa, rollup limpa, QC accepted (no flags), stats run with raw-p
+  calls. Raw-p / adjusted calls: KO_30 v WT_30 5,360 / 0; WT_37 v WT_30 19,514 / 5,340; KO_37 v WT_37 11,740 / 358; KO_37 v KO_30
+  12,643 / 31. Raw-p calls include many chance hits (~3,700 expected at p < 0.05 among ~74k tests). Caseins significant everywhere (flagged).
+  Same session: all review pages got interactive charts (app PNGs collapsed); 10b/10c write chart data (heatmap = 1,000 most variable rows).
 - **Impute defaults (user decision 2026-11-04): limpa for raw exports, perseus for background exports.** The form preselects the run's
   default. Rollup and Stats go by the imputation that was applied (Step 7 summary), not the param a preview writes.
 - Proposed Impute options (decided above): raw default limpa; background default Spectronaut background + Perseus for
