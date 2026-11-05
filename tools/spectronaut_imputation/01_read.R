@@ -1,6 +1,6 @@
 # Part of tools/spectronaut_imputation (see README.md). Analysis of the 11488 Spectronaut exports, 2026-11-04.
 WORK <- Sys.getenv("SPN_WORK", "/home/user/Claude_Shiny/data/spectronaut_compare")   # intermediate .rds files (git-ignored data/)
-INPUT <- Sys.getenv("SPN_INPUT", "/home/user/Claude_Shiny/data/input")              # the four Spectronaut exports
+INPUT <- Sys.getenv("SPN_INPUT", "/home/user/Claude_Shiny/data/input/11488")           # the four Spectronaut exports
 dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
 # Read the four Spectronaut exports into aligned matrices (quantity, qvalue, imputed flag) and save as RDS.
 suppressPackageStartupMessages(library(data.table))

@@ -3,7 +3,7 @@
 Scripts behind the findings in `PLAN.md` ("Spectronaut imputation path"). They compare four Spectronaut exports of the same analysis
 (no Spectronaut normalization): no imputation (`..._Report.tsv`), background signal, global imputation and run-wise imputation.
 
-Run from the project root with plain `Rscript` (needs data.table). Inputs: `$SPN_INPUT` (default `data/input`). Intermediate files:
+Run from the project root with plain `Rscript` (needs data.table). Inputs: `$SPN_INPUT` (default `data/input/11488`). Intermediate files:
 `$SPN_WORK` (default `data/spectronaut_compare/`, git-ignored). The export file names are hard-coded for 11488 in `01` and `06`.
 
 | Script | What it checks | Result for 11488 |

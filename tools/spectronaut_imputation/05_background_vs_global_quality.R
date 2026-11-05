@@ -1,6 +1,6 @@
 # Part of tools/spectronaut_imputation (see README.md). Analysis of the 11488 Spectronaut exports, 2026-11-04.
 WORK <- Sys.getenv("SPN_WORK", "/home/user/Claude_Shiny/data/spectronaut_compare")   # intermediate .rds files (git-ignored data/)
-INPUT <- Sys.getenv("SPN_INPUT", "/home/user/Claude_Shiny/data/input")              # the four Spectronaut exports
+INPUT <- Sys.getenv("SPN_INPUT", "/home/user/Claude_Shiny/data/input/11488")           # the four Spectronaut exports
 dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
 X <- readRDS(file.path(WORK, "exports.rds"))
 N <- X$none; miss <- is.na(N$q); lm <- log2(N$q); grp <- list(A = 1:3, B = 4:6, SPQC = 7:9)

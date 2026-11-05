@@ -6,7 +6,13 @@ steps, reads the plots and summaries, suggests options, and the user decides.
 
 ## Layout
 - `shiny_DPDP/` — clone of the Shiny app (source of the R logic; don't modify in place)
-- `data/input/` — starting files (data report + sample description). Kept out of git.
+- `data/input/<project>/` — starting files (data report + sample description), one folder per project. Kept out of git.
+  - `10658_triple_spike/` — three-species spike-in (known ratios); designs `_101926` (with SPQC), `_noSPQC`, `_noSPQC_mix`; raw + background exports, old `_MOD` files.
+  - `11485_phos/` — phospho, groups 1050 / DMSO / SPQC x3; `_RePrep_Report.tsv` (raw) + `_ImputeBackground_Report.tsv`. Not run yet.
+  - `11488/` — main test set (below); four Spectronaut exports (none / background / global / run-wise) + Shiny reference `.zip`.
+  - `11517_phos/` — phospho, WT/KO x 30/37 C + SPQC; `_Report.tsv` (raw) + `_preimpute.tsv` (background).
+  - `11531/` — groups CreNeg/CrePos x Biotin/NoBiotin + SPQC (CrePos_Biotin x6, others x3); raw + `_Impute_Report.tsv`. Not run yet.
+  - `11538/` — groups KD / NTC / SPQC x3; raw + `_preimpute.tsv` (background). Not run yet.
 - `PLAN.md` — this file; update the status as each step is finished.
 - `pipeline/` — `common.R`, `compare.R`, `steps/NN_<step>.R`
 - `.claude/skills/dpdp-<step>/SKILL.md` — one skill per step
@@ -35,9 +41,9 @@ State stays in the app's SQLite `.db` format, so a Claude run can be opened in S
   from `gregwaitt/dpmsr_proteomics`).
 
 ## Test dataset (project 11488)
-- Data: `data/input/20261031_081024_11488_Enkbayar_103126_Report.tsv`
+- Data: `data/input/11488/20261104_140253_11488_Enkbayar_103126_Report.tsv` (same as the original `20261031_081024_..._Report.tsv`, now removed)
   (Spectronaut precursor report, 131,975 precursors, 9 samples, EG.TotalQuantity)
-- Design: `data/input/11488_SampleList_110226.xlsx`
+- Design: `data/input/11488/11488_SampleList_110226.xlsx`
   (groups A ×3, B ×3, SPQC ×3; has a QC spike level column)
 - Parameters findings: total intensity even (0.91–1.20× median, B_1 highest). Histogram is a single peak
   with no noise shoulder. Group A has more missing values (A total_na 32,753 vs about 19.5–20k)
@@ -50,7 +56,7 @@ State stays in the app's SQLite `.db` format, so a Claude run can be opened in S
   Look at this in TIC and QC.
 - Note: the app's ID check strips `_N` suffixes, so SPQC_1/2/3 all match `154038` and can't
   catch an SPQC order swap.
-- Shiny reference run: `data/reference_shiny/11488_110226.db` (unzipped from `data/input/11488_110226.zip`).
+- Shiny reference run: `data/reference_shiny/11488_110226.db` (unzipped from `data/input/11488/11488_110226.zip`).
   Full run through Stats (B_v_A). Its `params` table records the user's choices at each step.
 - Claude run: `data/11488_110326/` (prefix `11488_110326`; folder deleted 2026-11-05 at the user's request; re-run from the inputs if needed)
 - User confirmed: yeast = spike-in; SPQC = pooled QC (order within SPQC doesn't matter).
@@ -121,7 +127,7 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   (q-value is the noise criterion); Filter and Stats (missing factor, Detected_Imputed, one-group-only) use the mask; Impute skipped.
 - Then compare on 11488: app imputation vs Spectronaut background / global / run-wise, scored by SPQC CV, ADH CV, casein level
   agreement, one-group-only calls and the p-value histogram.
-- **Exports received 2026-11-04** (data/input, no Spectronaut normalization): `..._Report.tsv` (no imputation; identical to the original
+- **Exports received 2026-11-04** (data/input/11488, no Spectronaut normalization): `..._Report.tsv` (no imputation; identical to the original
   11488 report), `_background_`, `_impute_global_`, `_impute_runwise_`. Same 131,975 precursors and run order in all four.
 - Findings:
   - `EG.IsImputed` (revisited after the user's pushback): TRUE for all 72,232 filled values and also for 79,547 measured values whose
@@ -181,7 +187,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 
 ## Imputation benchmark (2026-11-04)
 - 11488 (step 07b, no known truth) and the triple-spike known-ratio data (`tools/impute_benchmark/triple_spike.R`, data
-  `data/input/triple_spike`, 10658, design after Guzman et al. 2024; the "SPQC" columns in the `_MOD` files are the E20H50Y30 x2 + E30H50Y20 x1 runs, renamed because the app needs an SPQC; dropped).
+  `data/input/10658_triple_spike`, 10658, design after Guzman et al. 2024; the "SPQC" columns in the `_MOD` files are the E20H50Y30 x2 + E30H50Y20 x1 runs, renamed because the app needs an SPQC; dropped).
 - Triple-spike, 6 comparisons, adj p <= 0.05 and FC >= 1.5: limpa observed FDR 3.2% mean / 4.8% worst, background 3.5 / 6.2,
   Perseus 3.9 / 9.4, duke+bottom-X 8.6 / 22.7 (most true calls), kNN and group-blind mixed compress ratios (dropped).
 - Rerun on the new exports (2026-11-04, `data/10658_triplespike_bench2`, 5 groups, E30 dropped as a one-sample group, 10 comparisons):
@@ -204,7 +210,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   flagged (`pipeline/refilter_flags.R`). Found and handled two app bugs in the no-refilter path (Detected_Imputed missing from
   protein_<norm>_final; CV columns read as samples). The earlier limpa test tables had wrong sample/CV columns (FC and p were right).
 - **Phospho / peptide output (built 2026-11-04, user away; test runs zz_phos_bg / zz_phos_raw, decisions logged as code tests).** Data:
-  `data/input/phos`, 11517 (Cryptococcus, WT/KO x 30/37 C + SPQC, 148,530 precursors, 93,815 phospho). `_Report.tsv` = raw,
+  `data/input/11517_phos`, 11517 (Cryptococcus, WT/KO x 30/37 C + SPQC, 148,530 precursors, 93,815 phospho). `_Report.tsv` = raw,
   `_preimpute.tsv` = background (214,754 fills). Load/Parameters (PTM localization, ~7 min), Filter, Normalize, Impute work unchanged;
   Rollup now allows Peptide output (app sum per modified peptide, or limpa per peptide), QC runs on summed proteins, Stats / refilter flags /
   limpa key on the peptide (Accession, Sequence, PTM_Loc, Protein_PTM_Loc, PeptidePosition, ...), 10c plots top peptides.

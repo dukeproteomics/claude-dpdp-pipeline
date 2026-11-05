@@ -1,6 +1,6 @@
 # Part of tools/spectronaut_imputation (see README.md). Analysis of the 11488 Spectronaut exports, 2026-11-04.
 WORK <- Sys.getenv("SPN_WORK", "/home/user/Claude_Shiny/data/spectronaut_compare")   # intermediate .rds files (git-ignored data/)
-INPUT <- Sys.getenv("SPN_INPUT", "/home/user/Claude_Shiny/data/input")              # the four Spectronaut exports
+INPUT <- Sys.getenv("SPN_INPUT", "/home/user/Claude_Shiny/data/input/11488")           # the four Spectronaut exports
 dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
 suppressPackageStartupMessages(library(data.table))
 f <- c(none = "20261104_140253_11488_Enkbayar_103126_Report.tsv", background = "20261104_140341_11488_Enkbayar_103126_background_Report.tsv",
