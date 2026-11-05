@@ -203,8 +203,15 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - **Peptide refilter removed (user decision 2026-11-04):** Stats never re-rolls a comparison's samples; what the refilter would remove is
   flagged (`pipeline/refilter_flags.R`). Found and handled two app bugs in the no-refilter path (Detected_Imputed missing from
   protein_<norm>_final; CV columns read as samples). The earlier limpa test tables had wrong sample/CV columns (FC and p were right).
-- Phospho / peptide output with limpa: not built. DPC-Quant can group precursors by any id (peptide + site instead of protein), but the
-  pipeline's PTM path (Steps 3+ with data_output=Peptide) hasn't been wired or tested yet; needs a phospho dataset.
+- **Phospho / peptide output (built 2026-11-04, user away; test runs zz_phos_bg / zz_phos_raw, decisions logged as code tests).** Data:
+  `data/input/phos`, 11517 (Cryptococcus, WT/KO x 30/37 C + SPQC, 148,530 precursors, 93,815 phospho). `_Report.tsv` = raw,
+  `_preimpute.tsv` = background (214,754 fills). Load/Parameters (PTM localization, ~7 min), Filter, Normalize, Impute work unchanged;
+  Rollup now allows Peptide output (app sum per modified peptide, or limpa per peptide), QC runs on summed proteins, Stats / refilter flags /
+  limpa key on the peptide (Accession, Sequence, PTM_Loc, Protein_PTM_Loc, PeptidePosition, ...), 10c plots top peptides.
+  Results: app t-test finds 0 adjusted calls (WT_37 vs WT_30 has 17,441 raw p < 0.05, 3x chance); limpa finds 3,410 (background export) /
+  3,372 (raw); null splits 0.09-0.34% p < 0.01 (expect 1%). Raw, limpa: WT 37 vs 30 3,372; KO 37 vs 30 2; KO vs WT 37 C 40; 30 C 0.
+  Not done: 10b graphs on the raw run (stopped: system low on memory); all 118k peptides are tested incl. ~42k non-phospho (filter_ptm /
+  report options are the user's choice); no phospho benchmark with known truth.
 - **Impute defaults (user decision 2026-11-04): limpa for raw exports, perseus for background exports.** The form preselects the run's
   default. Rollup and Stats go by the imputation that was applied (Step 7 summary), not the param a preview writes.
 - Proposed Impute options (decided above): raw default limpa; background default Spectronaut background + Perseus for
