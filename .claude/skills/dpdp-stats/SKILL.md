@@ -19,6 +19,7 @@ description: Step 10 of the DPDP proteomics pipeline (same as the Shiny app's St
 | `missing_factor` | 0.6 | proteins with `_mf` below this are **removed** from the comparison table |
 | `peptide_refilter` | **always FALSE** | replaced by flags (user decision 2026-11-04); `--peptide_refilter=TRUE` is refused |
 | `peptide_missing_filter`, `peptide_cv_filter` | FALSE | now extra **flag** rules (precursors they would remove count toward the refilter flag) |
+| `checkbox_report_ptm` / `peptide_report_grep` | FALSE; **PTM peptide runs: TRUE / `ptm_grep`** | user rule 2026-11-05: only PTM peptides are tested and reported. Unlike the app (adjusts p over all peptides, then hides the rest), the pipeline drops them **before** testing, so adj p and limma's prior cover the PTM peptides only |
 | others (`peptide_*`, `stats_*_cv_filter*`, `checkbox_cohensd*`, `checkbox_limmapvalue`) | off | see `10_stats.R` spec |
 
 `--settings_from=<db>` copies the settings **and** the comparisons from a previous run.

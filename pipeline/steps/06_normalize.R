@@ -38,8 +38,11 @@ methods <- c("sl", "tmm", "sltmm", "directlfq", "quantile", "lr", "loess", "vsn"
 # Default exclude (user rule 2026-11-04): only added material -- digestion trypsin, human contaminant keratins,
 # bovine alpha/beta casein spike. The app's default "trypsin|keratin|casein" also hits the sample's own proteins.
 EXCLUDE_DEFAULT <- NORM_DEFAULT_EXCLUDE   # defined in pipeline/reviews/06_normalize.R
+# PTM runs (user rule 2026-11-05): factors from the PTM peptides only (include sequence ~ ptm_grep), on top of the default exclude.
+p0 <- get_params(db_path)
+ptm <- is_ptm_run(p0)
 spec <- list(norm_exclude = "description", norm_exclude_grep = EXCLUDE_DEFAULT,
-             norm_include = "not_used", norm_include_grep = "Phospho",
+             norm_include = if (ptm) "sequence" else "not_used", norm_include_grep = if (ptm) p0$ptm_grep else "Phospho",
              norm_ptm = FALSE, norm_ptm_grep = "Phospho")
 settings <- resolve_settings(spec, args)
 for (k in c("norm_exclude", "norm_include")) if (!settings[[k]] %in% fields)

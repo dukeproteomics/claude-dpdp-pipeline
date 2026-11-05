@@ -52,6 +52,10 @@ review_stats <- function(db_path) {
                 "Absolute fold change needed for Up/Down.", "Raw p gives more calls but no false-discovery control; adjusted p controls FDR.",
                 "Added to the tables either way.", "Proteins with a smaller share of measured (not imputed) values in the comparison are removed.",
                 "Re-filters precursors for the comparison's samples and rolls up again."), stringsAsFactors = FALSE)
+  if (is_peptide_output(p)) set_df <- rbind(set_df, data.frame(Setting = "Peptides tested",
+    Value = if (ptm_report(p)) sprintf("<b>%s only</b> (Sequence matches <code>%s</code>)", esc(g("peptide_report_grep")), esc(g("peptide_report_grep"))) else "all peptides",
+    Meaning = "PTM-enriched samples: the other peptides are not supposed to be there. They are left out before testing, so adjusted p covers the PTM peptides only (the app adjusts over all, then hides the rest).",
+    stringsAsFactors = FALSE))
   comp_df <- if (!is.null(sc) && nrow(sc)) data.frame(Comparison = esc(sc$Name), Numerator = esc(sc$FactorsN), Denominator = esc(sc$FactorsD),
     Samples = sprintf("%s vs %s (+%s pool)", sc$N, sc$D, sc$SPQC), stringsAsFactors = FALSE) else NULL
 
@@ -69,6 +73,7 @@ review_stats <- function(db_path) {
               fmt_n(r$significant), esc(pd$min_adjpval), fmt_n(r$proteins), fmt_n(round(r$proteins * pc)), esc(pc)) else ""
     paste0('<h3>', esc(r$comparison), ' (', esc(r$N), ' vs ', esc(r$D), ')</h3><div class="tiles">',
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">%s tested (%s removed by missing factor)</div></div>', fmt_n(r$proteins), if (identical(r$level, "peptide")) "peptides" else "proteins", fmt_n(r$removed_by_missing_factor)),
+      if (isTRUE(r$not_tested_non_ptm > 0)) sprintf('<div class="tile"><div class="v">%s</div><div class="l">non-%s peptides not tested</div></div>', fmt_n(r$not_tested_non_ptm), esc(g("peptide_report_grep"))) else "",
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">Up / Down by %s p: %s / %s</div></div>', fmt_n(r$significant), if (use_adj) "adjusted" else "raw", fmt_n(r$up), fmt_n(r$down)),
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">would pass with adjusted p &le; %s</div></div>', fmt_n(r$significant_if_adjusted_p), esc(pc)),
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">smallest adjusted p</div></div>', esc(pd$min_adjpval)),

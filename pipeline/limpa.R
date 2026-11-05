@@ -75,6 +75,8 @@ limpa_stats <- function(db_path, stats_comp, i, p) {
   obj <- readRDS(limpa_rds(dirname(db_path), p$stat_norm)); Q <- obj$Q
   loc <- function(x) as.integer(trimws(strsplit(as.character(x), ",")[[1]]))
   nl <- loc(stats_comp$N_loc[i]); dl <- loc(stats_comp$D_loc[i]); nm <- stats_comp$Name[i]
+  # PTM report: fit only the PTM peptides (limma's prior and adj p over those, as in the app-path Stats)
+  if (ptm_report(p)) { b <- read_table(base_table(p), db_path); Q <- Q[rownames(Q) %in% feature_key(b[grepl(p$peptide_report_grep, b$Sequence), ], p), ] }
   f <- factor(c(rep("D", length(dl)), rep("N", length(nl))), levels = c("D", "N"))
   fit <- limpa::dpcDE(Q[, c(dl, nl)], stats::model.matrix(~f), plot = FALSE)
   if (is.null(fit$t)) fit <- limma::eBayes(fit)

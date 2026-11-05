@@ -139,4 +139,9 @@ is_peptide_output <- function(p) identical(p$data_output, "Peptide")
 base_table <- function(p, norm = p$stat_norm) if (is_peptide_output(p)) paste0("peptide_impute_", norm) else paste0("protein_", norm)
 final_table <- function(stats_comp, i, p) if (is_peptide_output(p)) stats_comp$Final_Table_Name_Peptide[i] else stats_comp$Final_Table_Name[i]
 PEPTIDE_KEY <- c("Accession", "Description", "Name", "Genes", "Sequence", "PTM_Loc", "Protein_PTM_Loc", "PeptidePosition")
+# PTM-enriched runs (Parameters ptm = TRUE): normalization factors and Stats use only the rows whose Sequence matches ptm_grep
+# (user rule 2026-11-05: enriched samples, the non-PTM peptides are not supposed to be there). Rows stay in the data tables.
+is_ptm_run <- function(p) isTRUE(as_flag(p$ptm %||% FALSE)) && nzchar(p$ptm_grep %||% "")
+is_ptm_row <- function(d, p) grepl(p$ptm_grep, d$Sequence, ignore.case = TRUE)
+ptm_report <- function(p) is_peptide_output(p) && isTRUE(as_flag(p$checkbox_report_ptm %||% FALSE)) && !p$peptide_report_grep %in% c("", "Enter value here")
 feature_key <- function(d, p) if (is_peptide_output(p)) do.call(paste, c(lapply(d[intersect(PEPTIDE_KEY, names(d))], as.character), sep = "\r")) else as.character(d$Accession)

@@ -11,7 +11,7 @@ description: Step 6 of the DPDP proteomics pipeline (same as the Shiny app's Nor
 | Setting | Choices | App default | 11488 reference |
 |---|---|---|---|
 | `norm_exclude` + `norm_exclude_grep` | not_used, accession, description, name, genes, sequence + regex | pipeline: description + user-rule regex (below); app: not_used | 11488 Shiny run: **description**, `trypsin\|keratin\|casein` (old, too broad) |
-| `norm_include` + `norm_include_grep` | same | not_used | not_used |
+| `norm_include` + `norm_include_grep` | same | not_used; **PTM runs: sequence + `ptm_grep`** (e.g. Phospho) | not_used |
 | `norm_type` (method) | sl, tmm, sltmm, directlfq, quantile, lr, loess, vsn, mi, ai | — | **sltmm** |
 
 - Exclude/include only changes which precursors are used to **calculate** the factors (`precursor_normdata`).
@@ -19,6 +19,10 @@ description: Step 6 of the DPDP proteomics pipeline (same as the Shiny app's Nor
 - **Factors from measured values only.** Background exports: the subset is built from `precursor_filter_measured` (background
   blanked), and only `sl`, `tmm`, `sltmm` are allowed (the others transform the whole table). Spike-in designs where half the proteome
   changes (e.g. triple-spike): normalize on the constant proteome with `--norm_include=description --norm_include_grep="org=Homo sapiens$"`.
+- **PTM runs (Parameters `ptm` = TRUE; user rule 2026-11-05):** the samples are enriched, so the factors come from the PTM precursors only
+  (`--norm_include=sequence --norm_include_grep=<ptm_grep>`, the default), plus the usual exclude. Non-PTM precursors stay in the data,
+  are scaled with the same factors, and are left out of Stats. The TMM part of sltmm uses the same subset. Page choice `all_peptides`
+  -> `--norm_include=not_used`.
 - `sltmm`: SL is applied at this step; **TMM is applied after imputation** (`Shiny_Impute.R`). So `precursor_norm_sltmm` holds SL-only values.
 - `mti` is in the app's dropdown, but `mti_normalize()` doesn't exist. The pipeline refuses it.
 - `directlfq` needs a Python path that isn't set up yet.

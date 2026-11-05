@@ -28,12 +28,17 @@ review_normalize <- function(db_path) {
 
   # --- excluded proteins: current subset vs the pipeline default rule ---
   in_cur <- !filt$PrecursorId %in% normdata$PrecursorId
-  in_def <- grepl(NORM_DEFAULT_EXCLUDE, filt$Description, ignore.case = TRUE)
+  # pipeline default rule: leave out added material; on PTM runs also everything that isn't a PTM peptide
+  ptm <- is_ptm_run(p)
+  in_def <- grepl(NORM_DEFAULT_EXCLUDE, filt$Description, ignore.case = TRUE) | (ptm & !is_ptm_row(filt, p))
+  in_def_mat <- grepl(NORM_DEFAULT_EXCLUDE, filt$Description, ignore.case = TRUE)
   key <- paste(filt$Accession, filt$Description, sep = "\r")
-  ex <- data.frame(key = key, cur = in_cur, def = in_def, stringsAsFactors = FALSE)
+  # the excluded-proteins list shows proteins left out by description (added material); the non-PTM peptides are counted, not listed
+  keep_rows <- !ptm | is_ptm_row(filt, p)
+  ex <- data.frame(key = key, cur = in_cur & keep_rows, def = in_def_mat & keep_rows, stringsAsFactors = FALSE)
   ex <- ex[ex$cur | ex$def, ]
   agg <- if (nrow(ex)) do.call(rbind, lapply(split(ex, ex$key), function(d) data.frame(key = d$key[1], n = nrow(d), cur = any(d$cur), def = any(d$def)))) else NULL
-  same_rule <- identical(excl_mode, "description") && identical(tolower(excl_grep), tolower(NORM_DEFAULT_EXCLUDE)) && identical(incl_mode, "not_used")
+  same_rule <- identical(excl_mode, "description") && identical(tolower(excl_grep), tolower(NORM_DEFAULT_EXCLUDE)) && (if (ptm) identical(incl_mode, "sequence") && identical(tolower(incl_grep), tolower(p$ptm_grep)) else identical(incl_mode, "not_used"))
   ex_table <- ""
   if (!is.null(agg)) {
     agg$Accession <- sub("\r.*", "", agg$key); agg$Description <- sub(".*\r", "", agg$key)
@@ -75,12 +80,15 @@ review_normalize <- function(db_path) {
 <li><b>quantile</b>, <b>loess</b> (cyclic loess), <b>vsn</b>, <b>lr</b> (linear regression): reshape each sample&apos;s distribution, not just scale it.</li>
 <li><b>directlfq</b> - needs the python setup (not yet wired in the pipeline).</li>
 <li>Not available: <b>mti</b> (no function in the app), <b>ai</b> and <b>mi</b> (the app calls them with the wrong arguments).</li></ul>'
-  rule_html <- sprintf('<p>Current subset: exclude by <b>%s</b> <code>%s</code>%s. It leaves out <b>%s proteins / %s precursors</b> of %s.</p>',
+  rule_html <- sprintf('<p>Current subset: exclude by <b>%s</b> <code>%s</code>%s. It leaves out <b>%s proteins%s / %s precursors</b> of %s.</p>',
     esc(excl_mode), esc(excl_grep), if (!identical(incl_mode, "not_used")) sprintf(', include only %s <code>%s</code>', esc(incl_mode), esc(incl_grep)) else "",
-    fmt_n(n_cur_prot), fmt_n(n_cur_prec), fmt_n(nrow(filt)))
+    fmt_n(n_cur_prot), if (ptm) " (by the exclude rule)" else "", fmt_n(n_cur_prec), fmt_n(nrow(filt)))
+  if (ptm) rule_html <- paste0(rule_html, sprintf(
+    '<p>PTM run (<code>%s</code>): the samples are enriched, so the pipeline default calculates the factors from the <b>%s PTM precursors</b> only; the <b>%s</b> others are not supposed to be there. They stay in the data, are normalized with the same factors, and are left out of Stats.</p>',
+    esc(p$ptm_grep), fmt_n(sum(is_ptm_row(filt, p))), fmt_n(sum(!is_ptm_row(filt, p)))))
   if (!same_rule) rule_html <- paste0(rule_html, sprintf(
-    '<p class="missing">This is not the pipeline default rule (only added material: digestion trypsin, human contaminant keratins, bovine alpha/beta casein). The default <code>%s</code> would leave out <b>%s proteins / %s precursors</b>. See the list and the factors for both below.</p>',
-    esc(NORM_DEFAULT_EXCLUDE), fmt_n(n_def_prot), fmt_n(n_def_prec)))
+    '<p class="missing">This is not the pipeline default rule (only added material: digestion trypsin, human contaminant keratins, bovine alpha/beta casein%s). The default <code>%s</code> would leave out <b>%s precursors</b>. See the list and the factors for both below.</p>',
+    if (ptm) sprintf("; and on PTM runs, every precursor without <code>%s</code>", esc(p$ptm_grep)) else "", esc(NORM_DEFAULT_EXCLUDE), fmt_n(n_def_prec)))
   decision_html <- paste0('<section><h2>', if (applied) "Decision" else "Decisions needed", '</h2>',
     '<h3>1. Proteins left out of the factor calculation</h3>', rule_html,
     '<h3>2. Normalization method</h3>',

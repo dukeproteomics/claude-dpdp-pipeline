@@ -70,6 +70,10 @@ stat_calc_norefilter_bg <- function(db_path, comp_number, stats_comp) {
   if (!"Detected_Imputed" %in% names(df)) stop(base, " has no Detected_Imputed column (re-run Step 8).")
   cnt <- do.call(rbind, lapply(strsplit(as.character(df$Detected_Imputed), ".", fixed = TRUE), function(x) as.numeric(gsub("-", "0", x))))
   if (ncol(cnt) != params$sample_number) stop("Detected_Imputed has ", ncol(cnt), " counts per protein, expected ", params$sample_number)
+  # PTM report (pipeline): drop the non-PTM peptides before testing, so adj p covers the PTM peptides only
+  if (params$data_output == "Peptide" && as.logical(params$checkbox_report_ptm) && !params$peptide_report_grep %in% c("", "Enter value here")) {
+    k <- grepl(params$peptide_report_grep, df$Sequence); df <- df[k, ]; cnt <- cnt[k, , drop = FALSE]
+  }
   df_list <- stat_create_comp_df(df, stats_comp, comp_number, params, df_design)
   spqc <- as.numeric(stats_comp$SPQC[comp_number]) != 0
   df <- if (spqc) cbind(df_list[[1]], df_list[[2]], df_list[[3]], df_list[[4]]) else cbind(df_list[[1]], df_list[[2]], df_list[[3]])

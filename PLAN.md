@@ -210,8 +210,17 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   limpa key on the peptide (Accession, Sequence, PTM_Loc, Protein_PTM_Loc, PeptidePosition, ...), 10c plots top peptides.
   Results: app t-test finds 0 adjusted calls (WT_37 vs WT_30 has 17,441 raw p < 0.05, 3x chance); limpa finds 3,410 (background export) /
   3,372 (raw); null splits 0.09-0.34% p < 0.01 (expect 1%). Raw, limpa: WT 37 vs 30 3,372; KO 37 vs 30 2; KO vs WT 37 C 40; 30 C 0.
-  Not done: 10b graphs on the raw run (stopped: system low on memory); all 118k peptides are tested incl. ~42k non-phospho (filter_ptm /
-  report options are the user's choice); no phospho benchmark with known truth.
+  Not done: 10b graphs on the raw run (stopped: system low on memory); no phospho benchmark with known truth.
+- **PTM runs: phosphopeptides only for normalization and output (user rule 2026-11-05: enriched samples, non-phospho peptides are not
+  supposed to be there).** Parameters `ptm` = TRUE makes the defaults: Normalize `norm_include=sequence` + `ptm_grep` (factors from PTM
+  precursors; TMM part of sltmm too; non-PTM rows stay in the data), Stats `checkbox_report_ptm` + `peptide_report_grep=ptm_grep`.
+  Differs from the app: the app adjusts p over all peptides and then hides the non-PTM rows; the pipeline drops them **before** testing
+  (app path and limpa dpcDE), so adj p and limma's prior cover PTM peptides only. Filter's `filter_ptm` stays off (rows are kept).
+  zz_phos_raw rerun (raw, limpa, sltmm): 92,775 of 146,982 precursors used for factors; 75,813 phosphopeptides tested (42,079 not).
+  Adjusted calls, all peptides -> phospho only: KO vs WT 30 C 0 -> 0; WT 37 vs 30 3,372 -> 5,340 (2,669 up / 2,671 down);
+  KO vs WT 37 C 40 -> 358; KO 37 vs 30 2 -> 31. Null splits (30 C, mixed genotype): 0.40-0.49% p < 0.01, 0 calls.
+  ADH (non-phospho standard) CV on sltmm rose 14-15% -> 17-18%, expected when factors come from phosphopeptides.
+  Bovine caseins (phospho spike, levels 1/1.5/2 by design) are significant in WT 37 vs 30 and KO vs WT 37: flagged, not removed.
 - **Impute defaults (user decision 2026-11-04): limpa for raw exports, perseus for background exports.** The form preselects the run's
   default. Rollup and Stats go by the imputation that was applied (Step 7 summary), not the param a preview writes.
 - Proposed Impute options (decided above): raw default limpa; background default Spectronaut background + Perseus for

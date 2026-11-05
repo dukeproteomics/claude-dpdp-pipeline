@@ -93,7 +93,7 @@ impute_choices_ordered <- function(background, choices) {
 
 decision_spec <- function(step, variant, p, run_dir = NULL) {
   g <- function(k, d = "") { v <- p[[k]]; if (is.null(v) || length(v) == 0 || is.na(v[1])) d else as.character(v[1]) }
-  switch(paste0(step, if (nzchar(variant)) paste0(":", variant) else ""),
+  spec <- switch(paste0(step, if (nzchar(variant)) paste0(":", variant) else ""),
     "01_load" = list(q = "Does the design match the data?", nxt = "Step 3 - Parameters", choices = list(
       ch("accept", "Yes, continue"), ch("fix", "No, fix the sample sheet", list(fld("problem", "What is wrong?"))))),
     "03_parameters" = list(q = "Keep these parameters?", nxt = "Step 4 - Noise", choices = list(
@@ -107,7 +107,9 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
       ch("apply", "Apply as shown"), ch("change", "Change settings", list(fld("change", "Which filter and value? (e.g. misaligned_cutoff=60)"))))),
     "06_normalize" = list(q = "Which proteins to leave out of the factors, and which method?", nxt = "Step 7 - Impute",
       global = list(fld("norm_type", "Method", "select", "sltmm", c("sltmm", "sl", "tmm", "quantile", "loess", "vsn", "lr"))),
-      choices = list(ch("default_exclude", "Exclude: pipeline default (added material only)"), ch("current_exclude", "Exclude: keep the current rule"),
+      choices = list(ch("default_exclude", if (identical(g("ptm"), "1") || toupper(g("ptm")) == "TRUE") paste0("Pipeline default: ", g("ptm_grep"), " peptides only, added material excluded") else "Exclude: pipeline default (added material only)"),
+                     if (identical(g("ptm"), "1") || toupper(g("ptm")) == "TRUE") ch("all_peptides", paste0("All peptides (not only ", g("ptm_grep"), "), added material excluded")),
+                     ch("current_exclude", "Exclude: keep the current rule"),
                      ch("custom_exclude", "Exclude: my own regex", list(fld("norm_exclude_grep", "description regex", "text", g("norm_exclude_grep")))))),
     "07_impute" = list(q = "How should the data be imputed?", nxt = "Step 8 - Rollup", choices = impute_choices_ordered(identical(g("sp_fill_mode"), "background"), list(
       ch("duke", "duke (near the group mean), bottom-X for the rest", list(fld("missing_cutoff", "missing_cutoff %", "number", g("missing_cutoff", "50")), fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
@@ -129,6 +131,8 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
       ch("accept", "Accept"), ch("change", "Change cutoffs and re-run", list(fld("change", "New p type / p cutoff / FC cutoff"))),
       ch("plots", "Add protein plots", list(fld("proteins", "accessions (comma separated)"))))),
     NULL)
+  if (!is.null(spec)) spec$choices <- Filter(Negate(is.null), spec$choices)
+  spec
 }
 
 next_step_box <- function(run_dir, step, status_class, variant = "") {

@@ -39,6 +39,11 @@ if (args$action == "accept") {
 if (args$action == "apply" && !identical(args$decided_by, "user"))
   stop("Apply needs the analyst's approval: run --action=preview, show the review page, then pass --decided_by=user.")
 
+# PTM peptide runs (user rule 2026-11-05): test and report only the PTM peptides (app: checkbox_report_ptm). Unlike the app, which
+# adjusts p over every peptide and then hides the non-PTM rows, the pipeline drops them before testing, so adj p (and limma's prior)
+# cover the PTM peptides only.
+p0 <- get_params(db_path)
+ptm_default <- is_ptm_run(p0) && is_peptide_output(p0)
 # Stats Setup widgets (values = 11488 reference / app UI defaults)
 spec <- list(pvalue_cutoff = 0.05, pair_comp = FALSE, checkbox_adjpval = TRUE, padjust_options = "fdr",
              foldchange_cutoff = 1.5, missing_factor = 0.6,
@@ -49,7 +54,7 @@ spec <- list(pvalue_cutoff = 0.05, pair_comp = FALSE, checkbox_adjpval = TRUE, p
              stats_peptide_minimum = FALSE, stats_peptide_minimum_factor = 1,
              checkbox_filter_adjpval = FALSE, checkbox_cohensd = FALSE, checkbox_cohensd_hedges = FALSE,
              checkbox_limmapvalue = FALSE,
-             checkbox_report_ptm = FALSE, peptide_report_grep = "Enter value here",
+             checkbox_report_ptm = ptm_default, peptide_report_grep = if (ptm_default) p0$ptm_grep else "Enter value here",
              checkbox_report_accession = FALSE, report_accession = "Enter value")
 is_limpa <- identical(applied_impute_type(db_path), "limpa") && identical(get_param("rollup_method", db_path), "limpa")
 # Peptide refilter is replaced by flags (user decision 2026-11-04): Stats never re-rolls the comparison's samples; the proteins the
@@ -145,7 +150,9 @@ comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
                   min_adjpval = if (all(is.na(adj))) NA else signif(min(adj, na.rm = TRUE), 3),
                   adjp_lt_0.05 = sum(adj < 0.05, na.rm = TRUE), adjp_lt_0.1 = sum(adj < 0.1, na.rm = TRUE),
                   adjp_lt_0.2 = sum(adj < 0.2, na.rm = TRUE))
-  removed_mf <- nrow(read_table(base_table(p), db_path)) - nrow(df)
+  base_df <- read_table(base_table(p), db_path)
+  n_tested <- if (ptm_report(p)) sum(grepl(p$peptide_report_grep, base_df$Sequence)) else nrow(base_df)
+  removed_mf <- n_tested - nrow(df)
   sp <- qc_spike_settings(run_dir)
   flag <- flag_contaminants(df$Accession, df$Description, sp$spike, sp$constant)
   flagged_sig <- df[sig & flag != "", intersect(c("Accession", "Genes", fc_col, p_col, "Stats"), names(df))]
@@ -154,7 +161,7 @@ comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
        samples = list(N = as.integer(stats_comp$N[i]), D = as.integer(stats_comp$D[i]), SPQC = as.integer(stats_comp$SPQC[i])),
        table = final_table(stats_comp, i, p), proteins = nrow(df), level = if (is_peptide_output(p)) "peptide" else "protein",
        columns = names(df)[!names(df) %in% names(read_table(base_table(p), db_path))],
-       removed_by_missing_factor = removed_mf,
+       tested = n_tested, not_tested_non_ptm = nrow(base_df) - n_tested, removed_by_missing_factor = removed_mf,
        significant = sum(sig), up = sum(up), down = sum(down),
        pvalue_used_for_calls = if (as.logical(p$checkbox_filter_adjpval)) str_c("adjusted (", p$padjust_options, ")") else "raw (checkbox_filter_adjpval is off)",
        significant_if_adjusted_p = sum(adj_sig), pvalue_distribution = pv_dist,
@@ -165,6 +172,7 @@ comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
 summary <- list(step = "10_stats", action = "apply", db_path = db_path, settings = settings,
                 test = if (is_limpa) "limpa dpcDE: limma with DPC-Quant precision weights; FC from the model (log2 means)" else "app: t-test per protein; FC from the ratio of means",
                 limpa = limpa_test, refilter_flags = refilter,
+                report_ptm = if (ptm_report(p)) list(grep = p$peptide_report_grep, note = "Only peptides whose Sequence matches the grep are tested and reported; adj p is over those peptides only (the app adjusts over all peptides, then hides the rest).") else NULL,
                 stat_norm = stat_norm, comp_spqc = comp_spqc, stats_comp = stats_comp, comparisons = comp_results)
 sd <- step_dir(run_dir, "10_stats")
 write_summary(summary, sd)
@@ -177,8 +185,8 @@ cat("Test:", summary$test, "\n")
 cat(sprintf("Normalization: %s | SPQC group: %s | calls use %s p <= %s | FC >= %s | missing factor >= %s\n",
             stat_norm, comp_spqc, comp_results[[1]]$pvalue_used_for_calls, p$pvalue_cutoff, p$foldchange_cutoff, p$missing_factor))
 for (r in comp_results) {
-  cat(sprintf("  %s: %d proteins (%d removed by missing factor), %d significant (%d up, %d down) -> %s\n",
-              r$comparison, r$proteins, r$removed_by_missing_factor, r$significant, r$up, r$down, r$table))
+  cat(sprintf("  %s: %d %ss (%s%d removed by missing factor), %d significant (%d up, %d down) -> %s\n",
+              r$comparison, r$proteins, r$level, if (r$not_tested_non_ptm > 0) sprintf("%d non-%s not tested, ", r$not_tested_non_ptm, p$peptide_report_grep) else "", r$removed_by_missing_factor, r$significant, r$up, r$down, r$table))
   cat(sprintf("     with adjusted p instead: %d significant (min adj p %s)\n", r$significant_if_adjusted_p, r$pvalue_distribution$min_adjpval))
   rf <- refilter[[which(stats_comp$Name == r$comparison)]]
   cat(sprintf("     refilter flags (not removed): all precursors %d (%d significant), half or more %d (%d significant)\n",
