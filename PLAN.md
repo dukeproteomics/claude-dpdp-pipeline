@@ -196,8 +196,10 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - **limpa built into Impute / Rollup / Stats (2026-11-04, `pipeline/limpa.R`).** Tested end to end on 11488 (raw) and triple-spike
   (raw and background). Pipeline triple-spike E45/E5, E10/E5 observed FDR: raw 4.0 / 5.6%; background export with background left
   missing 4.9 / 5.6% (default `limpa_background=missing`), with background used 6.9 / 9.2%. Remaining gap raw vs background is most
-  likely the identified-but-blanked values (open question above). The app's no-refilter Stats path needs a Detected_Imputed column in
-  protein_<norm>, which the app's own Protein rollup doesn't write; the limpa rollup writes it.
+  likely the identified-but-blanked values (open question above). Detected_Imputed: the app adds it in Stats, in the peptide
+  refilter path (precursor_refilter_rollup, refilter is on by default), so it is in every normal data return. With refilter off, Stats
+  reads it from protein_<norm>_final, which the Rollup step doesn't write, and fails (tested on 11488 with duke + iq_maxlfq). limpa
+  runs need refilter off, so the limpa rollup writes the column itself.
 - Phospho / peptide output with limpa: not built. DPC-Quant can group precursors by any id (peptide + site instead of protein), but the
   pipeline's PTM path (Steps 3+ with data_output=Peptide) hasn't been wired or tested yet; needs a phospho dataset.
 - Proposed Impute options (not yet decided by the user): raw default limpa; background default Spectronaut background + Perseus for
