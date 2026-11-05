@@ -52,7 +52,7 @@ State stays in the app's SQLite `.db` format, so a Claude run can be opened in S
   catch an SPQC order swap.
 - Shiny reference run: `data/reference_shiny/11488_110226.db` (unzipped from `data/input/11488_110226.zip`).
   Full run through Stats (B_v_A). Its `params` table records the user's choices at each step.
-- Claude run: `data/11488_110326/` (prefix `11488_110326`)
+- Claude run: `data/11488_110326/` (prefix `11488_110326`; folder deleted 2026-11-05 at the user's request; re-run from the inputs if needed)
 - User confirmed: yeast = spike-in; SPQC = pooled QC (order within SPQC doesn't matter).
 - Spike-ins: bovine casein P02662/P02663 at design `QC Spike Level` (varies); yeast ADH P00330/P00331 at the same level in all samples.
 - QC finding: casein is high only in A_2 (about 20x the others); B_1/B_3 (level 2) are at background; SPQC is about A_2/5.
