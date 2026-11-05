@@ -131,7 +131,7 @@ refilter <- lapply(seq_len(nrow(stats_comp)), function(i) refilter_flags(db_path
 p <- get_params(db_path)
 comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
   nm <- stats_comp$Name[i]
-  df <- read_table(stats_comp$Final_Table_Name[i], db_path)
+  df <- read_table(final_table(stats_comp, i, p), db_path)
   fc_col <- str_c(nm, "_FC"); p_col <- str_c(nm, "_pval"); adj_col <- str_c(nm, "_adjpval"); mf_col <- str_c(nm, "_mf")
   fc <- df[[fc_col]]; pv <- df[[p_col]]; adj <- if (adj_col %in% names(df)) df[[adj_col]] else rep(NA_real_, nrow(df))
   fcc <- as.numeric(p$foldchange_cutoff); pc <- as.numeric(p$pvalue_cutoff)
@@ -145,15 +145,15 @@ comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
                   min_adjpval = if (all(is.na(adj))) NA else signif(min(adj, na.rm = TRUE), 3),
                   adjp_lt_0.05 = sum(adj < 0.05, na.rm = TRUE), adjp_lt_0.1 = sum(adj < 0.1, na.rm = TRUE),
                   adjp_lt_0.2 = sum(adj < 0.2, na.rm = TRUE))
-  removed_mf <- nrow(read_table(stats_comp$Table_Name[i], db_path)) - nrow(df)
+  removed_mf <- nrow(read_table(base_table(p), db_path)) - nrow(df)
   sp <- qc_spike_settings(run_dir)
   flag <- flag_contaminants(df$Accession, df$Description, sp$spike, sp$constant)
   flagged_sig <- df[sig & flag != "", intersect(c("Accession", "Genes", fc_col, p_col, "Stats"), names(df))]
   flagged_sig$Flag <- flag[sig & flag != ""]
   list(comparison = nm, N = stats_comp$FactorsN[i], D = stats_comp$FactorsD[i],
        samples = list(N = as.integer(stats_comp$N[i]), D = as.integer(stats_comp$D[i]), SPQC = as.integer(stats_comp$SPQC[i])),
-       table = stats_comp$Final_Table_Name[i], proteins = nrow(df),
-       columns = names(df)[!names(df) %in% names(read_table(str_c("protein_", stat_norm), db_path))],
+       table = final_table(stats_comp, i, p), proteins = nrow(df), level = if (is_peptide_output(p)) "peptide" else "protein",
+       columns = names(df)[!names(df) %in% names(read_table(base_table(p), db_path))],
        removed_by_missing_factor = removed_mf,
        significant = sum(sig), up = sum(up), down = sum(down),
        pvalue_used_for_calls = if (as.logical(p$checkbox_filter_adjpval)) str_c("adjusted (", p$padjust_options, ")") else "raw (checkbox_filter_adjpval is off)",

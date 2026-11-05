@@ -28,9 +28,10 @@ limpa_quant <- function(db_path, norm, background = "missing") {
   if (!anyNA(L)) stop("limpa_quant: precursor_impute_", norm, " has no gaps, so it was imputed. Apply Step 7 with --impute_type=limpa first.")
   dp <- limpa_dpc(L, bgm)
   if (!is.null(bgm) && background == "missing") L[bgm] <- NA   # background values left to the detection curve
-  Q <- limpa::dpcQuant(L, protein.id = d$Accession, dpc = dp, verbose = FALSE)
+  p <- get_params(db_path); id <- feature_key(d, p)   # protein accession, or the peptide's grouping columns for Peptide output
+  Q <- limpa::dpcQuant(L, protein.id = id, dpc = dp, verbose = FALSE)
   meas <- !is.na(L); if (!is.null(bgm)) meas <- meas & !bgm
-  nm <- rowsum(1L * meas, d$Accession, reorder = TRUE)[rownames(Q$E), , drop = FALSE]
+  nm <- rowsum(1L * meas, id, reorder = TRUE)[rownames(Q$E), , drop = FALSE]
   obj <- list(Q = Q, dpc = dp$dpc, background = if (is.null(bgm)) "none" else background, n_measured = nm, norm = norm, made = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
   dir.create(dirname(limpa_rds(dirname(db_path), norm)), showWarnings = FALSE, recursive = TRUE)
   saveRDS(obj, limpa_rds(dirname(db_path), norm))
@@ -39,7 +40,16 @@ limpa_quant <- function(db_path, norm, background = "missing") {
 
 # protein_<norm> and peptide_<norm> in the app's layout from the DPC-Quant result
 limpa_write_tables <- function(db_path, norm, obj) {
-  n_s <- as.integer(get_param("sample_number", db_path))
+  n_s <- as.integer(get_param("sample_number", db_path)); p <- get_params(db_path)
+  if (is_peptide_output(p)) {   # the app's peptide layout (made by rollup_apply_bg from the gapped table), sample values from DPC-Quant
+    t <- paste0("peptide_impute_", norm); pd <- read_table(t, db_path); k <- match(feature_key(pd, p), rownames(obj$Q$E))
+    if (anyNA(k)) stop("limpa_write_tables: ", sum(is.na(k)), " peptides of ", t, " are not in the DPC-Quant result.")
+    sc <- (ncol(pd) - n_s + 1):ncol(pd)
+    pd[sc] <- as.data.frame(2^obj$Q$E[k, , drop = FALSE])
+    pd$Detected_Imputed <- apply(obj$n_measured[k, , drop = FALSE], 1, function(r) paste(ifelse(r == 0, "-", as.character(r)), collapse = "."))
+    write_table_try(t, pd, db_path)
+    return(list(peptides = nrow(pd)))
+  }
   d <- read_table(paste0("precursor_impute_", norm), db_path); info <- ncol(d) - n_s; sc <- names(d)[(info + 1):ncol(d)]
   acc <- rownames(obj$Q$E); first <- match(acc, d$Accession)
   # Detected_Imputed: measured precursors per sample, "n.n.n" with 0 as "-" (the app's reduce_imputed_df format); the app's Stats reads it
@@ -70,7 +80,7 @@ limpa_stats <- function(db_path, stats_comp, i, p) {
   if (is.null(fit$t)) fit <- limma::eBayes(fit)
   tt <- limma::topTable(fit, coef = 2, number = Inf, sort.by = "none")
   adj_all <- stats::p.adjust(tt$P.Value, method = p$padjust_options)
-  tab <- stats_comp$Final_Table_Name[i]; df <- read_table(tab, db_path); m <- match(df$Accession, rownames(tt))
+  tab <- final_table(stats_comp, i, p); df <- read_table(tab, db_path); m <- match(feature_key(df, p), rownames(tt))
   if (anyNA(m)) stop("limpa_stats: ", sum(is.na(m)), " proteins in ", tab, " are not in the DPC-Quant result.")
   ratio <- 2^tt$logFC[m]
   df[[paste0(nm, "_FC")]] <- signif(ifelse(ratio >= 1, ratio, -1 / ratio), 7)

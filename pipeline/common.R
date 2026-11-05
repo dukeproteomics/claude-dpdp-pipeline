@@ -131,3 +131,12 @@ applied_impute_type <- function(db_path) {
   s <- jsonlite::fromJSON(f, simplifyVector = FALSE)
   if (identical(s$action, "apply")) s$settings$impute_type %||% NA_character_ else NA_character_
 }
+
+# Output level: Protein tables (protein_<norm>, stats_comp$Final_Table_Name) or Peptide tables (peptide_impute_<norm>,
+# Final_Table_Name_Peptide; e.g. phospho). feature_key() identifies a row: the protein accession, or the peptide's grouping columns
+# (the ones the app's collapse_precursor_ptm_raw / collapse_precursor_raw2 group by).
+is_peptide_output <- function(p) identical(p$data_output, "Peptide")
+base_table <- function(p, norm = p$stat_norm) if (is_peptide_output(p)) paste0("peptide_impute_", norm) else paste0("protein_", norm)
+final_table <- function(stats_comp, i, p) if (is_peptide_output(p)) stats_comp$Final_Table_Name_Peptide[i] else stats_comp$Final_Table_Name[i]
+PEPTIDE_KEY <- c("Accession", "Description", "Name", "Genes", "Sequence", "PTM_Loc", "Protein_PTM_Loc", "PeptidePosition")
+feature_key <- function(d, p) if (is_peptide_output(p)) do.call(paste, c(lapply(d[intersect(PEPTIDE_KEY, names(d))], as.character), sep = "\r")) else as.character(d$Accession)

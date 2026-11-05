@@ -44,7 +44,7 @@ if (is.null(args$excel) || as_flag(args$excel)) {
   # Pipeline addition: a "Flagged proteins" sheet (contaminants / spike-ins, flagged not removed). The app's sheets are unchanged.
   sp <- qc_spike_settings(run_dir)
   flag_rows <- do.call(rbind, lapply(seq_len(nrow(stats_comp)), function(i) {
-    nm <- stats_comp$Name[i]; d <- read_table(stats_comp$Final_Table_Name[i], db_path)
+    nm <- stats_comp$Name[i]; d <- read_table(final_table(stats_comp, i, p), db_path)
     fl <- flag_contaminants(d$Accession, d$Description, sp$spike, sp$constant); k <- fl != ""
     if (!any(k)) return(NULL)
     data.frame(Comparison = nm, Accession = d$Accession[k], Description = d$Description[k], Genes = d$Genes[k], Flag = fl[k],
@@ -74,7 +74,7 @@ plot_spqc <- if (!is.null(args$plot_spqc)) as_flag(args$plot_spqc) else TRUE
 locs <- function(x) as.integer(trimws(strsplit(x, ",")[[1]]))
 pos <- c(locs(stats_comp$N_loc[ci]), locs(stats_comp$D_loc[ci]), if (plot_spqc && p$comp_spqc != "0") locs(stats_comp$SPQC_loc[ci]))
 grp_of <- function(i) if (i %in% locs(stats_comp$N_loc[ci])) stats_comp$FactorsN[ci] else if (i %in% locs(stats_comp$D_loc[ci])) stats_comp$FactorsD[ci] else p$comp_spqc
-prot <- read_table(stats_comp$Final_Table_Name[ci], db_path)
+prot <- read_table(final_table(stats_comp, ci, p), db_path)
 # per-comparison peptide table only exists with the old peptide refilter; otherwise the whole-dataset peptide table (Step 8)
 pep_tab <- stats_comp$Final_Table_Name_Peptide[ci]
 pep <- read_table(if (table_exists(pep_tab, db_path)) pep_tab else str_c("peptide_", p$stat_norm), db_path)
@@ -82,18 +82,22 @@ id_cols <- function(df) sapply(design$ID[pos], function(id) grep(str_c("\\.", id
 pc <- id_cols(prot); qc <- id_cols(pep)
 if (anyNA(pc) || anyNA(qc)) stop("Could not match sample columns by design ID.")
 
-accs <- if (!is.null(args$proteins)) trimws(strsplit(args$proteins, ",")[[1]]) else {
-  s <- prot[prot$Stats != "", ]; head(s$Accession[order(s[[str_c(comp, "_pval")]])], as.integer(args$top %||% 6))
-}
+# Rows to plot: the top significant rows (proteins, or peptides for Peptide output), or every row of the given accessions.
+pep_out <- is_peptide_output(p)
+rows <- if (!is.null(args$proteins)) which(prot$Accession %in% trimws(strsplit(args$proteins, ",")[[1]])) else {
+  s <- which(prot$Stats != ""); head(s[order(prot[[str_c(comp, "_pval")]][s])], as.integer(args$top %||% 6)) }
+if (!is.null(args$proteins) && !pep_out) rows <- rows[!duplicated(prot$Accession[rows])]
 labels <- design$Label[pos]; groups <- vapply(pos, grp_of, ""); cols <- design$colorlist[pos]
 group_cols <- setNames(cols[!duplicated(groups)], groups[!duplicated(groups)])
 plots <- character(0); prot_info <- list()
-for (a in accs) {
-  r <- prot[prot$Accession == a, ]; if (!nrow(r)) { warning("Accession not in table: ", a); next }
+for (ri in rows) {
+  r <- prot[ri, ]; a <- r$Accession
+  tag <- if (pep_out) str_c(a, "_", ri) else a
+  seq_lab <- if (pep_out) str_c(" ", gsub("_", "", r$Sequence), if (!is.null(r$Protein_PTM_Loc) && nzchar(r$Protein_PTM_Loc)) str_c(" ", r$Protein_PTM_Loc) else "") else ""
   d <- data.frame(Sample = factor(labels, levels = labels), Group = groups, Intensity = unlist(r[1, pc]))
-  ttl <- sprintf("%s %s  FC %.2f  p %.2g  adj p %.2g  %s", a, r$Genes, r[[str_c(comp, "_FC")]], r[[str_c(comp, "_pval")]],
+  ttl <- sprintf("%s %s%s\nFC %.2f  p %.2g  adj p %.2g  %s", a, r$Genes, seq_lab, r[[str_c(comp, "_FC")]], r[[str_c(comp, "_pval")]],
                  r[[str_c(comp, "_adjpval")]] %||% NA, r$Stats)
-  f1 <- gsub("/+", "/", file.path(p$qc_path, str_c("Protein_", comp, "_", a, "_bar.png")))
+  f1 <- gsub("/+", "/", file.path(p$qc_path, str_c(if (pep_out) "Peptide_" else "Protein_", comp, "_", tag, "_bar.png")))
   ggsave(f1, ggplot(d, aes(Sample, Intensity, fill = Group)) + geom_col() + scale_fill_manual(values = group_cols) +
            theme_classic() + ggtitle(ttl) + xlab(NULL) +
            theme(plot.title = element_text(hjust = 0.5, size = 10), axis.text.x = element_text(angle = 90)), width = 7, height = 5, dpi = 150)
@@ -106,7 +110,7 @@ for (a in accs) {
     agg <- data.frame(Sequence = agg$Sequence, Group = factor(agg$Group, levels = unique(groups)), y_mean = agg$y[, "mean"], sd = agg$y[, "sd"])
     seq_order <- if ("PeptidePosition" %in% names(pr)) pr$Sequence[order(suppressWarnings(as.numeric(sub("[^0-9].*", "", pr$PeptidePosition))))] else pr$Sequence
     agg$Sequence <- factor(agg$Sequence, levels = unique(seq_order))
-    f2 <- gsub("/+", "/", file.path(p$qc_path, str_c("Protein_", comp, "_", a, "_peptides.png")))
+    f2 <- gsub("/+", "/", file.path(p$qc_path, str_c(if (pep_out) "Peptide_" else "Protein_", comp, "_", tag, "_peptides.png")))
     ggsave(f2, ggplot(agg, aes(Sequence, y_mean, fill = Group)) + geom_col(position = position_dodge(0.8), width = 0.7, color = "black") +
              geom_errorbar(aes(ymin = y_mean - sd, ymax = y_mean + sd), position = position_dodge(0.8), width = 0.25) +
              scale_fill_manual(values = group_cols) + theme_classic() + ylab("log2 intensity (mean ± SD)") + xlab(NULL) +
@@ -115,7 +119,7 @@ for (a in accs) {
            width = max(7, 0.25 * nrow(pr) + 3), height = 5, dpi = 150, limitsize = FALSE)
   }
   plots <- c(plots, f1, f2)
-  prot_info[[a]] <- list(genes = r$Genes, name = r$Name, stats = r$Stats, FC = r[[str_c(comp, "_FC")]],
+  prot_info[[tag]] <- list(accession = a, sequence = if (pep_out) r$Sequence else NULL, genes = r$Genes, name = r$Name, stats = r$Stats, FC = r[[str_c(comp, "_FC")]],
                          pval = r[[str_c(comp, "_pval")]], adjpval = r[[str_c(comp, "_adjpval")]], mf = r[[str_c(comp, "_mf")]],
                          detected_imputed = r$Detected_Imputed, precursors = r$Precursors, peptides = nrow(pr),
                          values = setNames(as.list(round(unlist(r[1, pc]))), labels))

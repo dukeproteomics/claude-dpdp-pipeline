@@ -45,7 +45,11 @@ if (!settings$rollup_topn %in% 1:5) stop("--rollup_topn must be 1-5")
 if (!settings$limpa_background %in% c("missing", "use")) stop("--limpa_background must be missing or use")
 
 p <- get_params(db_path)
-if (p$data_output != "Protein") stop("Rollup tab only applies to Protein output (the app rolls up Peptide output during Impute).")
+is_peptide <- p$data_output == "Peptide"
+# Peptide output (e.g. phospho): the app sums each peptide's precursors (charge states) into one row (collapse_precursor_ptm_raw /
+# collapse_precursor_raw2), keeping the localization columns; MaxLFQ doesn't apply. limpa instead estimates each peptide with DPC-Quant.
+if (is_peptide && !settings$rollup_method %in% c("sum", "limpa"))
+  stop("Peptide output: precursors are summed per peptide (--rollup_method=sum), or estimated with --rollup_method=limpa after limpa in Impute.")
 norms <- trimws(strsplit(p$norm_type, ",")[[1]])
 for (n in norms) if (!table_exists(str_c("precursor_impute_", n), db_path)) stop("Run Step 7 (Impute) first: precursor_impute_", n, " is missing.")
 for (k in names(settings)) p[[k]] <- settings[[k]]
@@ -72,11 +76,14 @@ if (args$action == "preview") {
   quit(save = "no")
 }
 if (!identical(args$decided_by, "user")) stop("Apply needs the analyst's approval: run --action=preview, show the review page, then pass --decided_by=user.")
-if (is_limpa) { for (n in norms) limpa_write_tables(db_path, n, readRDS(limpa_rds(run_dir, n)))
-} else run_bg(rollup_apply_bg, list(db_path), "rollup_bg", db_path)
-for (n in norms) add_detected_column(db_path, n)   # Stats reads it for the missing factor (no peptide refilter)
+if (is_limpa && !is_peptide) { for (n in norms) limpa_write_tables(db_path, n, readRDS(limpa_rds(run_dir, n)))
+} else {
+  run_bg(rollup_apply_bg, list(db_path), "rollup_bg", db_path)
+  if (is_limpa) for (n in norms) limpa_write_tables(db_path, n, readRDS(limpa_rds(run_dir, n)))   # peptide output: app layout, limpa values
+}
+if (!is_peptide) for (n in norms) add_detected_column(db_path, n)   # Stats reads it for the missing factor (no peptide refilter); the app adds it for peptides
 run_bg(qc_stats_bg, list(db_path), "qc", db_path)
-for (n in norms) add_detected_column(db_path, n)   # in case qc_stats_bg rebuilt protein_<norm>_final without it
+if (!is_peptide) for (n in norms) add_detected_column(db_path, n)   # in case qc_stats_bg rebuilt protein_<norm>_final without it
 run_bg(cv_grouped_plot_bg, list(db_path), "cv_plot", db_path)
 run_bg(norm_comp_plot_bg, list(db_path), "norm_comp_plot", db_path)
 
@@ -84,8 +91,9 @@ run_bg(norm_comp_plot_bg, list(db_path), "norm_comp_plot", db_path)
 groups <- read_table("sample_groups", db_path)
 cv <- read_table("summary_cv", db_path)
 tables <- lapply(norms, function(n) {
-  prot <- read_table(str_c("protein_", n), db_path); pep <- read_table(str_c("peptide_", n), db_path)
-  pcv <- read_table(str_c("protein_", n, "_cv"), db_path)
+  out_t <- if (is_peptide) str_c("peptide_impute_", n) else str_c("protein_", n)
+  prot <- read_table(out_t, db_path); pep <- if (is_peptide) prot else read_table(str_c("peptide_", n), db_path)
+  pcv <- read_table(str_c(out_t, "_cv"), db_path)
   tot <- colSums(prot[(ncol(prot) - n_s + 1):ncol(prot)], na.rm = TRUE)
   cv_cols <- grep("_CV$", names(pcv), value = TRUE)
   list(norm = n, proteins = nrow(prot), peptides = nrow(pep),

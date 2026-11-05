@@ -22,7 +22,7 @@ review_stats <- function(db_path) {
   # --- per-comparison data for the volcano ---
   comps <- list()
   if (applied && !is.null(sc)) for (i in seq_len(nrow(sc))) {
-    nm <- sc$Name[i]; tb <- sc$Final_Table_Name[i]
+    nm <- sc$Name[i]; tb <- final_table(sc, i, p)
     if (!table_exists(tb, db_path)) next
     d <- read_table(tb, db_path)
     fc <- d[[paste0(nm, "_FC")]]; pv <- d[[paste0(nm, "_pval")]]; ap <- d[[paste0(nm, "_adjpval")]] %||% rep(NA_real_, nrow(d))
@@ -68,7 +68,7 @@ review_stats <- function(db_path) {
       sprintf('<p class="missing">The %s Up/Down calls use <b>raw p</b>. <b>None pass FDR</b> (smallest adjusted p = %s). With %s proteins tested, about %s would have raw p &lt; %s by chance alone.</p>',
               fmt_n(r$significant), esc(pd$min_adjpval), fmt_n(r$proteins), fmt_n(round(r$proteins * pc)), esc(pc)) else ""
     paste0('<h3>', esc(r$comparison), ' (', esc(r$N), ' vs ', esc(r$D), ')</h3><div class="tiles">',
-      sprintf('<div class="tile"><div class="v">%s</div><div class="l">proteins tested (%s removed by missing factor)</div></div>', fmt_n(r$proteins), fmt_n(r$removed_by_missing_factor)),
+      sprintf('<div class="tile"><div class="v">%s</div><div class="l">%s tested (%s removed by missing factor)</div></div>', fmt_n(r$proteins), if (identical(r$level, "peptide")) "peptides" else "proteins", fmt_n(r$removed_by_missing_factor)),
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">Up / Down by %s p: %s / %s</div></div>', fmt_n(r$significant), if (use_adj) "adjusted" else "raw", fmt_n(r$up), fmt_n(r$down)),
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">would pass with adjusted p &le; %s</div></div>', fmt_n(r$significant_if_adjusted_p), esc(pc)),
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">smallest adjusted p</div></div>', esc(pd$min_adjpval)),
@@ -76,8 +76,8 @@ review_stats <- function(db_path) {
       if (!is.null(r$refilter_flags)) sprintf('<div class="tile"><div class="v">%s / %s</div><div class="l">refilter flags: all / half or more precursors (significant: %s / %s)</div></div>',
         fmt_n(r$refilter_flags$flagged_all), fmt_n(r$refilter_flags$flagged_most), fmt_n(r$refilter_flags$flagged_all_significant), fmt_n(r$refilter_flags$flagged_most_significant)) else "",
       '</div>', warn,
-      if (!is.null(r$refilter_flags)) sprintf('<p class="note">Refilter flags (kept, not removed): proteins where all or at least half of the precursors would have been removed by the old peptide refilter for this comparison (%s). Their protein value in these samples rests mostly on imputed precursors. Columns <code>%s_refilter_precursors</code> and <code>%s_refilter_flag</code>.</p>',
-        esc(paste(unlist(r$refilter_flags$rules), collapse = "; ")), esc(r$comparison), esc(r$comparison)) else "")
+      if (!is.null(r$refilter_flags)) sprintf('<p class="note">Refilter flags (kept, not removed): %s where all or at least half of the precursors would have been removed by the old peptide refilter for this comparison (%s). Their value in these samples rests mostly on imputed precursors. Columns <code>%s_refilter_precursors</code> and <code>%s_refilter_flag</code>.</p>',
+        if (identical(r$level, "peptide")) "peptides" else "proteins", esc(paste(unlist(r$refilter_flags$rules), collapse = "; ")), esc(r$comparison), esc(r$comparison)) else "")
   }, ""), collapse = ""), if (!is.null(summ$test)) sprintf('<p class="note">Test: %s.</p>', esc(summ$test)) else "", '</section>')
 
   volc_html <- if (length(comps)) paste0('<section><h2>Volcano explorer</h2>',

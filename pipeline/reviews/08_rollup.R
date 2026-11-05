@@ -41,7 +41,8 @@ review_rollup <- function(db_path) {
     lfq <- lfq[rownames(summed), , drop = FALSE]
     lfq_s <- lfq * (rowMeans(summed) / rowMeans(lfq, na.rm = TRUE))
     summed[summed == 0] <- NA
-    lim <- if (is_limpa && file.exists(limpa_rds(run_dir, n))) readRDS(limpa_rds(run_dir, n)) else NULL
+    # the comparison is protein-level; for Peptide output limpa estimates peptides, so it isn't added here
+    lim <- if (is_limpa && !identical(p$data_output, "Peptide") && file.exists(limpa_rds(run_dir, n))) readRDS(limpa_rds(run_dir, n)) else NULL
     cvl <- list(sum = cvs(summed), iq_maxlfq = cvs(lfq))
     if (!is.null(lim)) cvl$limpa <- cvs(2^lim$Q$E[rownames(summed), , drop = FALSE])
     comp[[n]] <- c(lapply(cvl, function(cv) lapply(seq_along(gcols), function(i) ecdf_pts(cv[, i]))),

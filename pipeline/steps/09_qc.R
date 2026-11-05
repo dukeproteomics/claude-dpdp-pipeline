@@ -43,7 +43,9 @@ const_acc <- split_acc(args$constant_accession %||% "P00330,P00331")
 prot_acc <- split_acc(args$protein_accession)
 
 p <- get_params(db_path)
-if (p$data_output != "Protein") stop("QC step is only wired up for Protein output so far.")
+is_peptide <- p$data_output == "Peptide"
+# Peptide output (e.g. phospho): the spike / constant / protein checks are protein-level, so they run on protein_qc_<norm>, the sum of each
+# protein's peptides in peptide_impute_<norm> (QC only; nothing downstream uses it).
 norms <- split_acc(args$norms %||% p$norm_type)
 qc_path <- p$qc_path
 n_s <- as.integer(p$sample_number)
@@ -54,6 +56,15 @@ plots <- character(0)
 
 results <- lapply(norms, function(n) {
   tbl <- str_c("protein_", n)
+  if (is_peptide) {
+    pt <- str_c("peptide_impute_", n)
+    if (!table_exists(pt, db_path)) stop("Run Step 8 (Rollup) first: ", pt, " is missing.")
+    pd <- read_table(pt, db_path); X <- as.matrix(pd[(ncol(pd) - n_s + 1):ncol(pd)])
+    S <- rowsum(X, pd$Accession, reorder = FALSE, na.rm = TRUE); first <- match(rownames(S), pd$Accession)
+    tbl <- str_c("protein_qc_", n)
+    write_table_try(tbl, data.frame(pd[first, c("Accession", "Description", "Name", "Genes")], Precursors = as.integer(rowsum(pd$Precursors, pd$Accession, reorder = FALSE)),
+                                    S, check.names = FALSE, row.names = NULL), db_path)
+  }
   if (!table_exists(tbl, db_path)) stop("Run Step 8 (Rollup) first: ", tbl, " is missing.")
   df <- read_table(tbl, db_path)
   sc <- (ncol(df) - n_s + 1):ncol(df)

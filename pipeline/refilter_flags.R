@@ -41,8 +41,8 @@ refilter_flags <- function(db_path, stats_comp, i, p) {
     cv <- function(cc) 100 * apply(x[, cc, drop = FALSE], 1, stats::sd, na.rm = TRUE) / rowMeans(x[, cc, drop = FALSE], na.rm = TRUE)
     pmin(cv(nl), cv(dl)) > as.numeric(p$peptide_cv_factor) * 100 } else FALSE
   rm <- rm_all | rm_mf | rm_cv; rm[is.na(rm)] <- FALSE
-  n_rm <- tapply(rm, pf$Accession, sum); n_all <- tapply(rm, pf$Accession, length)
-  tab <- stats_comp$Final_Table_Name[i]; df <- read_table(tab, db_path); a <- df$Accession
+  pk <- feature_key(pf, p); n_rm <- tapply(rm, pk, sum); n_all <- tapply(rm, pk, length)
+  tab <- final_table(stats_comp, i, p); df <- read_table(tab, db_path); a <- feature_key(df, p)
   r <- as.integer(n_rm[a]); n <- as.integer(n_all[a])
   flag <- ifelse(r == n, "refilter: all precursors", ifelse(r >= n / 2, "refilter: half or more precursors", ""))
   df[[paste0(nm, "_refilter_precursors")]] <- sprintf("%d of %d", r, n)
@@ -65,8 +65,9 @@ refilter_flags <- function(db_path, stats_comp, i, p) {
 stat_calc_norefilter_bg <- function(db_path, comp_number, stats_comp) {
   source("Shiny_MVA_Functions.R"); source("Shiny_Misc_Functions.R"); source("Shiny_File.R")
   params <- get_params(db_path); df_design <- read_table_try("design", db_path)
-  df <- read_table_try(stringr::str_c("protein_", trimws(params$stat_norm)), db_path)
-  if (!"Detected_Imputed" %in% names(df)) stop("protein_", params$stat_norm, " has no Detected_Imputed column (re-run Step 8).")
+  base <- if (params$data_output == "Peptide") stringr::str_c("peptide_impute_", trimws(params$stat_norm)) else stringr::str_c("protein_", trimws(params$stat_norm))
+  df <- read_table_try(base, db_path)
+  if (!"Detected_Imputed" %in% names(df)) stop(base, " has no Detected_Imputed column (re-run Step 8).")
   cnt <- do.call(rbind, lapply(strsplit(as.character(df$Detected_Imputed), ".", fixed = TRUE), function(x) as.numeric(gsub("-", "0", x))))
   if (ncol(cnt) != params$sample_number) stop("Detected_Imputed has ", ncol(cnt), " counts per protein, expected ", params$sample_number)
   df_list <- stat_create_comp_df(df, stats_comp, comp_number, params, df_design)
@@ -76,6 +77,6 @@ stat_calc_norefilter_bg <- function(db_path, comp_number, stats_comp) {
   df_missing <- as.data.frame(cnt[, c(nl, dl), drop = FALSE])
   df <- stat_add(df, df_missing, params, comp_number, stats_comp, df_design)
   if (params$stat_norm == "impute") colnames(df) <- gsub("Normalized", "Imputed", colnames(df))
-  write_table_try(stats_comp$Final_Table_Name[comp_number], df, db_path)
+  write_table_try(if (params$data_output == "Peptide") stats_comp$Final_Table_Name_Peptide[comp_number] else stats_comp$Final_Table_Name[comp_number], df, db_path)
   invisible(TRUE)
 }
