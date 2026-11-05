@@ -210,6 +210,14 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - Proposed Impute options (decided above): raw default limpa; background default Spectronaut background + Perseus for
   empty gaps; Perseus / MinProb baselines; duke+bottom-X for comparison with old runs.
 
+## Live run 10658_110426 (triple-spike background export, complete 2026-11-04)
+- Load accept; Parameters accept; Noise none; Filter as shown (294,715 precursors / 15,114 proteins; 311,693 background values back);
+  Normalize SL, human only; Impute perseus (81,509 empty values); Rollup iq_maxlfq scaled; QC accept, no spikes (the 11488 ADH/casein
+  defaults don't apply), no flags; Stats 6 comparisons, calls by adjusted p; results accepted.
+- Scored against the true ratios: observed FDR 0.9-2.9%, 22,624 true calls; E. coli FC compressed when E5 is the low group (+2.59 vs
+  +3.17): app FC is the ratio of linear means, inflated by noisy background values. Open question for the user: app t-test / ratio-of-means
+  vs limma or limpa as the Stats default.
+
 ## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize)
 - Decisions so far made on the review pages: Load accept, Parameters accept, Noise fixed 26.91 (log2 4.75, from the replicate
   reproducibility panel) with noise_keep on, Filter as the Shiny run (125,923 precursors / 7,142 proteins; 14,074 values put back).
