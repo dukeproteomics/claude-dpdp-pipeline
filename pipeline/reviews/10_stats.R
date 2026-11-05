@@ -47,7 +47,7 @@ review_stats <- function(db_path) {
                                    "Up/Down calls use", "Adjusted p column", "Missing factor", "Peptide refilter"),
     Value = c(esc(summ$stat_norm %||% p$stat_norm), esc(summ$comp_spqc %||% p$comp_spqc), esc(pc), esc(fcc),
               if (use_adj) sprintf("<b>adjusted p</b> (%s)", esc(g("padjust_options"))) else "<b>raw p</b> (checkbox_filter_adjpval off)",
-              if (as_flag(g("checkbox_adjpval"))) esc(g("padjust_options")) else "off", esc(g("missing_factor")), if (as_flag(g("peptide_refilter"))) "on" else "off"),
+              if (as_flag(g("checkbox_adjpval"))) esc(g("padjust_options")) else "off", esc(g("missing_factor")), "replaced by flags (no re-rollup per comparison)"),
     Meaning = c("Which normalized data the tests use.", "Pool shown in tables and plots; not part of the test.", "",
                 "Absolute fold change needed for Up/Down.", "Raw p gives more calls but no false-discovery control; adjusted p controls FDR.",
                 "Added to the tables either way.", "Proteins with a smaller share of measured (not imputed) values in the comparison are removed.",
@@ -73,8 +73,12 @@ review_stats <- function(db_path) {
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">would pass with adjusted p &le; %s</div></div>', fmt_n(r$significant_if_adjusted_p), esc(pc)),
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">smallest adjusted p</div></div>', esc(pd$min_adjpval)),
       sprintf('<div class="tile"><div class="v">%s / %s / %s</div><div class="l">raw p &lt; 0.05 / 0.01 / 0.001</div></div>', fmt_n(pd$raw_p_lt_0.05), fmt_n(pd$raw_p_lt_0.01), fmt_n(pd$raw_p_lt_0.001)),
-      '</div>', warn)
-  }, ""), collapse = ""), '</section>')
+      if (!is.null(r$refilter_flags)) sprintf('<div class="tile"><div class="v">%s / %s</div><div class="l">refilter flags: all / half or more precursors (significant: %s / %s)</div></div>',
+        fmt_n(r$refilter_flags$flagged_all), fmt_n(r$refilter_flags$flagged_most), fmt_n(r$refilter_flags$flagged_all_significant), fmt_n(r$refilter_flags$flagged_most_significant)) else "",
+      '</div>', warn,
+      if (!is.null(r$refilter_flags)) sprintf('<p class="note">Refilter flags (kept, not removed): proteins where all or at least half of the precursors would have been removed by the old peptide refilter for this comparison (%s). Their protein value in these samples rests mostly on imputed precursors. Columns <code>%s_refilter_precursors</code> and <code>%s_refilter_flag</code>.</p>',
+        esc(paste(unlist(r$refilter_flags$rules), collapse = "; ")), esc(r$comparison), esc(r$comparison)) else "")
+  }, ""), collapse = ""), if (!is.null(summ$test)) sprintf('<p class="note">Test: %s.</p>', esc(summ$test)) else "", '</section>')
 
   volc_html <- if (length(comps)) paste0('<section><h2>Volcano explorer</h2>',
     '<p class="note">Change the p type and cutoffs to see how the Up/Down calls change (same rule as the app&apos;s Stats column). ',

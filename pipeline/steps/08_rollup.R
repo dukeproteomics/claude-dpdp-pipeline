@@ -19,6 +19,7 @@ source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
 source(file.path(here, "..", "background.R"))
 source(file.path(here, "..", "limpa.R"))
+source(file.path(here, "..", "refilter_flags.R"))
 source(file.path(here, "..", "reviews", "08_rollup.R"))
 
 args <- parse_args()
@@ -70,7 +71,9 @@ if (args$action == "preview") {
 if (!identical(args$decided_by, "user")) stop("Apply needs the analyst's approval: run --action=preview, show the review page, then pass --decided_by=user.")
 if (is_limpa) { for (n in norms) limpa_write_tables(db_path, n, readRDS(limpa_rds(run_dir, n)))
 } else run_bg(rollup_apply_bg, list(db_path), "rollup_bg", db_path)
+for (n in norms) add_detected_column(db_path, n)   # Stats reads it for the missing factor (no peptide refilter)
 run_bg(qc_stats_bg, list(db_path), "qc", db_path)
+for (n in norms) add_detected_column(db_path, n)   # in case qc_stats_bg rebuilt protein_<norm>_final without it
 run_bg(cv_grouped_plot_bg, list(db_path), "cv_plot", db_path)
 run_bg(norm_comp_plot_bg, list(db_path), "norm_comp_plot", db_path)
 

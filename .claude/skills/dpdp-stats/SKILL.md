@@ -17,14 +17,25 @@ description: Step 10 of the DPDP proteomics pipeline (same as the Shiny app's St
 | `checkbox_adjpval` / `padjust_options` | TRUE / fdr | **only adds an `_adjpval` column** |
 | `checkbox_filter_adjpval` | FALSE | **decides whether Up/Down calls use the adjusted p.** FALSE = raw p |
 | `missing_factor` | 0.6 | proteins with `_mf` below this are **removed** from the comparison table |
-| `peptide_refilter` | TRUE | re-filters precursors for the comparison's samples, then rolls up again |
+| `peptide_refilter` | **always FALSE** | replaced by flags (user decision 2026-11-04); `--peptide_refilter=TRUE` is refused |
+| `peptide_missing_filter`, `peptide_cv_filter` | FALSE | now extra **flag** rules (precursors they would remove count toward the refilter flag) |
 | others (`peptide_*`, `stats_*_cv_filter*`, `checkbox_cohensd*`, `checkbox_limmapvalue`) | off | see `10_stats.R` spec |
 
 `--settings_from=<db>` copies the settings **and** the comparisons from a previous run.
 
+## No re-rollup per comparison: refilter flags
+The app's peptide refilter re-rolled each comparison's samples after removing precursors with no measured value in them; re-rolling a
+subset gives different MaxLFQ values than the whole-dataset rollup. Now every comparison uses the whole-dataset protein values, and
+`pipeline/refilter_flags.R` flags what the refilter would have removed: `<comp>_refilter_precursors` ("k of n") and `<comp>_refilter_flag`
+("refilter: all precursors" / "refilter: half or more precursors"). Flagged proteins stay in the tests and the Excel; report the counts
+(summary `refilter_flags`), especially flagged significant ones: their value in these samples rests mostly on imputed precursors.
+11488 B vs A: same 221 calls (one more), mf identical; 45 proteins lose a precursor, 4 flagged (Q9JJ61 FC 4.8 whole-set vs 29 refiltered).
+Two app issues in the no-refilter path, handled in the pipeline: Stats reads `Detected_Imputed` from `protein_<norm>_final` (Rollup now
+writes it), and it takes the last sample_number columns as samples although `_final` ends with the CV columns (Stats swaps in the
+whole-dataset protein table during `stat_calc_bg` and restores the CV table afterwards).
+
 ## limpa runs
-After limpa in Impute and Rollup, Stats sets `peptide_refilter=FALSE` (refilter re-rolls precursors and would bypass DPC-Quant) and refuses
-`--pair_comp`. The app's `stat_calc_bg` still builds the tables (layout, CVs, missing factor filter, flags); then `limpa_stats()` replaces
+After limpa in Impute and Rollup, Stats refuses `--pair_comp`. The app's `stat_calc_bg` still builds the tables (layout, CVs, missing factor filter, flags); then `limpa_stats()` replaces
 `<comp>_FC`, `_FC2`, `_pval`, `_adjpval` and `Stats` with limpa's dpcDE (limma with precision weights) on the comparison's samples.
 FC comes from the model (difference of log2 means), not the ratio of means. Adjusted p is over all tested proteins, as in the app.
 The summary's `test` field says which test was used: report it. 11488 B vs A: 229 calls by raw p, 1 by adjusted p (duke run: 221 / 72;

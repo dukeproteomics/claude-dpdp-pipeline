@@ -22,6 +22,7 @@ source(file.path(here, "..", "review.R"))
 source(file.path(here, "..", "contaminants.R"))
 source(file.path(here, "..", "background.R"))
 source(file.path(here, "..", "limpa.R"))
+source(file.path(here, "..", "refilter_flags.R"))
 source(file.path(here, "..", "reviews", "10_stats.R"))
 
 args <- parse_args()
@@ -51,9 +52,13 @@ spec <- list(pvalue_cutoff = 0.05, pair_comp = FALSE, checkbox_adjpval = TRUE, p
              checkbox_report_ptm = FALSE, peptide_report_grep = "Enter value here",
              checkbox_report_accession = FALSE, report_accession = "Enter value")
 is_limpa <- identical(get_param("impute_type", db_path), "limpa")
-if (is_limpa && is.null(args$peptide_refilter)) args$peptide_refilter <- "FALSE"   # refilter re-rolls precursors, bypassing DPC-Quant
+# Peptide refilter is replaced by flags (user decision 2026-11-04): Stats never re-rolls the comparison's samples; the proteins the
+# refilter would have removed are flagged (pipeline/refilter_flags.R). peptide_missing_filter / peptide_cv_filter now set flag rules.
+if (!is.null(args$peptide_refilter) && as_flag(args$peptide_refilter))
+  stop("--peptide_refilter=TRUE is no longer used: Stats doesn't re-roll per comparison; proteins the refilter would remove are flagged.")
+args$peptide_refilter <- "FALSE"
 settings <- resolve_settings(spec, args)
-if (is_limpa && as_flag(settings$peptide_refilter)) stop("limpa run: --peptide_refilter must be FALSE (it re-rolls the precursors and bypasses DPC-Quant).")
+settings$peptide_refilter <- FALSE
 if (is_limpa && as_flag(settings$pair_comp)) stop("limpa run: paired comparisons (--pair_comp) are not built for dpcDE yet.")
 padj <- c("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr")
 if (!settings$padjust_options %in% padj) stop("--padjust_options must be one of: ", paste(padj, collapse = ", "))
@@ -114,10 +119,18 @@ if (args$action == "preview") {
 }
 
 # --- stat_calc ---
-for (i in seq_len(nrow(stats_comp)))
-  run_bg(stat_calc_bg, list(db_path, i, stats_comp), str_c("stat_calc_", i), db_path)
+# Without refilter the app's stat_calc_bg reads protein_<stat_norm>_final and takes the LAST sample_number columns as the samples, but
+# that table ends with the group CV columns (A_CV, ...), so it would read CVs as samples. During stat_calc the table is the
+# whole-dataset protein table (samples last, with Detected_Imputed); the CV version is put back afterwards.
+fin <- str_c("protein_", stat_norm, "_final")
+fin_cv <- read_table(fin, db_path)
+write_table_try(fin, read_table(str_c("protein_", stat_norm), db_path), db_path)
+stat_ok <- tryCatch({ for (i in seq_len(nrow(stats_comp)))
+  run_bg(stat_calc_bg, list(db_path, i, stats_comp), str_c("stat_calc_", i), db_path); TRUE },
+  finally = write_table_try(fin, fin_cv, db_path))
 # limpa: the app built the tables (layout, CVs, missing factor); FC / pval / adjpval / Stats now come from dpcDE
 limpa_test <- if (is_limpa) lapply(seq_len(nrow(stats_comp)), function(i) limpa_stats(db_path, stats_comp, i, get_params(db_path))) else NULL
+refilter <- lapply(seq_len(nrow(stats_comp)), function(i) refilter_flags(db_path, stats_comp, i, get_params(db_path)))
 
 # --- Summary ---
 p <- get_params(db_path)
@@ -130,7 +143,7 @@ comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
   # The app's own call (Stats column): raw p unless checkbox_filter_adjpval is on.
   up <- df$Stats == "Up"; down <- df$Stats == "Down"; sig <- up | down
   adj_sig <- !is.na(adj) & adj <= pc & abs(fc) >= fcc
-  top <- df[sig, intersect(c("Accession", "Name", "Genes", fc_col, p_col, adj_col, mf_col, "Stats"), names(df))]
+  top <- df[sig, intersect(c("Accession", "Name", "Genes", fc_col, p_col, adj_col, mf_col, str_c(nm, "_refilter_flag"), "Stats"), names(df))]
   top <- head(top[order(top[[p_col]]), ], 15)
   pv_dist <- list(raw_p_lt_0.05 = sum(pv < 0.05, na.rm = TRUE), raw_p_lt_0.01 = sum(pv < 0.01, na.rm = TRUE),
                   raw_p_lt_0.001 = sum(pv < 0.001, na.rm = TRUE),
@@ -152,11 +165,11 @@ comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
        significant_if_adjusted_p = sum(adj_sig), pvalue_distribution = pv_dist,
        flagged = list(note = "Flagged, not removed (lab rule): digestion trypsin, human keratins (non-human samples), QC spike-ins.",
                       tested = as.list(table(flag[flag != ""])), significant = flagged_sig),
-       top_by_pvalue = top)
+       refilter_flags = refilter[[i]], top_by_pvalue = top)
 })
 summary <- list(step = "10_stats", action = "apply", db_path = db_path, settings = settings,
                 test = if (is_limpa) "limpa dpcDE: limma with DPC-Quant precision weights; FC from the model (log2 means)" else "app: t-test per protein; FC from the ratio of means",
-                limpa = limpa_test,
+                limpa = limpa_test, refilter_flags = refilter,
                 stat_norm = stat_norm, comp_spqc = comp_spqc, stats_comp = stats_comp, comparisons = comp_results)
 sd <- step_dir(run_dir, "10_stats")
 write_summary(summary, sd)
@@ -172,6 +185,9 @@ for (r in comp_results) {
   cat(sprintf("  %s: %d proteins (%d removed by missing factor), %d significant (%d up, %d down) -> %s\n",
               r$comparison, r$proteins, r$removed_by_missing_factor, r$significant, r$up, r$down, r$table))
   cat(sprintf("     with adjusted p instead: %d significant (min adj p %s)\n", r$significant_if_adjusted_p, r$pvalue_distribution$min_adjpval))
+  rf <- refilter[[which(stats_comp$Name == r$comparison)]]
+  cat(sprintf("     refilter flags (not removed): all precursors %d (%d significant), half or more %d (%d significant)\n",
+              rf$flagged_all, rf$flagged_all_significant, rf$flagged_most, rf$flagged_most_significant))
   if (nrow(r$flagged$significant)) cat(sprintf("     flagged among significant: %s\n", paste(sprintf("%s (%s)", r$flagged$significant$Genes, r$flagged$significant$Flag), collapse = ", ")))
 }
 cat("Review page:", review_stats(db_path), "\n")

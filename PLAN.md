@@ -200,6 +200,9 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   refilter path (precursor_refilter_rollup, refilter is on by default), so it is in every normal data return. With refilter off, Stats
   reads it from protein_<norm>_final, which the Rollup step doesn't write, and fails (tested on 11488 with duke + iq_maxlfq). limpa
   runs need refilter off, so the limpa rollup writes the column itself.
+- **Peptide refilter removed (user decision 2026-11-04):** Stats never re-rolls a comparison's samples; what the refilter would remove is
+  flagged (`pipeline/refilter_flags.R`). Found and handled two app bugs in the no-refilter path (Detected_Imputed missing from
+  protein_<norm>_final; CV columns read as samples). The earlier limpa test tables had wrong sample/CV columns (FC and p were right).
 - Phospho / peptide output with limpa: not built. DPC-Quant can group precursors by any id (peptide + site instead of protein), but the
   pipeline's PTM path (Steps 3+ with data_output=Peptide) hasn't been wired or tested yet; needs a phospho dataset.
 - Proposed Impute options (not yet decided by the user): raw default limpa; background default Spectronaut background + Perseus for
