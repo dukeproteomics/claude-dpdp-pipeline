@@ -35,6 +35,11 @@ The analyst can decide **on the review page** (radio buttons, fields, a note, an
 | 10_stats (settings) | `run` -> `10_stats.R --action=apply`, then 10b and 10c; `run_adjp` -> the same with `--checkbox_filter_adjpval=TRUE`; `change` -> discuss |
 | 10_stats (results) | `accept` -> `10_stats.R --action=accept`; `change` -> discuss, then re-run; `plots` -> `10c --proteins=<fields.proteins>`, then ask again |
 
+## Logs
+The app's logs go to `<run>/Error/error_<name>.txt` (`run_bg`). To keep a step's own stderr, run it as
+`pipeline/run_step.sh pipeline/steps/NN_<step>.R <args>`: stderr still shows, and is appended to `<run>/Error/<step>_stderr.log`.
+Never redirect logs into `data/` itself.
+
 ## Setup (once per machine)
 - R with the app's packages. On the lab Linux PC they are in `/home/R_Packages`. **Run plain `Rscript`, never `--vanilla`.**
 - `DPDP_APP`: path to a clone of the shiny_DPDP app (default `/home/user/Claude_Shiny/shiny_DPDP`). The pipeline calls its functions.

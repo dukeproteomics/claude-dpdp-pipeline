@@ -18,6 +18,9 @@ Read `PLAN.md` first: it has the plan, the status of each step, and the test dat
 - Work one step at a time. Show results, recommend options, and let the user decide before
   running the next step.
 - Data stays under `data/`. Never commit it or push it to GitHub.
+- Logs go in the run's own `Error/` folder, never loose in `data/`. The app's logs already do (`run_bg` -> `Error/error_<name>.txt`).
+  To keep a step's stderr, run it through `pipeline/run_step.sh <step.R> <args>` (shows stderr and appends it to
+  `<run>/Error/<step>_stderr.log`); don't redirect with `2> data/...`.
 
 ## Git
 - Repo: https://github.com/dukeproteomics/claude-dpdp-pipeline (public). Commit as the repo-local identity `dukeproteomics`
