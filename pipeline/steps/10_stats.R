@@ -119,15 +119,10 @@ if (args$action == "preview") {
 }
 
 # --- stat_calc ---
-# Without refilter the app's stat_calc_bg reads protein_<stat_norm>_final and takes the LAST sample_number columns as the samples, but
-# that table ends with the group CV columns (A_CV, ...), so it would read CVs as samples. During stat_calc the table is the
-# whole-dataset protein table (samples last, with Detected_Imputed); the CV version is put back afterwards.
-fin <- str_c("protein_", stat_norm, "_final")
-fin_cv <- read_table(fin, db_path)
-write_table_try(fin, read_table(str_c("protein_", stat_norm), db_path), db_path)
-stat_ok <- tryCatch({ for (i in seq_len(nrow(stats_comp)))
-  run_bg(stat_calc_bg, list(db_path, i, stats_comp), str_c("stat_calc_", i), db_path); TRUE },
-  finally = write_table_try(fin, fin_cv, db_path))
+# Without refilter the pipeline runs the stats itself (pipeline/refilter_flags.R::stat_calc_norefilter_bg, the app's stat_add core),
+# because the app's no-refilter branch reads the wrong columns and fails when a comparison doesn't use every sample.
+for (i in seq_len(nrow(stats_comp)))
+  run_bg(stat_calc_norefilter_bg, list(db_path, i, stats_comp), str_c("stat_calc_", i), db_path)
 # limpa: the app built the tables (layout, CVs, missing factor); FC / pval / adjpval / Stats now come from dpcDE
 limpa_test <- if (is_limpa) lapply(seq_len(nrow(stats_comp)), function(i) limpa_stats(db_path, stats_comp, i, get_params(db_path))) else NULL
 refilter <- lapply(seq_len(nrow(stats_comp)), function(i) refilter_flags(db_path, stats_comp, i, get_params(db_path)))

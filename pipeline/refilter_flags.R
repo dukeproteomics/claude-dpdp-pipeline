@@ -57,3 +57,25 @@ refilter_flags <- function(db_path, stats_comp, i, p) {
        flagged_all = sum(flag == "refilter: all precursors"), flagged_most = sum(flag == "refilter: half or more precursors"), with_any_removed = sum(r > 0),
        flagged_all_significant = sum(sig & flag == "refilter: all precursors"), flagged_most_significant = sum(sig & flag == "refilter: half or more precursors"))
 }
+
+# Stats without refilter, run by the pipeline instead of the app's stat_calc_bg (whose no-refilter branch is broken twice: it takes the
+# last sample_number columns of protein_<norm>_final, which end with CV columns, and its detected counts assume every sample is in the
+# comparison, so it fails when other groups exist). Same core as the app: stat_create_comp_df + the app's stat_add (CVs, FC, p, adj p,
+# missing factor filter, Up/Down), on the whole-dataset protein_<norm> table. Runs in callr with the app directory as working directory.
+stat_calc_norefilter_bg <- function(db_path, comp_number, stats_comp) {
+  source("Shiny_MVA_Functions.R"); source("Shiny_Misc_Functions.R"); source("Shiny_File.R")
+  params <- get_params(db_path); df_design <- read_table_try("design", db_path)
+  df <- read_table_try(stringr::str_c("protein_", trimws(params$stat_norm)), db_path)
+  if (!"Detected_Imputed" %in% names(df)) stop("protein_", params$stat_norm, " has no Detected_Imputed column (re-run Step 8).")
+  cnt <- do.call(rbind, lapply(strsplit(as.character(df$Detected_Imputed), ".", fixed = TRUE), function(x) as.numeric(gsub("-", "0", x))))
+  if (ncol(cnt) != params$sample_number) stop("Detected_Imputed has ", ncol(cnt), " counts per protein, expected ", params$sample_number)
+  df_list <- stat_create_comp_df(df, stats_comp, comp_number, params, df_design)
+  spqc <- as.numeric(stats_comp$SPQC[comp_number]) != 0
+  df <- if (spqc) cbind(df_list[[1]], df_list[[2]], df_list[[3]], df_list[[4]]) else cbind(df_list[[1]], df_list[[2]], df_list[[3]])
+  nl <- str_to_numlist(stats_comp$N_loc[comp_number]); dl <- str_to_numlist(stats_comp$D_loc[comp_number])
+  df_missing <- as.data.frame(cnt[, c(nl, dl), drop = FALSE])
+  df <- stat_add(df, df_missing, params, comp_number, stats_comp, df_design)
+  if (params$stat_norm == "impute") colnames(df) <- gsub("Normalized", "Imputed", colnames(df))
+  write_table_try(stats_comp$Final_Table_Name[comp_number], df, db_path)
+  invisible(TRUE)
+}

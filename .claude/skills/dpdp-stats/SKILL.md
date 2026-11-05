@@ -30,9 +30,11 @@ subset gives different MaxLFQ values than the whole-dataset rollup. Now every co
 ("refilter: all precursors" / "refilter: half or more precursors"). Flagged proteins stay in the tests and the Excel; report the counts
 (summary `refilter_flags`), especially flagged significant ones: their value in these samples rests mostly on imputed precursors.
 11488 B vs A: same 221 calls (one more), mf identical; 45 proteins lose a precursor, 4 flagged (Q9JJ61 FC 4.8 whole-set vs 29 refiltered).
-Two app issues in the no-refilter path, handled in the pipeline: Stats reads `Detected_Imputed` from `protein_<norm>_final` (Rollup now
-writes it), and it takes the last sample_number columns as samples although `_final` ends with the CV columns (Stats swaps in the
-whole-dataset protein table during `stat_calc_bg` and restores the CV table afterwards).
+The app's no-refilter branch of `stat_calc_bg` is broken three ways (no Detected_Imputed in the Rollup tables; it reads the CV columns of
+`_final` as samples; its detected counts assume every sample is in the comparison, so it fails when other groups exist). The pipeline
+runs that branch itself (`stat_calc_norefilter_bg`: the app's `stat_create_comp_df` + `stat_add` on `protein_<norm>`); Rollup writes
+Detected_Imputed. Checked on 11488: same calls and missing factor as the refiltered Shiny run. Step 10c protein plots use `peptide_<norm>`
+when the per-comparison peptide table (refilter only) doesn't exist.
 
 ## limpa runs
 After limpa in Impute and Rollup, Stats refuses `--pair_comp`. The app's `stat_calc_bg` still builds the tables (layout, CVs, missing factor filter, flags); then `limpa_stats()` replaces

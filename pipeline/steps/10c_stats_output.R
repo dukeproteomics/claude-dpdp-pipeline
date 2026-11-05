@@ -75,7 +75,9 @@ locs <- function(x) as.integer(trimws(strsplit(x, ",")[[1]]))
 pos <- c(locs(stats_comp$N_loc[ci]), locs(stats_comp$D_loc[ci]), if (plot_spqc && p$comp_spqc != "0") locs(stats_comp$SPQC_loc[ci]))
 grp_of <- function(i) if (i %in% locs(stats_comp$N_loc[ci])) stats_comp$FactorsN[ci] else if (i %in% locs(stats_comp$D_loc[ci])) stats_comp$FactorsD[ci] else p$comp_spqc
 prot <- read_table(stats_comp$Final_Table_Name[ci], db_path)
-pep <- read_table(stats_comp$Final_Table_Name_Peptide[ci], db_path)
+# per-comparison peptide table only exists with the old peptide refilter; otherwise the whole-dataset peptide table (Step 8)
+pep_tab <- stats_comp$Final_Table_Name_Peptide[ci]
+pep <- read_table(if (table_exists(pep_tab, db_path)) pep_tab else str_c("peptide_", p$stat_norm), db_path)
 id_cols <- function(df) sapply(design$ID[pos], function(id) grep(str_c("\\.", id, "(\\.|$)"), names(df))[1])
 pc <- id_cols(prot); qc <- id_cols(pep)
 if (anyNA(pc) || anyNA(qc)) stop("Could not match sample columns by design ID.")
