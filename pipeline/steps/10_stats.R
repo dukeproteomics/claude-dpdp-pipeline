@@ -191,6 +191,6 @@ for (r in comp_results) {
   rf <- refilter[[which(stats_comp$Name == r$comparison)]]
   cat(sprintf("     refilter flags (not removed): all precursors %d (%d significant), half or more %d (%d significant)\n",
               rf$flagged_all, rf$flagged_all_significant, rf$flagged_most, rf$flagged_most_significant))
-  if (nrow(r$flagged$significant)) cat(sprintf("     flagged among significant: %s\n", paste(sprintf("%s (%s)", r$flagged$significant$Genes, r$flagged$significant$Flag), collapse = ", ")))
+  if (nrow(r$flagged$significant)) cat(sprintf("     flagged among significant: %s\n", { tb <- table(sprintf("%s (%s)", r$flagged$significant$Genes, r$flagged$significant$Flag)); paste(sprintf("%s x%d", names(tb), as.integer(tb)), collapse = ", ") }))
 }
 cat("Review page:", review_stats(db_path), "\n")

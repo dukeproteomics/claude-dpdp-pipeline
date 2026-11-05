@@ -130,7 +130,7 @@ review_normalize <- function(db_path) {
   js_data <- list(samples = labels, groups = grp_of, factors = fac, dist = lapply(dist, function(q) unname(split(q, row(q)))),
                   method = method %||% "")
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA), ';', NORM_JS, '</script>')
-  extra_css <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; } section h3 { font-size:15px; margin:14px 0 4px; }
+  extra_css <- '<style>.viz-root { } section h3 { font-size:15px; margin:14px 0 4px; }
 .control select { font:inherit; font-size:13px; }</style>'
   body <- paste0(decision_html, factors_html, graphs, excl_html, js)
   write_review_page(run_dir, "06_normalize", "Step 6 - Normalize", status, status_class, body, extra_head = extra_css)

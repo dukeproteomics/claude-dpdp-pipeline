@@ -49,12 +49,12 @@ review_parameters <- function(db_path) {
     '<script>', plotly_js(), '</script><script>const D = ', toJSON(pdat, digits = NA), ';
 const css = getComputedStyle(document.querySelector(".viz-root")), C = n => css.getPropertyValue(n).trim(), cols = ["--series-1", "--series-2", "--series-3"];
 Plotly.newPlot("rel", [...new Set(D.g)].map((g, k) => { const i = D.g.map((x, j) => x === g ? j : -1).filter(j => j >= 0);
-  return { type: "bar", name: g, x: i.map(j => D.s[j]), y: i.map(j => D.rel[j]), marker: { color: C(cols[k % 3]) }, hovertemplate: "%{x}: %{y:.3f} x median<extra></extra>" }; }),
+  return { type: "bar", name: g, x: i.map(j => D.s[j]), y: i.map(j => D.rel[j]), marker: { color: DPDP_GCOL(g, [...new Set(D.g)]) }, hovertemplate: "%{x}: %{y:.3f} x median<extra></extra>" }; }),
   { paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 }, margin: { l: 60, r: 10, t: 10, b: 50 },
     legend: { orientation: "h", y: 1.12 }, shapes: [{ type: "line", x0: 0, x1: 1, xref: "paper", y0: 1, y1: 1, line: { dash: "dot", color: C("--text-muted") } }],
     xaxis: { categoryorder: "array", categoryarray: D.s }, yaxis: { title: "total / median sample", gridcolor: C("--grid"), rangemode: "tozero" } },
   { displaylogo: false, responsive: true });</script>')
-  extra <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; }</style>'
+  extra <- '<style>.viz-root { }</style>'
   write_review_page(run_dir, "03_parameters", "Step 3 - Parameters", if (is.null(a)) "Waiting for the analyst's review" else "Accepted",
                     if (is.null(a)) "waiting" else "done", body, extra_head = extra)
 }

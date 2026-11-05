@@ -145,18 +145,27 @@ Low fills (bottom-X, perseus, minprob, qrilc) should sit at the low end; duke fi
     '</section>') else ""
 
   qc <- p$qc_path
-  graphs <- paste0('<section><h2>Graphs</h2><div class="grid2">',
-    embed_png(file.path(qc, "missing_bar_plot.png"), "Missing values bar plot", "App plot: missing values per sample."),
-    embed_png(file.path(qc, "missing_percent_plot.png"), "Missing values percent plot", "App plot: percent missing per sample."),
-    if (applied) paste(vapply(norms, function(n) embed_png(file.path(qc, paste0("Precursor_impute_", n, "_barplot.png")), paste("Imputed", n),
-      sprintf("Pipeline plot: total intensity per sample after imputation (%s).%s", n, if (n == "sltmm") " Totals need not be equal after TMM." else "")), ""), collapse = "") else "",
-    '</div></section>')
+  # interactive: missing values per sample (count / percent) and, after apply, total intensity per sample for each imputed table
+  miss_n <- colSums(na_mask)
+  tot <- list()
+  if (applied) for (n in norms) { tb <- paste0("precursor_impute_", n)
+    if (table_exists(tb, db_path)) { d <- read_table(tb, db_path); x <- as.matrix(d[, (ncol(d) - n_s + 1):ncol(d)]); tot[[paste("total,", n)]] <- colSums(x, na.rm = TRUE) } }
+  graphs <- paste0('<section><h2>Missing values per sample</h2>',
+    '<p class="note">Before imputation (the normalized table). Samples with many more gaps than their group have weaker data, not necessarily lower abundance.</p>',
+    sample_bar("miss", labels, grp_of, list(`missing values` = miss_n, `missing %` = round(100 * miss_n / nrow(na_mask), 2)), group_order = groups$Group),
+    if (length(tot)) paste0('<h2>Total intensity per sample after imputation</h2><p class="note">',
+      if (identical(itype, "limpa")) "limpa: gaps are kept, so these are the measured values only. " else "",
+      if ("sltmm" %in% norms) "sltmm totals need not be equal: TMM is applied here, after imputation. " else "", '</p>',
+      sample_bar("imptot", labels, grp_of, tot, "total intensity", group_order = groups$Group)) else "",
+    app_png_panel(c(file.path(qc, "missing_bar_plot.png"), file.path(qc, "missing_percent_plot.png"),
+                    if (applied) file.path(qc, paste0("Precursor_impute_", norms, "_barplot.png")))),
+    '</section>')
 
   js_data <- list(groups = groups$Group, counts = as.integer(groups$Count), rows_by_k = rows_by_k, mc = mc, itype = itype,
                   edges = edges, hist = hist_meas, bx_grid = bx_grid, bx_max = bx_max, bx_min = bx_min, bx = bx,
                   bins = bins, pers = pers, dpc = dpc_info, samples = labels, sample_group = grp_of, after = after)
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA), ';', IMPUTE_JS, '</script>')
-  extra_css <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; } .control select { font:inherit; font-size:13px; }
+  extra_css <- '<style>.viz-root { } .control select { font:inherit; font-size:13px; }
 .control input[type=range] { width:260px; }</style>'
   dpc_html <- if (!is.null(dpc_info)) sprintf('<section><h2>Detection curve (used by limpa)</h2>
 <p class="note">How likely a precursor is to be detected at a given log2 intensity, estimated from this data (limpa::dpc, measured values only):
@@ -208,7 +217,7 @@ function bxdraw() {
 bxr.addEventListener("input", bxdraw); bxdraw();
 // duke SD
 Plotly.newPlot("dukeplot", D.groups.map((g, i) => ({ type: "scatter", mode: "lines+markers", name: g, x: D.bins[g].mid, y: D.bins[g].sd,
-  line: { width: 2, color: C(SER[i % 4]) }, marker: { size: 8, color: C(SER[i % 4]), line: { width: 2, color: C("--surface-1") } },
+  line: { width: 2, color: DPDP_GCOL(g, D.groups) }, marker: { size: 8, color: DPDP_GCOL(g, D.groups), line: { width: 2, color: C("--surface-1") } },
   hovertemplate: g + "<br>group mean log2 %{x:.2f}<br>SD %{y:.3f}<extra></extra>" })),
   Object.assign(base(), { margin: { l: 60, r: 20, t: 10, b: 50 }, showlegend: true, legend: { orientation: "h", y: 1.12 },
     xaxis: ax("group mean log2 intensity (bin)"), yaxis: Object.assign(ax("SD used for duke fills (log2)"), { rangemode: "tozero" }) }), cfg);

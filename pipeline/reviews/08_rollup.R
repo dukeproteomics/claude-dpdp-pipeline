@@ -130,14 +130,26 @@ proteins with the most precursors, and a random set with 2 to 15 precursors.</p>
     paste0('<option value="', seq_along(explorer$proteins) - 1, '">', vapply(explorer$proteins, function(z) esc(z$label), ""), '</option>', collapse = "")) else ""
 
   qc <- p$qc_path
-  graphs <- if (applied) paste0('<section><h2>Graphs</h2><div class="grid2">',
-    embed_png(file.path(qc, "CV_barplot.png"), "CV bar plot", "App plot: average protein CV% per group for each normalization."),
-    paste(vapply(norms, function(n) embed_png(file.path(qc, paste0("protein_", n, "_barplot.png")), paste("Protein", n), sprintf("App plot: protein total intensity per sample (%s).", n)), ""), collapse = ""),
-    '</div></section>') else ""
+  graphs <- ""
+  if (applied) {
+    out_tab <- function(n) if (is_peptide_output(p)) paste0("peptide_impute_", n) else paste0("protein_", n)
+    tot <- list(); cvs <- list()
+    for (n in norms) if (table_exists(out_tab(n), db_path)) {
+      d <- read_table(out_tab(n), db_path); x <- as.matrix(d[, (ncol(d) - n_s + 1):ncol(d)]); storage.mode(x) <- "numeric"
+      tot[[paste("total,", n)]] <- colSums(x, na.rm = TRUE)
+    }
+    if (!is.null(summ$summary_cv)) for (n in norms) cvs[[paste("mean CV %,", n)]] <- vapply(groups$Group, function(g) {
+      r <- Filter(function(z) z$Group == g, summ$summary_cv)[[1]]; as.numeric(r[[n]] %||% NA) }, 0)
+    graphs <- paste0('<section><h2>Graphs</h2>',
+      if (length(cvs)) paste0('<h3>Mean CV per group (app definition)</h3>', sample_bar("cvg", groups$Group, groups$Group, cvs, "mean CV %", group_order = groups$Group, height = 260)) else "",
+      if (length(tot)) paste0('<h3>Total intensity per sample (', if (is_peptide_output(p)) "peptides" else "proteins", ')</h3>',
+        sample_bar("rtot", labels, grp_of, tot, "total intensity", group_order = groups$Group)) else "",
+      app_png_panel(c(file.path(qc, "CV_barplot.png"), file.path(qc, paste0("protein_", norms, "_barplot.png")))), '</section>')
+  }
 
   js_data <- list(groups = groups$Group, samples = labels, comp = comp, ppp = ppp, explorer = explorer, method = method)
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA), ';', ROLLUP_JS, '</script>')
-  extra_css <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; } @media (prefers-color-scheme: dark) { .viz-root { --series-3:#199e70; } } .grid3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+  extra_css <- '<style>.viz-root { } .grid3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
 .control select { font:inherit; font-size:13px; max-width:560px; }</style>'
   body <- paste0(decision_html, limpa_html, applied_html, comp_html, ppp_html, expl_html, graphs, js)
   write_review_page(run_dir, "08_rollup", "Step 8 - Rollup", status, status_class, body, extra_head = extra_css)
@@ -178,7 +190,7 @@ if (D.explorer) {
       marker: { size: 8, color: C("--series-1") }, hovertemplate: "sum %{x}: %{y:.2f}<extra></extra>" });
     tr.push({ type: "scatter", mode: "lines+markers", name: "iq_maxlfq", x: D.samples, y: ctr(z.lfq), line: { width: 2, color: C("--series-2") },
       marker: { size: 8, color: C("--series-2") }, hovertemplate: "iq_maxlfq %{x}: %{y:.2f}<extra></extra>" });
-    if (z.limpa) { const lo = z.limpa.map((v, j) => v - 2 * z.se[j]), hi = z.limpa.map((v, j) => v + 2 * z.se[j]);
+    if (Array.isArray(z.limpa) && z.limpa.length) { const lo = z.limpa.map((v, j) => v - 2 * z.se[j]), hi = z.limpa.map((v, j) => v + 2 * z.se[j]);
       tr.push({ type: "scatter", mode: "lines+markers", name: "limpa (± 2 SE)", x: D.samples, y: ctr(z.limpa), line: { width: 2, color: C("--series-3"), dash: "dash" },
         marker: { size: 8, color: C("--series-3") }, error_y: { type: "data", array: z.se.map(v => 2 * v), visible: true, color: C("--series-3") },
         hovertemplate: "limpa %{x}: %{y:.2f}<extra></extra>" }); }

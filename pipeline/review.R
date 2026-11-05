@@ -17,6 +17,29 @@ embed_png <- function(path, alt, caption = NULL) {
           esc(alt), base64enc::base64encode(path), if (is.null(caption)) "" else paste0(esc(caption), "<br/>"), esc(path))
 }
 
+# The app's static plots, kept for reference behind a collapsed panel (the interactive charts above are the ones to read).
+app_png_panel <- function(files, captions = NULL, title = "The app&apos;s original plots") {
+  files <- files[file.exists(gsub("/+", "/", files))]
+  if (!length(files)) return("")
+  if (is.null(captions)) captions <- sub("\\.png$", "", basename(files))
+  paste0('<details><summary>', title, '</summary><div class="grid2">',
+         paste(mapply(function(f, cp) embed_png(f, basename(f), cp), files, captions), collapse = ""), '</div></details>')
+}
+
+# Per-sample bar chart, coloured by group (fixed group order = sample_groups order). `series`: named list of numeric vectors
+# (one per sample); with more than one series a select switches between them (one y-axis at a time, never two).
+sample_bar <- function(id, labels, groups, series, ytitle = names(series), group_order = unique(groups), height = 300) {
+  if (length(ytitle) == 1 && length(series) > 1) ytitle <- rep(ytitle, length(series))
+  d <- list(samples = labels, groups = groups, order = group_order, series = lapply(series, function(v) unname(as.numeric(v))),
+            ytitle = as.list(setNames(ytitle, names(series))))
+  sprintf('%s<div id="%s_sb" style="height:%dpx" role="img" aria-label="Per-sample bar chart"></div>
+<details><summary>Table view</summary><div id="%s_sbt"></div></details>
+<script>window.DPDP_BARS = (window.DPDP_BARS || []).concat([{ id: "%s", d: %s }]);</script>',
+    if (length(series) > 1) sprintf('<div class="control"><label for="%s_sbs">Show</label><select id="%s_sbs">%s</select></div>', id, id,
+      paste0('<option>', esc(names(series)), '</option>', collapse = "")) else "",
+    id, height, id, id, toJSON(d, auto_unbox = TRUE, digits = NA))
+}
+
 html_table <- function(df, numeric_cols = integer(0), class = "") {
   head <- paste0("<tr>", paste0("<th", ifelse(seq_along(df) %in% numeric_cols, ' class="num"', ""), ">", esc(names(df)), "</th>", collapse = ""), "</tr>")
   rows <- vapply(seq_len(nrow(df)), function(i)
@@ -41,11 +64,15 @@ plotly_js <- function() {
 
 REVIEW_CSS <- "
 .viz-root { color-scheme: light; --surface-0:#f4f4f2; --surface-1:#fcfcfb; --text-primary:#0b0b0b; --text-secondary:#52514e;
-  --text-muted:#6f6e69; --rule:#d9d8d3; --grid:#ebeae6; --series-1:#2a78d6; --ref-dynamic:#eb6834; --ref-fixed:#008300;
+  --text-muted:#6f6e69; --rule:#d9d8d3; --grid:#ebeae6; --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100;
+  --series-5:#e87ba4; --series-6:#008300; --series-7:#6250d6; --series-8:#e34948; --div-neg:#2a78d6; --div-mid:#f0efec; --div-pos:#e34948;
+  --seq-lo:#cde2fb; --seq-hi:#104281; --ref-dynamic:#eb6834; --ref-fixed:#008300;
   --accent:#2a78d6; --warn-bg:#fff4d6; --warn-ink:#6b4a00; --ok-bg:#e3f4ea; --ok-ink:#0f5132; }
 @media (prefers-color-scheme: dark) { :root:where(:not([data-theme=\"light\"])) .viz-root { color-scheme: dark; --surface-0:#111110;
   --surface-1:#1a1a19; --text-primary:#f0efec; --text-secondary:#c3c2b7; --text-muted:#9b9a92; --rule:#3a3a37; --grid:#2a2a28;
-  --series-1:#3987e5; --ref-dynamic:#d95926; --ref-fixed:#2f9e2f; --accent:#3987e5; --warn-bg:#3a2e0c; --warn-ink:#f5d58a;
+  --series-1:#3987e5; --series-2:#d95926; --series-3:#199e70; --series-4:#c98500; --series-5:#d55181; --series-6:#008300;
+  --series-7:#9085e9; --series-8:#e66767; --div-neg:#3987e5; --div-mid:#383835; --div-pos:#e66767; --seq-lo:#1c2a3a; --seq-hi:#86b6ef;
+  --ref-dynamic:#d95926; --ref-fixed:#2f9e2f; --accent:#3987e5; --warn-bg:#3a2e0c; --warn-ink:#f5d58a;
   --ok-bg:#12301f; --ok-ink:#a8e0bf; } }
 body { margin:0; font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
 .viz-root { background:var(--surface-0); color:var(--text-primary); min-height:100vh; }
@@ -200,11 +227,10 @@ DECISION_JS <- '
 '
 
 write_review_page <- function(run_dir, step, title, status, status_class, body, extra_head = "", decision_variant = "") {
-  body <- paste0(next_step_box(run_dir, step, status_class, decision_variant), body, '<script>', DECISION_JS, '</script>')
-  if (grepl("DPDP_CHARTS", body, fixed = TRUE)) {
-    if (!grepl("Plotly.newPlot", body, fixed = TRUE) && !grepl("plotly", extra_head, fixed = TRUE)) body <- paste0(body, '<script>', plotly_js(), '</script>')
-    body <- paste0(body, '<script>', SAMPLE_CHARTS_JS, '</script>')
-  }
+  body <- paste0('<script>', COMMON_JS, '</script>', next_step_box(run_dir, step, status_class, decision_variant), body, '<script>', DECISION_JS, '</script>')
+  need_plotly <- function() if (!grepl("Plotly.newPlot", body, fixed = TRUE) && !grepl("plotly", extra_head, fixed = TRUE)) body <<- paste0(body, '<script>', plotly_js(), '</script>')
+  if (grepl("DPDP_CHARTS", body, fixed = TRUE)) { need_plotly(); body <- paste0(body, '<script>', SAMPLE_CHARTS_JS, '</script>') }
+  if (grepl("DPDP_BARS", body, fixed = TRUE)) { need_plotly(); body <- paste0(body, '<script>', SAMPLE_BAR_JS, '</script>') }
   extra_head <- paste0('<meta name="dpdp-token" content="__DPDP_TOKEN__"/>', extra_head)
   p_prefix <- basename(run_dir)
   html <- sprintf('<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -242,14 +268,14 @@ write_review_index <- function(run_dir) {
 # sample_charts(m, labels, groups, id, ref) -> HTML + data for: total intensity per sample (bars by group), log2 intensity per
 # sample (box plots from precomputed quantiles), and the log2 histogram of all values with reference lines.
 # m: matrix of raw intensities (samples in columns). ref: named list of vertical lines for the histogram (log2 values).
-sample_charts <- function(m, labels, groups, id, ref = list(), title_suffix = "") {
+sample_charts <- function(m, labels, groups, id, ref = list(), title_suffix = "", group_order = unique(groups)) {
   m[!is.na(m) & m <= 0] <- NA
   lx <- log2(m)
   q <- t(apply(lx, 2, function(v) as.numeric(quantile(v, c(0.05, 0.25, 0.5, 0.75, 0.95), na.rm = TRUE))))
   edges <- seq(floor(min(lx, na.rm = TRUE) * 5) / 5, ceiling(max(lx, na.rm = TRUE) * 5) / 5, by = 0.2)
   h <- tabulate(findInterval(lx[!is.na(lx)], edges, rightmost.closed = TRUE), nbins = length(edges) - 1)
   d <- list(samples = labels, groups = groups, total = as.numeric(colSums(m, na.rm = TRUE)), measured = as.integer(colSums(!is.na(m))),
-            q = unname(split(round(q, 3), row(q))), edges = edges, hist = h, ref = ref)
+            q = unname(split(round(q, 3), row(q))), edges = edges, hist = h, ref = ref, order = group_order)
   sprintf('<div class="grid2"><div><h3>Total intensity per sample%s</h3><div id="%s_bar" style="height:320px" role="img" aria-label="Total intensity per sample"></div></div>
 <div><h3>log2 intensity per sample%s</h3><div id="%s_box" style="height:320px" role="img" aria-label="log2 intensity distribution per sample"></div></div></div>
 <h3>log2 intensity histogram, all values%s</h3><div id="%s_hist" style="height:340px" role="img" aria-label="Histogram of log2 intensities"></div>
@@ -258,6 +284,35 @@ sample_charts <- function(m, labels, groups, id, ref = list(), title_suffix = ""
     title_suffix, id, title_suffix, id, title_suffix, id, id, id, toJSON(d, auto_unbox = TRUE, digits = NA))
 }
 
+# Group colour = categorical slot by the group's position in the run's group order (entity, not rank; 8 slots, validated).
+COMMON_JS <- '
+window.DPDP_GCOL = function (g, order) { const i = Math.max(0, (order || []).indexOf(g));
+  return getComputedStyle(document.querySelector(".viz-root")).getPropertyValue("--series-" + ((i % 8) + 1)).trim(); };
+'
+
+SAMPLE_BAR_JS <- '
+(function () {
+  const css = getComputedStyle(document.querySelector(".viz-root")), C = n => css.getPropertyValue(n).trim();
+  const base = () => ({ paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 } });
+  const f3 = v => v === null ? "-" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("en-US") : (+v).toPrecision(3));
+  (window.DPDP_BARS || []).forEach(({ id, d }) => {
+    const names = Object.keys(d.series), sel = document.getElementById(id + "_sbs"), gs = d.order;
+    function draw() {
+      const k = sel ? sel.value : names[0], y = d.series[k];
+      Plotly.react(id + "_sb", gs.filter(g => d.groups.includes(g)).map(g => { const ix = d.groups.map((x, i) => x === g ? i : -1).filter(i => i >= 0);
+        return { type: "bar", name: g, x: ix.map(i => d.samples[i]), y: ix.map(i => y[i]), marker: { color: DPDP_GCOL(g, gs) },
+          hovertemplate: "%{x}<br>" + k + ": %{y:,.4~g}<extra>" + g + "</extra>" }; }),
+        Object.assign(base(), { margin: { l: 70, r: 10, t: 10, b: 60 }, legend: { orientation: "h", y: 1.12 }, bargap: 0.25,
+          xaxis: { categoryorder: "array", categoryarray: d.samples }, yaxis: { title: d.ytitle[k], gridcolor: C("--grid"), rangemode: "tozero" } }),
+        { displaylogo: false, responsive: true });
+    }
+    if (sel) sel.addEventListener("change", draw); draw();
+    document.getElementById(id + "_sbt").innerHTML = "<table><thead><tr><th>Sample</th><th>Group</th>" + names.map(n => "<th class=num>" + n + "</th>").join("") +
+      "</tr></thead><tbody>" + d.samples.map((s, i) => "<tr><td>" + s + "</td><td>" + d.groups[i] + "</td>" + names.map(n => "<td class=num>" + f3(d.series[n][i]) + "</td>").join("") + "</tr>").join("") + "</tbody></table>";
+  });
+})();
+'
+
 SAMPLE_CHARTS_JS <- '
 (function () {
   const css = getComputedStyle(document.querySelector(".viz-root")), C = n => css.getPropertyValue(n).trim();
@@ -265,7 +320,7 @@ SAMPLE_CHARTS_JS <- '
   const base = () => ({ paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 } });
   const ax = t => ({ title: t, gridcolor: C("--grid"), zeroline: false });
   (window.DPDP_CHARTS || []).forEach(({ id, d }) => {
-    const gs = [...new Set(d.groups)], col = g => C(GC[gs.indexOf(g) % GC.length]), idx = g => d.groups.map((x, i) => x === g ? i : -1).filter(i => i >= 0);
+    const gs = [...new Set(d.groups)], col = g => DPDP_GCOL(g, d.order || gs), idx = g => d.groups.map((x, i) => x === g ? i : -1).filter(i => i >= 0);
     const med = d.total.slice().sort((a, b) => a - b)[Math.floor(d.total.length / 2)];
     Plotly.newPlot(id + "_bar", gs.map(g => ({ type: "bar", name: g, x: idx(g).map(i => d.samples[i]), y: idx(g).map(i => d.total[i]), marker: { color: col(g) },
       customdata: idx(g).map(i => (d.total[i] / med).toFixed(3)), hovertemplate: "%{x}<br>total %{y:.3s}<br>%{customdata} x median<extra></extra>" })),

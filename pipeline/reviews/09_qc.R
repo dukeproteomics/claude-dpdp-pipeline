@@ -75,13 +75,13 @@ review_qc <- function(db_path) {
 
   qc <- p$qc_path
   app_plots <- unlist(summ$plots)
-  graphs <- paste0('<section><h2>App plots</h2><div class="grid2">', paste(vapply(app_plots, function(f) embed_png(f, basename(f), sub("_barplot\\.png$", "", basename(f))), ""), collapse = ""), '</div></section>')
+  graphs <- if (length(app_plots)) paste0('<section><h2>App plots</h2><p class="note">The interactive spike and ADH charts above show the same data.</p>', app_png_panel(app_plots, sub("_barplot\\.png$", "", basename(app_plots))), '</section>') else ""
 
   pcs <- prec_counts(unlist(st$spike_accession))
   pcc <- lapply(unlist(st$constant_accession), function(a) prec_counts(a)); names(pcc) <- unlist(st$constant_accession)
   js_data <- list(samples = labels, groups = grp_of, pool = pool, spike = spike, constant = constant, spike_prec = pcs, const_prec = pcc)
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA, null = "null"), ';', QC_JS, '</script>')
-  extra_css <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; } .control select { font:inherit; font-size:13px; }
+  extra_css <- '<style>.viz-root { } .control select { font:inherit; font-size:13px; }
 td.flag { color:var(--warn-ink); font-weight:600; } .control input[type=range] { width:200px; }</style>'
   body <- paste0(decision_html, spike_html, const_html, graphs, js)
   write_review_page(run_dir, "09_qc", "Step 9 - QC", status, status_class, body, extra_head = extra_css)
@@ -94,7 +94,7 @@ const fmt = n => Math.round(n).toLocaleString("en-US");
 const base = () => ({ paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 } });
 const ax = t => ({ title: t, gridcolor: C("--grid"), zeroline: false });
 const cfg = { displaylogo: false, responsive: true };
-const GC = {}; [...new Set(D.groups)].forEach((g, i) => GC[g] = ["--series-1", "--series-2", "--series-3"][i % 3]);
+const GC = {}; [...new Set(D.groups)].forEach((g, i) => GC[g] = "--series-" + ((i % 8) + 1));
 function spikeDraw() {
   const n = document.getElementById("snorm").value, S = D.spike[n], tol = +document.getElementById("tol").value;
   document.getElementById("tolv").textContent = "±" + tol + "%";

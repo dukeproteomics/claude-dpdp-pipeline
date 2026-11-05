@@ -48,12 +48,12 @@ review_load <- function(db_path) {
     '<script>', plotly_js(), '</script><script>const D = ', toJSON(list(s = names(miss), g = grp, m = as.numeric(missf * 100), n = as.numeric(miss)), digits = NA), ';
 const css = getComputedStyle(document.querySelector(".viz-root")), C = n => css.getPropertyValue(n).trim(), cols = ["--series-1", "--series-2", "--series-3"];
 Plotly.newPlot("miss", [...new Set(D.g)].map((g, k) => { const i = D.g.map((x, j) => x === g ? j : -1).filter(j => j >= 0);
-  return { type: "bar", name: g, x: i.map(j => D.s[j]), y: i.map(j => D.m[j]), customdata: i.map(j => D.n[j]), marker: { color: C(cols[k % 3]) },
+  return { type: "bar", name: g, x: i.map(j => D.s[j]), y: i.map(j => D.m[j]), customdata: i.map(j => D.n[j]), marker: { color: DPDP_GCOL(g, [...new Set(D.g)]) },
     hovertemplate: "%{x}: %{y:.2f}% missing (%{customdata:,})<extra></extra>" }; }),
   { paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 }, margin: { l: 60, r: 10, t: 10, b: 50 },
     legend: { orientation: "h", y: 1.12 }, xaxis: { categoryorder: "array", categoryarray: D.s }, yaxis: { title: "% missing", gridcolor: C("--grid"), rangemode: "tozero" } },
   { displaylogo: false, responsive: true });</script>')
-  extra <- '<style>.viz-root { --series-2:#eb6834; --series-3:#1baf7a; } .bad { color:var(--warn-ink); }</style>'
+  extra <- '<style>.viz-root { } .bad { color:var(--warn-ink); }</style>'
   write_review_page(run_dir, "01_load", "Step 1 - Load", if (is.null(a)) "Waiting for the analyst's review" else "Accepted",
                     if (is.null(a)) "waiting" else "done", body, extra_head = extra)
 }

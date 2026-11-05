@@ -195,7 +195,7 @@ review_filter <- function(db_path) {
                   result = result_data, group_colors = c("--series-1", "--series-2", "--series-3", "--series-4", "--series-5", "--series-6"))
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA), ';', FILTER_JS, '</script>')
   extra_css <- '<style>.panel { border:1px solid var(--rule); border-radius:8px; padding:10px 14px; } .panel h3 { font-size:15px; margin:0 0 4px; }
-.status.off { background:var(--grid); color:var(--text-secondary); } .viz-root { --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100; --series-5:#e87ba4; --series-6:#008300; }
+.status.off { background:var(--grid); color:var(--text-secondary); } .viz-root { --series-5:#e87ba4; --series-6:#008300; }
 .control select { font:inherit; font-size:13px; } .control input[type=range] { width:220px; }</style>'
   body <- paste0(decision_html, results_html, graphs, ex_html, js)
   write_review_page(run_dir, "05_filter", "Step 5 - Filter", status, status_class, body, extra_head = extra_css)

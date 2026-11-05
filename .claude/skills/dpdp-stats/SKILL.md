@@ -49,10 +49,14 @@ the duke adjusted calls are mostly false positives, step 07b).
 cd /home/user/Claude_Shiny
 Rscript pipeline/steps/10_stats.R --db=<db> --action=preview [--settings_from=<db>] [--comp1_N=B --comp1_D=A] [--name=value ...]
 Rscript pipeline/steps/10_stats.R --db=<db> --action=apply   [...same...] --decided_by=user --analyst=<name> [--note="<reason>"]
-Rscript pipeline/steps/10b_stats_graphs.R --db=<db> [--comps=B_v_A] [--include_spqc=TRUE] [--volcano_highlight=text,...]
+Rscript pipeline/steps/10b_stats_graphs.R --db=<db> [--comps=B_v_A] [--include_spqc=TRUE] [--heatmap_rows=1000] [--png=FALSE]
 ```
-Graphs are static PNGs made from the app's own data prep (`create_plot_bg`, `create_volcano_bg`), with the plot code
-from `Shiny_Interactive.R`. PCA_3D is not made. Graph sets: each comparison's samples, plus "all" (comparisons + SPQC).
+10b writes **chart data** (`steps/10_stats/graphs.json`); the Stats page draws everything interactively (user request 2026-11-05):
+totals and log2 distribution per sample, PCA (PC1 vs PC2 / PC3), sample distance, and a heatmap of the **1,000 most variable rows**
+(z-score per row; the app clusters every row, which ran out of memory on ~118k peptides). Same data as the app's `create_plot_bg`
+(the tested normalization, each comparison's samples, complete rows), except PTM runs use the PTM peptides only. Volcanoes are drawn
+from the stats tables. `--png=TRUE` also writes app-style static PNGs (shown in a collapsed panel). Sets: each comparison, plus
+"all samples" (comparisons + SPQC).
 
 ## Review page and decisions
 `10_stats.R` (preview, apply, accept), `10b` and `10c` all rebuild **`data/<prefix>/review/10_stats.html`**
@@ -86,17 +90,19 @@ From `steps/10_stats/summary.json` and `steps/10_stats/graphs.json`, and **open 
 2. **Missing factor:** how many proteins were removed (`removed_by_missing_factor`).
 3. **Large fold changes:** check `Detected_Imputed` for the top hits. Very large FCs (≥ 10×) usually mean
    detected in one group and imputed (bottom-X) in the other. Report how many significant proteins are like that.
-4. **Volcano** (`Stats_<comp>_volcano.png`): red = Up, blue = Down; dotted lines = FC and p cutoffs.
-5. **PCA** (`Stats_<set>_pca2d.png`): do the groups separate on PC1 or PC2? SPQC should sit tightly in the middle (a pool).
+4. **Volcano** (page explorer): red = Up, blue = Down; dotted lines = FC and p cutoffs.
+5. **PCA** (page, per sample set): do the groups separate on PC1 or PC2? SPQC should sit tightly in the middle (a pool).
    Point out samples far from their group (`graphs.json` scores, `nearest_sample`).
-6. **Sample distance** (`_cluster.png`) and **heatmap** (`_heatmap.png`, column dendrogram order): which samples cluster together.
+6. **Sample distance** and **heatmap** (page; sample order = column dendrogram): which samples cluster together.
 7. **Bar / box** plots: totals and distributions of the samples used.
 Then ask the user to accept, or change settings or comparisons and re-run.
 
 ## Excel output and Protein Plots (step 10c)
 ```bash
-Rscript pipeline/steps/10c_stats_output.R --db=<db> [--excel=TRUE] [--comp=B_v_A] [--proteins=<acc>,...] [--top=6] [--plot_spqc=TRUE]
+Rscript pipeline/steps/10c_stats_output.R --db=<db> [--excel=TRUE] [--comp=B_v_A] [--proteins=<acc>,...] [--top=6] [--plot_spqc=TRUE] [--png=FALSE]
 ```
+- **Protein / peptide plots** are drawn on the Stats page from `output.json` (value per sample; every peptide of the protein, mean ± SD per
+  group; PTM runs: PTM peptides, up to the 60 most intense). `--png=TRUE` also writes the static PNGs.
 - **Excel:** runs the app's `stats_Final_Excel_bg` → `data/<prefix>/<norm>/Final_<norm>_stats.xlsx`
   (Table1 Sample Info [created empty by the app], Table2 Raw Precursor, Table3 Raw Peptide, Table4 Normalized, Table5+ one per comparison)
   and `<prefix>_Parameters.xlsx`. Tell the user the file paths. Remind them the Up/Down column uses raw p if `checkbox_filter_adjpval` is off.

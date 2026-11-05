@@ -7,7 +7,8 @@
 #
 # Usage:
 #   Rscript pipeline/steps/10c_stats_output.R --db=<db> [--excel=TRUE] [--final_stats_name=Final_<norm>_stats.xlsx]
-#       [--comp=B_v_A] [--proteins=<acc>,<acc>] [--top=6] [--plot_spqc=TRUE]
+#       [--comp=B_v_A] [--proteins=<acc>,<acc>] [--top=6] [--plot_spqc=TRUE] [--png=FALSE]
+#   The plots are drawn interactively on the Stats page from output.json; --png=TRUE also writes the static PNGs.
 #   --proteins  accessions to plot; default = the top N significant proteins by p-value (--top)
 #
 # Output: Excel files; QC/Protein_<comp>_<acc>_{bar,peptides}.png; steps/10_stats/output.json
@@ -89,6 +90,7 @@ rows <- if (!is.null(args$proteins)) which(prot$Accession %in% trimws(strsplit(a
 if (!is.null(args$proteins) && !pep_out) rows <- rows[!duplicated(prot$Accession[rows])]
 labels <- design$Label[pos]; groups <- vapply(pos, grp_of, ""); cols <- design$colorlist[pos]
 group_cols <- setNames(cols[!duplicated(groups)], groups[!duplicated(groups)])
+make_png <- as_flag(args$png %||% FALSE)
 plots <- character(0); prot_info <- list()
 for (ri in rows) {
   r <- prot[ri, ]; a <- r$Accession
@@ -98,12 +100,17 @@ for (ri in rows) {
   ttl <- sprintf("%s %s%s\nFC %.2f  p %.2g  adj p %.2g  %s", a, r$Genes, seq_lab, r[[str_c(comp, "_FC")]], r[[str_c(comp, "_pval")]],
                  r[[str_c(comp, "_adjpval")]] %||% NA, r$Stats)
   f1 <- gsub("/+", "/", file.path(p$qc_path, str_c(if (pep_out) "Peptide_" else "Protein_", comp, "_", tag, "_bar.png")))
-  ggsave(f1, ggplot(d, aes(Sample, Intensity, fill = Group)) + geom_col() + scale_fill_manual(values = group_cols) +
+  if (make_png) ggsave(f1, ggplot(d, aes(Sample, Intensity, fill = Group)) + geom_col() + scale_fill_manual(values = group_cols) +
            theme_classic() + ggtitle(ttl) + xlab(NULL) +
            theme(plot.title = element_text(hjust = 0.5, size = 10), axis.text.x = element_text(angle = 90)), width = 7, height = 5, dpi = 150)
   pr <- pep[pep$Accession == a, ]
+  if (ptm_report(p) && pep_out) pr <- pr[grepl(p$peptide_report_grep, pr$Sequence), ]
+  if (nrow(pr) > 60) pr <- pr[order(-rowMeans(as.matrix(pr[, qc]), na.rm = TRUE))[1:60], ]   # page limit: the 60 most intense
   f2 <- NULL
-  if (nrow(pr)) {
+  pep_data <- if (nrow(pr)) list(sequence = gsub("_", "", pr$Sequence), site = if (!is.null(pr$Protein_PTM_Loc)) pr$Protein_PTM_Loc else NULL,
+    position = suppressWarnings(as.numeric(sub("[^0-9].*", "", pr$PeptidePosition %||% rep(NA, nrow(pr))))),
+    log2 = unname(round(log2(as.matrix(pr[, qc])), 3)), this = if (pep_out) which(pr$Sequence == r$Sequence & (is.null(pr$Protein_PTM_Loc) | pr$Protein_PTM_Loc == (r$Protein_PTM_Loc %||% ""))) else integer(0)) else NULL
+  if (nrow(pr) && make_png) {
     lg <- log2(as.matrix(pr[, qc])); colnames(lg) <- labels
     long <- data.frame(Sequence = rep(pr$Sequence, times = length(pos)), Group = rep(groups, each = nrow(pr)), y = as.vector(lg))
     agg <- aggregate(y ~ Sequence + Group, long, function(v) c(mean = mean(v), sd = sd(v)))
@@ -118,16 +125,19 @@ for (ri in rows) {
              theme(plot.title = element_text(hjust = 0.5), axis.text.x = element_text(angle = 90, size = 6)),
            width = max(7, 0.25 * nrow(pr) + 3), height = 5, dpi = 150, limitsize = FALSE)
   }
-  plots <- c(plots, f1, f2)
+  if (make_png) plots <- c(plots, f1, f2)
   prot_info[[tag]] <- list(accession = a, sequence = if (pep_out) r$Sequence else NULL, genes = r$Genes, name = r$Name, stats = r$Stats, FC = r[[str_c(comp, "_FC")]],
                          pval = r[[str_c(comp, "_pval")]], adjpval = r[[str_c(comp, "_adjpval")]], mf = r[[str_c(comp, "_mf")]],
                          detected_imputed = r$Detected_Imputed, precursors = r$Precursors, peptides = nrow(pr),
-                         values = setNames(as.list(round(unlist(r[1, pc]))), labels))
+                         site = if (pep_out) r$Protein_PTM_Loc %||% "" else NULL,
+                         values = setNames(as.list(round(unlist(r[1, pc]))), labels), peptide_data = pep_data)
 }
-out$protein_plots <- list(comp = comp, proteins = prot_info, plots = plots,
+out$protein_plots <- list(comp = comp, proteins = prot_info, plots = plots, samples = labels, groups = groups,
+                          group_order = read_table("sample_groups", db_path)$Group, level = if (pep_out) "peptide" else "protein",
                           note = "Pipeline version of Stats > Protein Plots (the app's version fails for group names that match annotation columns).")
 out$plots <- plots
 sd <- step_dir(run_dir, "10_stats")
 write_json(out, file.path(sd, "output.json"), auto_unbox = TRUE, pretty = TRUE, digits = NA)
-cat("Protein plots:\n", paste0("  ", plots, collapse = "\n"), "\n")
+cat(sprintf("Protein plots: %d %s (drawn on the Stats page)%s\n", length(prot_info), if (pep_out) "peptides" else "proteins",
+            if (length(plots)) paste0("; PNGs:\n", paste0("  ", plots, collapse = "\n")) else ""))
 cat("Review page:", review_stats(db_path), "\n")
