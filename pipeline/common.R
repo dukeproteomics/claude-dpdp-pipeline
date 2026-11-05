@@ -124,3 +124,10 @@ existing_plots <- function(qc_path, files) {
   p[file.exists(p)]
 }
 
+# The imputation that was APPLIED (Step 7 summary), not the param (a preview also writes impute_type).
+applied_impute_type <- function(db_path) {
+  f <- file.path(dirname(db_path), "steps", "07_impute", "summary.json")
+  if (!file.exists(f)) return(NA_character_)
+  s <- jsonlite::fromJSON(f, simplifyVector = FALSE)
+  if (identical(s$action, "apply")) s$settings$impute_type %||% NA_character_ else NA_character_
+}

@@ -51,7 +51,7 @@ spec <- list(pvalue_cutoff = 0.05, pair_comp = FALSE, checkbox_adjpval = TRUE, p
              checkbox_limmapvalue = FALSE,
              checkbox_report_ptm = FALSE, peptide_report_grep = "Enter value here",
              checkbox_report_accession = FALSE, report_accession = "Enter value")
-is_limpa <- identical(get_param("impute_type", db_path), "limpa")
+is_limpa <- identical(applied_impute_type(db_path), "limpa") && identical(get_param("rollup_method", db_path), "limpa")
 # Peptide refilter is replaced by flags (user decision 2026-11-04): Stats never re-rolls the comparison's samples; the proteins the
 # refilter would have removed are flagged (pipeline/refilter_flags.R). peptide_missing_filter / peptide_cv_filter now set flag rules.
 if (!is.null(args$peptide_refilter) && as_flag(args$peptide_refilter))

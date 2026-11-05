@@ -8,9 +8,9 @@ description: Step 7 of the DPDP proteomics pipeline (same as the Shiny app's Imp
 **Show the user every graph** and the fill plan; the user decides.
 
 ## Settings
-| Setting | App default | 11488 reference | Meaning |
+| Setting | Pipeline default | 11488 reference | Meaning |
 |---|---|---|---|
-| `impute_type` | duke | duke | app: `duke`, `bottomx` (the only two in `impute_apply_bg2()`); pipeline: `perseus`, `minprob`, `qrilc` |
+| `impute_type` | **limpa** (raw exports), **perseus** (background exports) | duke | app: `duke`, `bottomx` (the only two in `impute_apply_bg2()`); pipeline: `perseus`, `minprob`, `qrilc` |
 | `perseus_shift`, `perseus_width` | 1.8, 0.3 | - | Perseus: per sample N(mean - shift x SD, (width x SD)^2) of the measured log2 values |
 | `minprob_q` | 0.01 | - | MinProb: quantile of each sample's measured values the fills centre on |
 | `bottom_x` | 2 | 2 | bottom-X percentile range used for bottom-X fills |

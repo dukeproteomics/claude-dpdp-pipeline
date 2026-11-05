@@ -23,7 +23,7 @@ review_rollup <- function(db_path) {
   method <- s$rollup_method %||% p$rollup_method; scale <- as_flag(s$maxlfq_scale %||% p$maxlfq_scale)
 
   cvs <- function(m) sapply(gcols, function(cc) { x <- m[, cc, drop = FALSE]; signif(100 * apply(x, 1, stats::sd, na.rm = TRUE) / rowMeans(x, na.rm = TRUE), 3) })
-  is_limpa <- identical(p$impute_type, "limpa")
+  is_limpa <- identical(applied_impute_type(db_path), "limpa")
   ecdf_pts <- function(v) { v <- sort(v[is.finite(v)]); g <- c(seq(0, 50, by = 0.5), seq(51, 100, by = 1)); list(x = g, y = round(vapply(g, function(t) mean(v <= t), 0) * 100, 2)) }
 
   comp <- list(); explorer <- NULL; ppp <- NULL

@@ -83,7 +83,15 @@ pre { background:var(--grid); padding:10px; border-radius:6px; overflow-x:auto; 
 ch <- function(value, label, fields = list()) list(value = value, label = label, fields = fields)
 fld <- function(name, label, type = "text", default = "", options = NULL) list(name = name, label = label, type = type, default = default, options = options)
 
-decision_spec <- function(step, variant, p) {
+# Impute form: the run's default first (it is preselected) and marked. User decision 2026-11-04: limpa for raw, perseus for background.
+impute_choices_ordered <- function(background, choices) {
+  def <- if (background) "perseus" else "limpa"
+  k <- which(vapply(choices, `[[`, "", "value") == def)
+  choices[[k]]$label <- paste0(choices[[k]]$label, " - default for ", if (background) "background" else "raw", " exports")
+  c(choices[k], choices[-k])
+}
+
+decision_spec <- function(step, variant, p, run_dir = NULL) {
   g <- function(k, d = "") { v <- p[[k]]; if (is.null(v) || length(v) == 0 || is.na(v[1])) d else as.character(v[1]) }
   switch(paste0(step, if (nzchar(variant)) paste0(":", variant) else ""),
     "01_load" = list(q = "Does the design match the data?", nxt = "Step 3 - Parameters", choices = list(
@@ -101,14 +109,14 @@ decision_spec <- function(step, variant, p) {
       global = list(fld("norm_type", "Method", "select", "sltmm", c("sltmm", "sl", "tmm", "quantile", "loess", "vsn", "lr"))),
       choices = list(ch("default_exclude", "Exclude: pipeline default (added material only)"), ch("current_exclude", "Exclude: keep the current rule"),
                      ch("custom_exclude", "Exclude: my own regex", list(fld("norm_exclude_grep", "description regex", "text", g("norm_exclude_grep")))))),
-    "07_impute" = list(q = "How should the data be imputed?", nxt = "Step 8 - Rollup", choices = list(
+    "07_impute" = list(q = "How should the data be imputed?", nxt = "Step 8 - Rollup", choices = impute_choices_ordered(identical(g("sp_fill_mode"), "background"), list(
       ch("duke", "duke (near the group mean), bottom-X for the rest", list(fld("missing_cutoff", "missing_cutoff %", "number", g("missing_cutoff", "50")), fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
       ch("bottomx", "bottomx only", list(fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
       ch("perseus", "perseus (down-shifted normal per sample)", list(fld("perseus_shift", "shift (SD)", "number", g("perseus_shift", "1.8")), fld("perseus_width", "width (SD)", "number", g("perseus_width", "0.3")))),
       ch("minprob", "minprob", list(fld("minprob_q", "quantile", "number", g("minprob_q", "0.01")))),
       ch("qrilc", "qrilc"),
-      ch("limpa", "limpa: no imputation (DPC-Quant rollup and dpcDE stats follow)"))),
-    "08_rollup" = list(q = "Which rollup?", nxt = "Step 9 - QC", choices = if (identical(g("impute_type"), "limpa"))
+      ch("limpa", "limpa: no imputation (DPC-Quant rollup and dpcDE stats follow)")))),
+    "08_rollup" = list(q = "Which rollup?", nxt = "Step 9 - QC", choices = if (!is.null(run_dir) && identical(applied_impute_type(file.path(run_dir, "x.db")), "limpa"))
       list(ch("limpa", "limpa DPC-Quant (Impute was limpa, so this is the only rollup)", list(fld("limpa_background", "Spectronaut background values (background exports)", "select", g("limpa_background", "missing"), c("missing", "use")))))
       else list(ch("iq_maxlfq_scaled", "iq_maxlfq, scaled"), ch("iq_maxlfq", "iq_maxlfq, not scaled"), ch("sum", "sum"))),
     "09_qc" = list(q = "Accept the QC and continue to Stats?", nxt = "Step 10 - Stats", choices = list(
@@ -127,7 +135,7 @@ next_step_box <- function(run_dir, step, status_class, variant = "") {
   db <- file.path(run_dir, paste0(basename(run_dir), ".db"))
   if (!file.exists(db)) db <- list.files(run_dir, pattern = "\\.db$", full.names = TRUE)[1]
   p <- if (!is.na(db) && file.exists(db)) tryCatch(get_params(db), error = function(e) list()) else list()
-  spec <- decision_spec(step, variant, p)
+  spec <- decision_spec(step, variant, p, run_dir)
   if (is.null(spec)) return("")
   if (!identical(status_class, "waiting"))
     return(sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude continues in the session.</p></section>', esc(spec$nxt)))

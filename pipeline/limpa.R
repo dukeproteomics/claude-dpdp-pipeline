@@ -25,6 +25,7 @@ limpa_quant <- function(db_path, norm, background = "missing") {
   d <- read_table(paste0("precursor_impute_", norm), db_path); info <- ncol(d) - n_s
   X <- as.matrix(d[(info + 1):ncol(d)]); X[!is.na(X) & X <= 0] <- NA; L <- log2(X)
   bgm <- if (is_background_run(db_path)) as.matrix(read_table("precursor_filter_bgmask", db_path)[(info + 1):ncol(d)]) == 1 else NULL
+  if (!anyNA(L)) stop("limpa_quant: precursor_impute_", norm, " has no gaps, so it was imputed. Apply Step 7 with --impute_type=limpa first.")
   dp <- limpa_dpc(L, bgm)
   if (!is.null(bgm) && background == "missing") L[bgm] <- NA   # background values left to the detection curve
   Q <- limpa::dpcQuant(L, protein.id = d$Accession, dpc = dp, verbose = FALSE)

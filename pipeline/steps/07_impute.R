@@ -35,7 +35,9 @@ run_dir <- dirname(db_path)
 use_app(c("Shiny_File.R", "Shiny_Data.R", "Shiny_Impute.R", "Shiny_MVA_Functions.R", "Shiny_Plots.R", "Shiny_Norm_Functions.R"))
 if (get_param("raw_data_format", db_path) != "precursor") stop("Impute step is only wired up for precursor data so far.")
 
-spec <- list(impute_type = "duke", bottom_x = 2, missing_cutoff = 50, perseus_shift = 1.8, perseus_width = 0.3, minprob_q = 0.01)
+# Default (user decision 2026-11-04): limpa for raw exports, perseus for Spectronaut background exports.
+default_impute <- if (is_background_run(db_path)) "perseus" else "limpa"
+spec <- list(impute_type = default_impute, bottom_x = 2, missing_cutoff = 50, perseus_shift = 1.8, perseus_width = 0.3, minprob_q = 0.01)
 settings <- resolve_settings(spec, args)
 APP_METHODS <- c("duke", "bottomx")            # impute_apply_bg2() implements only these two of the app's list
 PIPE_METHODS <- c("perseus", "minprob", "qrilc")

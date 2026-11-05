@@ -205,7 +205,9 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   protein_<norm>_final; CV columns read as samples). The earlier limpa test tables had wrong sample/CV columns (FC and p were right).
 - Phospho / peptide output with limpa: not built. DPC-Quant can group precursors by any id (peptide + site instead of protein), but the
   pipeline's PTM path (Steps 3+ with data_output=Peptide) hasn't been wired or tested yet; needs a phospho dataset.
-- Proposed Impute options (not yet decided by the user): raw default limpa; background default Spectronaut background + Perseus for
+- **Impute defaults (user decision 2026-11-04): limpa for raw exports, perseus for background exports.** The form preselects the run's
+  default. Rollup and Stats go by the imputation that was applied (Step 7 summary), not the param a preview writes.
+- Proposed Impute options (decided above): raw default limpa; background default Spectronaut background + Perseus for
   empty gaps; Perseus / MinProb baselines; duke+bottom-X for comparison with old runs.
 
 ## Live run 11488_110426b (paused 2026-11-04 at Step 6 Normalize)
