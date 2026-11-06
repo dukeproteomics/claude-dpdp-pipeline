@@ -56,9 +56,10 @@ review_normalize <- function(db_path) {
     tot <- colSums(x, na.rm = TRUE); med <- matrixStats::colMedians(x, na.rm = TRUE)
     sl <- mean(tot) / tot
     x0 <- x; x0[is.na(x0)] <- 0
-    tmm <- 1 / edgeR::calcNormFactors(x0, method = "TMM", sumTrim = 0.1)
     xs <- sweep(x0, 2, sl, "*"); sltmm <- sl / edgeR::calcNormFactors(xs, method = "TMM", sumTrim = 0.1)
-    list(SL = round(sl, 4), `SL + TMM (estimate)` = round(sltmm, 4), TMM = round(tmm, 4), Median = round(mean(med) / med, 4))
+    mr <- 2^-off_medianratio(log2(x)); tmm_eff <- 2^-off_tmm(log2(x))
+    list(SL = round(sl, 4), `SL + TMM (estimate)` = round(sltmm, 4), TMM = round(tmm_eff, 4), Median = round(mean(med) / med, 4),
+         `Median ratio` = round(mr, 4))
   }
   fac <- list(current = factor_set(smat(normdata)))
   if (!same_rule) fac$default <- factor_set(smat(filt[!in_def, ]))
@@ -73,13 +74,15 @@ review_normalize <- function(db_path) {
   status <- if (applied) sprintf("Applied: %s", method) else "Waiting for the analyst's decision"
   status_class <- if (applied) "done" else "waiting"
   dec <- read_decisions(run_dir, "06_normalize"); last_dec <- if (length(dec)) dec[[length(dec)]] else NULL
-  methods_html <- '<ul class="options">
-<li><b>sltmm</b> - SL now, then TMM after imputation (the lab default).</li>
-<li><b>sl</b> - sample loading: scale every sample to the same total intensity of the normalization subset.</li>
-<li><b>tmm</b> - trimmed mean of M-values (edgeR): robust to a minority of proteins that change.</li>
-<li><b>quantile</b>, <b>loess</b> (cyclic loess), <b>vsn</b>, <b>lr</b> (linear regression): reshape each sample&apos;s distribution, not just scale it.</li>
-<li><b>directlfq</b> - needs the python setup (not yet wired in the pipeline).</li>
-<li>Not available: <b>mti</b> (no function in the app), <b>ai</b> and <b>mi</b> (the app calls them with the wrong arguments).</li></ul>'
+  avail <- norm_available(db_path, filt$PrecursorId)
+  methods_html <- paste0('<p class="note">Every method is fitted on the normalization subset (measured values only) and applied to all values. ',
+    'The subset says what is assumed constant; the method says which bias is corrected. Compare them on this dataset with ',
+    '<code>06b_normalize_compare.R</code>.</p><table><thead><tr><th>Method</th><th>Corrects</th><th>What it does</th><th>When to use</th></tr></thead><tbody>',
+    paste0(vapply(names(NORM_METHODS), function(m) { x <- NORM_METHODS[[m]]
+      sprintf('<tr><td><b>%s</b>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>', esc(m), if (m %in% avail) "" else " <span class=\"missing\">(no RT in this export)</span>",
+              esc(c(scaling = "one factor per sample", intensity = "intensity-dependent bias", rt = "drift along the gradient",
+                    distribution = "whole distribution", none = "nothing")[[x$family]]), esc(x$desc), esc(x$when)) }, ""), collapse = ""),
+    '</tbody></table>')
   rule_html <- sprintf('<p>Current subset: exclude by <b>%s</b> <code>%s</code>%s. It leaves out <b>%s proteins%s / %s precursors</b> of %s.</p>',
     esc(excl_mode), esc(excl_grep), if (!identical(incl_mode, "not_used")) sprintf(', include only %s <code>%s</code>', esc(incl_mode), esc(incl_grep)) else "",
     fmt_n(n_cur_prot), if (ptm) " (by the exclude rule)" else "", fmt_n(n_cur_prec), fmt_n(nrow(filt)))
@@ -92,6 +95,8 @@ review_normalize <- function(db_path) {
   decision_html <- paste0('<section><h2>', if (applied) "Decision" else "Decisions needed", '</h2>',
     '<h3>1. Proteins left out of the factor calculation</h3>', rule_html,
     '<h3>2. Normalization method</h3>',
+    if (file.exists(file.path(sd_dir, "compare.json"))) '<p><b>Method comparison on this dataset:</b> <a href="06b_normalize_compare.html">Step 6b page</a> (CVs, intensity and RT bias, fold-change spread for every method).</p>' else
+      '<p class="note">No method comparison yet: run <code>pipeline/steps/06b_normalize_compare.R --db=&lt;db&gt;</code>.</p>',
     if (applied) sprintf('<div class="tiles"><div class="tile"><div class="v">%s</div><div class="l">method</div></div><div class="tile"><div class="v">%s%% &rarr; %s%%</div><div class="l">CV of sample totals, before &rarr; after</div></div></div>%s',
                          esc(method), esc(summ$total_cv_pct_before), esc(summ$total_cv_pct_after), if (!is.null(summ$note)) paste0('<p class="note">', esc(summ$note), '</p>') else "") else "",
     if (applied) paste0('<details><summary>Methods that were available</summary>', methods_html, '</details>') else methods_html,
@@ -102,7 +107,7 @@ review_normalize <- function(db_path) {
 
   factors_html <- paste0('<section><h2>Scaling factors per sample</h2>',
     '<p class="note">What each method would multiply each sample by (1 = unchanged), calculated here from the normalization subset with the app&apos;s formulas. ',
-    'SL + TMM is an estimate: the real TMM step runs after imputation. Distribution methods (quantile, loess, vsn, lr) have no single factor. ',
+    'SL + TMM is an estimate: the real TMM step runs after imputation. Curve and distribution methods (rlr, loess, rt, vsn, quantile) have no single factor. ',
     'Factors far from 1 mean that sample&apos;s loading differs; methods that agree give confidence.</p>',
     if (!same_rule) '<div class="control"><label for="facset">Subset</label><select id="facset"><option value="current">current regex</option><option value="default">pipeline default rule</option></select></div>' else "",
     '<div id="facplot" style="height:380px" role="img" aria-label="Scaling factor per sample for each method"></div>',

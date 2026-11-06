@@ -1,6 +1,6 @@
 ---
 name: dpdp-normalize
-description: Step 6 of the DPDP proteomics pipeline (same as the Shiny app's Normalize tab). Use after dpdp-filter. Builds the subset used to calculate normalization factors (exclude/include by accession, description, name, genes or sequence), applies the chosen normalization method (sl, tmm, sltmm, quantile, loess, vsn, lr, mi, ai, directlfq), and shows the NormData and normalized bar plots. The user approves the settings and reviews every plot.
+description: Step 6 of the DPDP proteomics pipeline (same as the Shiny app's Normalize tab). Use after dpdp-filter. Builds the subset used to calculate normalization factors (exclude/include by accession, description, name, genes or sequence), compares every normalization method on the dataset (06b: CVs, intensity and RT bias, fold-change spread), applies the chosen method (sltmm, sl, tmm, median, medianratio, rlr, loess, rt, rt_loess, vsn, quantile, none), and shows the NormData and normalized bar plots. The user approves the settings and reviews every plot.
 ---
 
 # DPDP Step 6 — Normalize
@@ -12,20 +12,49 @@ description: Step 6 of the DPDP proteomics pipeline (same as the Shiny app's Nor
 |---|---|---|---|
 | `norm_exclude` + `norm_exclude_grep` | not_used, accession, description, name, genes, sequence + regex | pipeline: description + user-rule regex (below); app: not_used | 11488 Shiny run: **description**, `trypsin\|keratin\|casein` (old, too broad) |
 | `norm_include` + `norm_include_grep` | same | not_used; **PTM runs: sequence + `ptm_grep`** (e.g. Phospho) | not_used |
-| `norm_type` (method) | sl, tmm, sltmm, directlfq, quantile, lr, loess, vsn, mi, ai | — | **sltmm** |
+| `norm_type` (method) | sltmm, sl, tmm, median, medianratio, rlr, loess, rt, rt_loess, vsn, quantile, none | — | **sltmm** |
+| `norm_preset` | adh (yeast ADH1 spike P00330), carboxylases (endogenous biotinylated carboxylases) | — | — |
 
 - Exclude/include only changes which precursors are used to **calculate** the factors (`precursor_normdata`).
   All filtered precursors are normalized and kept.
 - **Factors from measured values only.** Background exports: the subset is built from `precursor_filter_measured` (background
-  blanked), and only `sl`, `tmm`, `sltmm` are allowed (the others transform the whole table). Spike-in designs where half the proteome
+  blanked). Every method is fitted on the subset and applied to all values, background included, so all methods work on background exports. Spike-in designs where half the proteome
   changes (e.g. triple-spike): normalize on the constant proteome with `--norm_include=description --norm_include_grep="org=Homo sapiens$"`.
 - **PTM runs (Parameters `ptm` = TRUE; user rule 2026-11-05):** the samples are enriched, so the factors come from the PTM precursors only
   (`--norm_include=sequence --norm_include_grep=<ptm_grep>`, the default), plus the usual exclude. Non-PTM precursors stay in the data,
   are scaled with the same factors, and are left out of Stats. The TMM part of sltmm uses the same subset. Page choice `all_peptides`
   -> `--norm_include=not_used`.
 - `sltmm`: SL is applied at this step; **TMM is applied after imputation** (`Shiny_Impute.R`). So `precursor_norm_sltmm` holds SL-only values.
-- `mti` is in the app's dropdown, but `mti_normalize()` doesn't exist. The pipeline refuses it.
-- `directlfq` needs a Python path that isn't set up yet.
+
+## Two separate choices (user, 2026-11-05: methods for every kind of dataset)
+1. **What is constant** = the subset (exclude/include, preset). 2. **Which bias is corrected** = the method. Methods are in
+`pipeline/normalize.R` (`NORM_METHODS` has each one's description and when to use it); sl and sltmm still run through the app.
+
+| Method | Corrects | When |
+|---|---|---|
+| sltmm, sl | one factor per sample (total) | most proteins unchanged (lab default) |
+| tmm | one factor, trimmed log ratios | part of the proteome changes, maybe one-sided. **Fixed**: the app divided by the TMM factor only, so loading was never corrected |
+| median / medianratio | one factor | median: the common standard; medianratio: robust when samples differ in missingness |
+| rlr | intensity bias, a line | small subsets (one spike-in protein) where loess would overfit. Rebuilt from the app's broken `lr` |
+| loess | intensity bias, a curve | saturation, different loads or columns. Now fitted on the subset (app: whole table) |
+| rt, rt_loess | drift along the gradient (+ intensity) | long runs, spray drift; needs `EG.ApexRT` in the export (10658 and 11488 have it) |
+| vsn | variance vs intensity (glog) | cohorts; **shrinks fold changes** (spread vs SL 0.36 on the triple-spike); fitted on the subset |
+| quantile | whole distribution | large cohorts of similar samples; keeps the sample names now (the app's version lost them) |
+| none | nothing | IP / AP-MS, proximity labeling, secretome: total signal is the biology |
+
+Subsets for designs where everything changes: `--norm_preset=adh` (constant yeast ADH spike), `--norm_preset=carboxylases`
+(PC, PCCA/B, MCCC1/2, ACACA/B: endogenously biotinylated, for streptavidin pulldowns), or the bait: `--norm_include=accession --norm_include_grep=<acc>`.
+App names removed: `ai`, `ti` (SL with another target), `mti` (no function), `mi` -> `median`, `lr` -> `rlr`; `directlfq` is a protein rollup method (Step 8, not built).
+
+## Method comparison (06b) - run after the preview, before asking
+```bash
+Rscript pipeline/steps/06b_normalize_compare.R --db=<db> [--methods=sl,loess,...]
+```
+Fits every available method on the current subset and scores it on measured values: median CV within groups and in the pool, ADH CV
+(only when yeast is a spike; information only: a constant spike varies after a correct loading correction, so it is lowest with none), sample spread by intensity and by RT (SD between samples within deciles; 0 = samples agree), fold-change
+spread vs SL (1 = same size of differences; below 1 = shrinks them, which also lowers CVs), median log2 FC per comparison, and a
+known-truth error when the group names are species mixes (E<n>H<n>Y<n>). Page: `review/06b_normalize_compare.html`. No single score: show
+the analyst the table and the trend charts, point out where methods disagree, and re-run it when the subset changes.
 - `--settings_from=<db>` copies the exclude/include settings (an old Shiny run brings back `trypsin|keratin|casein`; the script warns) and the first `norm_type` from a previous run.
 
 ## Run
@@ -53,7 +82,7 @@ In the chat, point out samples whose factors are far from 1 (11488: B_1 about 0.
 methods agree. Then ask with **AskUserQuestion** (two questions, no option marked as recommended):
 1. "Which proteins should be left out of the factor calculation?" (header "Exclude"). Options: "Pipeline default (added material only)" /
    "Keep current" / Other (they type a regex).
-2. "Which normalization method?" (header "Method"). Options: "sltmm" / "sl" / "tmm" / Other (quantile, loess, vsn, lr).
+2. "Which normalization method?" (header "Method"). Options: "sltmm" / "sl" / the method(s) that 06b points to / Other (any method in the table).
 If the exclude rule changes, re-run `--action=preview --norm_exclude=description --norm_exclude_grep='<regex>'` and show the page again
 before applying.
 ## Show the user

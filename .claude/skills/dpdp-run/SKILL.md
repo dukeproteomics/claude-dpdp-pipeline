@@ -28,7 +28,7 @@ The analyst can decide **on the review page** (radio buttons, fields, a note, an
 | 03_parameters | `accept` -> `accept.R --step=03_parameters`; `change` -> re-run 03 with the change, then ask again |
 | 04_noise | `none` / `dynamic` / `fixed` -> `04_noise.R --action=apply --noise_type=<choice>` [`--noise_baseline_value`] [`--noise_keep=TRUE` if `fields.noise_keep` is true] |
 | 05_filter | `apply` -> `05_filter.R --action=apply` with the previewed settings; `change` -> re-preview with the change |
-| 06_normalize | `default_exclude` -> default rule (PTM runs: PTM peptides only); `all_peptides` (PTM runs) -> default exclude + `--norm_include=not_used`; `current_exclude` -> current `norm_exclude_grep`; `custom_exclude` -> preview with `fields.norm_exclude_grep` first, then apply. Method = `fields.norm_type` |
+| 06_normalize | `default_exclude` -> default rule (PTM runs: PTM peptides only); `all_peptides` (PTM runs) -> default exclude + `--norm_include=not_used`; `current_exclude` -> current `norm_exclude_grep`; `custom_exclude` -> preview with `fields.norm_exclude_grep` first, then apply; `preset_adh` / `preset_carboxylases` -> `--norm_preset=adh` / `carboxylases`; `custom_include` -> `--norm_include=accession --norm_include_grep=<fields.norm_include_grep>` (presets and include: re-preview and re-run 06b first). Method = `fields.norm_type` |
 | 07_impute | `duke` / `bottomx` / `perseus` / `minprob` / `qrilc` / `limpa` -> `07_impute.R --action=apply --impute_type=<choice>` plus that choice's fields (`--missing_cutoff --bottom_x`, `--perseus_shift --perseus_width`, `--minprob_q`); re-preview first if they changed |
 | 08_rollup | `iq_maxlfq_scaled` -> `--rollup_method=iq_maxlfq --maxlfq_scale=TRUE`; `iq_maxlfq` -> `... --maxlfq_scale=FALSE`; `sum` -> `--rollup_method=sum`; `limpa` -> `--rollup_method=limpa --limpa_background=<field>` (the only choice after limpa in Impute) |
 | 09_qc | `accept_flag` -> `09_qc.R --action=accept --flag_samples=<fields.flag_samples>`; `accept` -> `--action=accept`; `stop` -> stop |
@@ -61,7 +61,7 @@ Ask for anything missing. Ask which spike-ins the project uses if they aren't th
 | 3 | Parameters | dpdp-parameters | output level, peptide selection (accept) |
 | 4 | Noise | dpdp-noise | none / fixed / dynamic, noise_keep |
 | 5 | Filter | dpdp-filter | filter settings |
-| 6 | Normalize | dpdp-normalize | exclude rule, method |
+| 6 | Normalize | dpdp-normalize | exclude rule, method (after the 06b method comparison) |
 | 7 | Impute | dpdp-impute | duke / bottomx / perseus / minprob / qrilc, settings |
 | 8 | Rollup | dpdp-rollup | sum / iq_maxlfq |
 | 9 | QC | dpdp-qc | accept, flag samples |

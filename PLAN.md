@@ -237,6 +237,27 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - Proposed Impute options (decided above): raw default limpa; background default Spectronaut background + Perseus for
   empty gaps; Perseus / MinProb baselines; duke+bottom-X for comparison with old runs.
 
+## Normalization rework (2026-11-05)
+- **User rule:** methods for every kind of dataset (nothing changes ... everything changes); remove a method only if it has no value on
+  any dataset type, never because of one benchmark. Two separate choices: what is constant (subset / preset) and which bias is corrected (method).
+- `pipeline/normalize.R`: every method is fitted on the subset (measured values) and applied to all values, so all methods work on
+  background exports. sl / sltmm still run through the app. Fixed: tmm (app never corrected loading), loess / vsn / quantile (ignored
+  the subset; quantile lost the sample names; vsn had a /10 hack), mi -> median, lr -> rlr. New: medianratio, rt and rt_loess
+  (need `EG.ApexRT`; 10658 and 11488 exports have it), none, presets `--norm_preset=adh|carboxylases`. Removed: ai, ti (SL duplicates),
+  mti (never existed). directlfq: belongs in Rollup, not built (Python package not installed).
+- Step 6b `06b_normalize_compare.R` + page: CVs (groups, pool), sample spread by intensity and by RT, fold-change spread vs SL,
+  median FC per comparison, ADH CV (information only), known-truth error for species-mix designs.
+- Tested on six datasets (test runs `data/zz_norm_11488`, `_11538`, `_11531`, `_11485` are code tests, Steps 1-5 defaults):
+  - TMM / medianratio / sltmm agree everywhere; plain sl and median leave more intensity bias (11488: 0.08 / 0.045 vs 0.02).
+  - loess flattens the intensity bias in every dataset (0.004-0.027) with FC spread 0.98-1.01 and CVs equal to sltmm.
+  - rt / rt_loess remove a gradient drift (11488 RT spread 0.059 -> 0.006) and lower CVs (11488 groups 19.6 -> 19.0%, SPQC 14.3 -> 13.5%);
+    FC spread 0.93-0.97.
+  - vsn has the lowest CVs everywhere but shrinks fold changes (spread 0.36-0.80; triple-spike truth error 0.60 vs 0.08).
+  - quantile: no advantage on these datasets (no large cohort available).
+  - ADH CV is lowest with none in 5 of 6 (constant spike, loads differ), so it can't rank methods.
+  - 11531 (design unknown to the user; mouse, albumin / fibrinogen top, totals vary 7x, within-group CV 57-66% for every method): looks
+    like a pulldown from plasma/serum where everything changes. No method fixes the replicate spread; ADH-only factors made it worse (71%).
+
 ## Live run 10658_110426 (triple-spike background export, complete 2026-11-04)
 - Load accept; Parameters accept; Noise none; Filter as shown (294,715 precursors / 15,114 proteins; 311,693 background values back);
   Normalize SL, human only; Impute perseus (81,509 empty values); Rollup iq_maxlfq scaled; QC accept, no spikes (the 11488 ADH/casein

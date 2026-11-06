@@ -7,12 +7,15 @@
 # Usage:
 #   Rscript pipeline/steps/06_normalize.R --db=<db> --action=preview [--settings_from=<db>]
 #       [--norm_exclude=not_used|accession|description|name|genes|sequence] [--norm_exclude_grep=...]
-#       [--norm_include=...] [--norm_include_grep=...]
+#       [--norm_include=...] [--norm_include_grep=...] [--norm_preset=adh|carboxylases]
 #   Rscript pipeline/steps/06_normalize.R --db=<db> --action=apply --norm_type=<method> [--settings_from=<db>] \
 #       --decided_by=user [--analyst=<name>] [--note="<why>"]
 # Both actions (re)build the review page <run_dir>/review/06_normalize.html.
-# Methods: sl, tmm, sltmm, directlfq, quantile, lr, loess, vsn, mi, ai
-#   (sltmm: SL is applied here; the app applies TMM after imputation.)
+# Methods (pipeline/normalize.R): sltmm, sl, tmm, median, medianratio, rlr, loess, rt, rt_loess, vsn, quantile, none
+#   sl and sltmm run through the app (sltmm: SL here, TMM after imputation); the others are pipeline code. Every method is fitted on
+#   the normalization subset (measured values only) and applied to all values. rt / rt_loess need EG.ApexRT in the export.
+# Presets for "what is constant" (set the include rule): --norm_preset=adh (yeast ADH1 spike, P00330; for designs where everything
+#   changes), --norm_preset=carboxylases (endogenously biotinylated carboxylases; proximity labeling / streptavidin pulldowns).
 #
 # Output: precursor_normdata, precursor_norm_<method> (+ precursor_norm_impute on the first pass);
 #         QC/Precursor_NormData_barplot.png, QC/Precursor_<method>_barplot.png; steps/06_normalize/summary.json
@@ -22,6 +25,7 @@ here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value 
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
 source(file.path(here, "..", "background.R"))
+source(file.path(here, "..", "normalize.R"))
 source(file.path(here, "..", "reviews", "06_normalize.R"))
 
 args <- parse_args()
@@ -34,7 +38,9 @@ if (get_param("raw_data_format", db_path) != "precursor") stop("Normalize step i
 if (!table_exists("precursor_filter", db_path)) stop("Run Step 5 (Filter) first: precursor_filter is missing.")
 
 fields <- c("not_used", "accession", "description", "name", "genes", "sequence")
-methods <- c("sl", "tmm", "sltmm", "directlfq", "quantile", "lr", "loess", "vsn", "mi", "ai")
+methods <- norm_method_names()
+NORM_PRESETS <- list(adh = list(norm_include = "accession", norm_include_grep = "P00330"),
+                     carboxylases = list(norm_include = "genes", norm_include_grep = "^(pc|pcca|pccb|mccc1|mccc2|acaca|acacb)$"))
 # Default exclude (user rule 2026-11-04): only added material -- digestion trypsin, human contaminant keratins,
 # bovine alpha/beta casein spike. The app's default "trypsin|keratin|casein" also hits the sample's own proteins.
 EXCLUDE_DEFAULT <- NORM_DEFAULT_EXCLUDE   # defined in pipeline/reviews/06_normalize.R
@@ -44,6 +50,10 @@ ptm <- is_ptm_run(p0)
 spec <- list(norm_exclude = "description", norm_exclude_grep = EXCLUDE_DEFAULT,
              norm_include = if (ptm) "sequence" else "not_used", norm_include_grep = if (ptm) p0$ptm_grep else "Phospho",
              norm_ptm = FALSE, norm_ptm_grep = "Phospho")
+if (!is.null(args$norm_preset)) {
+  if (!args$norm_preset %in% names(NORM_PRESETS)) stop("--norm_preset must be one of: ", paste(names(NORM_PRESETS), collapse = ", "))
+  for (k in names(NORM_PRESETS[[args$norm_preset]])) args[[k]] <- NORM_PRESETS[[args$norm_preset]][[k]]
+}
 settings <- resolve_settings(spec, args)
 for (k in c("norm_exclude", "norm_include")) if (!settings[[k]] %in% fields)
   stop(sprintf("--%s must be one of: %s", k, paste(fields, collapse = ", ")))
@@ -105,14 +115,10 @@ if (is.null(method) && !is.null(args$settings_from)) {
   method <- trimws(strsplit(RSQLite::dbReadTable(con, "params")$norm_type, ",")[[1]][1]); RSQLite::dbDisconnect(con)
 }
 if (is.null(method)) stop("--norm_type is required for apply")
-if (!method %in% methods) stop("--norm_type must be one of: ", paste(methods, collapse = ", "),
-                               "  (the app's 'mti' option has no mti_normalize() function)")
-if (method %in% c("ai", "mi")) stop("--norm_type=", method, ": the app's norm_apply_bg() calls ", method,
-                                    "_normalize() with the wrong arguments, so it fails. Choose another method.")
-if (bg_run && !method %in% c("sl", "tmm", "sltmm"))
-  stop("--norm_type=", method, ": on a background export only factor methods (sl, tmm, sltmm) are allowed, because only they can be ",
-       "calculated from measured values and then applied to the background values. ", method, " transforms the data as a whole.")
-if (method == "directlfq") warning("directlfq needs python_path, which isn't set up in the pipeline yet.")
+old <- c(mi = "median", lr = "rlr", ai = "sl", ti = "sl")
+if (method %in% names(old)) stop("--norm_type=", method, " was the app's name; use ", old[[method]], " (see pipeline/normalize.R)")
+if (!method %in% methods) stop("--norm_type must be one of: ", paste(methods, collapse = ", "))
+if (nrow(normdata) < 20) stop("The normalization subset has only ", nrow(normdata), " precursors; check the include/exclude rule or preset.")
 
 # app: norm_apply_widget_save -> new method is put in front of the existing list
 p <- get_params(db_path)
@@ -126,7 +132,16 @@ if (length(norm_list) == 2) {   # app: first pass also makes the impute-only tab
          "normapplyimpute", db_path)
 }
 new_table <- str_c("precursor_norm_", method)
-run_bg(norm_apply_bg, list("precursor_filter", "precursor_normdata", new_table, info_columns, p, db_path, method), "normapply", db_path)
+if (method %in% APP_NORM_METHODS) {
+  run_bg(norm_apply_bg, list("precursor_filter", "precursor_normdata", new_table, info_columns, p, db_path, method), "normapply", db_path)
+} else {
+  n_s <- as.integer(p$sample_number); filt_all <- read_table("precursor_filter", db_path)
+  ref_rows <- match(normdata$PrecursorId, filt_all$PrecursorId)
+  rt <- if (method %in% c("rt", "rt_loess")) precursor_rt(db_path, filt_all$PrecursorId) else NULL
+  Ln <- norm_apply_method(method, log2_samples(normdata, n_s), log2_samples(filt_all, n_s), rt = rt, ref_rows = ref_rows)
+  filt_all[(info_columns + 1):ncol(filt_all)] <- as.data.frame(2^Ln)
+  write_table_try(new_table, filt_all, db_path)
+}
 run_bg(bar_plot, list(new_table, str_c("Precursor_", method), qc_path, db_path), "normbarplot", db_path)
 
 normed <- read_table(new_table, db_path)
@@ -135,6 +150,7 @@ summary <- list(
   step = "06_normalize", action = "apply", db_path = db_path, settings = settings,
   norm_type = method, norm_type_list = p$norm_type, table = new_table,
   note = if (method == "sltmm") "SL applied now; the app applies TMM after imputation (Shiny_Impute.R)." else NULL,
+  method_info = NORM_METHODS[[method]],
   normalization_subset = norm_subset,
   factors_from = if (bg_run) "measured values only; background values excluded, then normalized with the same factors" else "measured values",
   totals_before = as.list(round(before)), totals_after = as.list(round(after)),

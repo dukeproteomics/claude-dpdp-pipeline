@@ -133,11 +133,15 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
     "05_filter" = list(q = "Apply these filter settings?", nxt = "Step 6 - Normalize", choices = list(
       ch("apply", "Apply as shown"), ch("change", "Change settings", list(fld("change", "Which filter and value? (e.g. misaligned_cutoff=60)"))))),
     "06_normalize" = list(q = "Which proteins to leave out of the factors, and which method?", nxt = "Step 7 - Impute",
-      global = list(fld("norm_type", "Method", "select", "sltmm", c("sltmm", "sl", "tmm", "quantile", "loess", "vsn", "lr"))),
+      global = list(fld("norm_type", "Method", "select", "sltmm", if (exists("norm_method_names")) norm_method_names() else
+        c("sltmm", "sl", "tmm", "median", "medianratio", "rlr", "loess", "rt", "rt_loess", "vsn", "quantile", "none"))),
       choices = list(ch("default_exclude", if (identical(g("ptm"), "1") || toupper(g("ptm")) == "TRUE") paste0("Pipeline default: ", g("ptm_grep"), " peptides only, added material excluded") else "Exclude: pipeline default (added material only)"),
                      if (identical(g("ptm"), "1") || toupper(g("ptm")) == "TRUE") ch("all_peptides", paste0("All peptides (not only ", g("ptm_grep"), "), added material excluded")),
                      ch("current_exclude", "Exclude: keep the current rule"),
-                     ch("custom_exclude", "Exclude: my own regex", list(fld("norm_exclude_grep", "description regex", "text", g("norm_exclude_grep")))))),
+                     ch("custom_exclude", "Exclude: my own regex", list(fld("norm_exclude_grep", "description regex", "text", g("norm_exclude_grep")))),
+                     ch("preset_adh", "Factors from the yeast ADH spike only (designs where everything changes)"),
+                     ch("preset_carboxylases", "Factors from the endogenous biotinylated carboxylases only (proximity labeling / streptavidin pulldown)"),
+                     ch("custom_include", "Factors from my own reference proteins (e.g. the bait)", list(fld("norm_include_grep", "accession regex", "text", ""))))),
     "07_impute" = list(q = "How should the data be imputed?", nxt = "Step 8 - Rollup", choices = impute_choices_ordered(identical(g("sp_fill_mode"), "background"), list(
       ch("duke", "duke (near the group mean), bottom-X for the rest", list(fld("missing_cutoff", "missing_cutoff %", "number", g("missing_cutoff", "50")), fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
       ch("bottomx", "bottomx only", list(fld("bottom_x", "bottom_x %", "number", g("bottom_x", "2")))),
