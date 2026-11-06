@@ -131,7 +131,14 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
       ch("fixed", "fixed - remove values below a baseline", list(fld("noise_baseline_value", "baseline intensity", "number", g("noise_baseline_value", "1")),
                                                               fld("noise_keep", "noise_keep (put values back for precursors that pass the filter)", "checkbox", "false"))))),
     "05_filter" = list(q = "Apply these filter settings?", nxt = "Step 6 - Normalize", choices = list(
-      ch("apply", "Apply as shown"), ch("change", "Change settings", list(fld("change", "Which filter and value? (e.g. misaligned_cutoff=60)"))))),
+      ch("apply", "Apply as shown"),
+      ch("quality", "Precursor quality filter: turn on/off, method, CV cutoff (re-preview)", list(
+        fld("precursor_quality", "on", "checkbox", if (toupper(g("precursor_quality", "FALSE")) %in% c("TRUE", "1")) "true" else "false"),
+        fld("precursor_quality_method", "method (profile: residual to the protein/peptide profile; app: share of the protein signal, protein output only)", "select",
+            if (identical(g("data_output"), "Peptide") || !toupper(g("precursor_quality", "FALSE")) %in% c("TRUE", "1")) "profile" else g("precursor_quality_method", "profile"),
+            if (identical(g("data_output"), "Peptide")) "profile" else c("profile", "app")),
+        fld("precursor_quality_sd", "CV cutoff %", "number", g("precursor_quality_sd", "50")))),
+      ch("change", "Change other settings", list(fld("change", "Which filter and value? (e.g. misaligned_cutoff=60)"))))),
     "06_normalize" = list(q = "Which proteins to leave out of the factors, and which method?", nxt = "Step 7 - Impute",
       global = list(fld("norm_type", "Method", "select", "sltmm", if (exists("norm_method_names")) norm_method_names() else
         c("sltmm", "sl", "tmm", "median", "medianratio", "rlr", "loess", "rt", "rt_loess", "vsn", "quantile", "none"))),
