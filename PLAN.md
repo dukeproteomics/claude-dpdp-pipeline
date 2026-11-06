@@ -294,6 +294,16 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - Reading: harmful at the app default on a design where proteins change; no gain at 100%. Kept off by default (pipeline and app default).
   The idea has merit for constant proteins (removed human precursors are 2x worse); a fix would compute the share per group or only on
   samples where the protein's precursors are all measured.
+- **Fix built (pipeline/filter_quality.R, `--precursor_quality_method=profile`):** median polish per protein on log2 values (precursor
+  + sample effects, missing values skipped); score = SD of a precursor's residuals as a CV %; same limits as the app (3+ precursors,
+  intensity >= 500, values >= 300); worst first, a protein keeps at least 2 precursors. Runs after the app's filter on measured values
+  (before noise_keep / background restore), so after the SPQC ratio and duplicate stages instead of before them. Runs zz_pqp_50 / _100.
+  - At 50%: removes 4,439 (human 1.3%, E. coli 2.6%, yeast 1.8%); removed precursors fit their protein worse in every species
+    (residual SD 0.99 / 1.00 / 1.04 vs kept 0.44 / 0.65 / 0.55). Stats mean: true 4,537 -> 4,544, false 149.8 -> 145.7, observed FDR
+    4.11 -> 4.05% (worst 8.86 -> 8.90%), human MAD 0.17 -> 0.16; protein-level vs off: true +76 / -32, false +43 / -67.
+  - At 100%: removes 815; true 4,542, false 151.0, FDR 4.14%: no change.
+  - Reading: the fix removes the species bias; at 50% a small gain (fewer false calls), like the misaligned filter. Not yet tested on a
+    background export or a dataset where nothing changes. Defaults unchanged (precursor_quality off, method app) pending the user.
 
 ## Live run 10658_110426 (triple-spike background export, complete 2026-11-04)
 - Load accept; Parameters accept; Noise none; Filter as shown (294,715 precursors / 15,114 proteins; 311,693 background values back);

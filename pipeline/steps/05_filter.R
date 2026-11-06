@@ -20,6 +20,7 @@ here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value 
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "noise_keep.R"))
 source(file.path(here, "..", "background.R"))
+source(file.path(here, "..", "filter_quality.R"))
 source(file.path(here, "..", "review.R"))
 source(file.path(here, "..", "reviews", "05_filter.R"))
 
@@ -38,10 +39,12 @@ spec <- list(
   filter_cv = FALSE, filter_cv_group = "SPQC", filter_cv_value = 99, filter_ptm = FALSE,
   checkbox_misaligned = TRUE, misaligned_cutoff = 50, misaligned_target = "dataset", intensity_cutoff_sd = 0.5,
   precursor_quality = FALSE, precursor_quality_sd = 50, precursor_quality_intensity = 500, precursor_quality_min = 300,
-  precursor_spqc_ratio = FALSE, precursor_spqc_intensity = 500, precursor_spqc_accuracy = 50
+  precursor_spqc_ratio = FALSE, precursor_spqc_intensity = 500, precursor_spqc_accuracy = 50,
+  precursor_quality_method = "app"   # pipeline: app (Shiny_Filter.R) or profile (pipeline/filter_quality.R)
 )
 settings <- resolve_settings(spec, args)
 if (!settings$misaligned_target %in% c("group", "dataset")) stop("--misaligned_target must be group or dataset")
+if (!settings$precursor_quality_method %in% c("app", "profile")) stop("--precursor_quality_method must be app or profile")
 
 p <- get_params(db_path)
 groups <- read_table("sample_groups", db_path)
@@ -90,7 +93,17 @@ if (args$action == "preview") {
 # --- apply -------------------------------------------------------------------
 if (!identical(args$decided_by, "user")) stop("Apply needs the analyst's approval: run --action=preview, show the review page, then pass --decided_by=user.")
 
+# profile quality filter: the app runs without its own quality step, then the pipeline's version runs on the measured values
+pq_profile_on <- settings$precursor_quality && settings$precursor_quality_method == "profile"
+if (pq_profile_on) { p <- get_params(db_path); p$precursor_quality <- FALSE; invisible(write_params(p, db_path)) }
 err_alert <- run_bg(filter_data_bg, list("precursor_noise", "precursor_filter", db_path), "filter", db_path)
+pq_info <- NULL
+if (pq_profile_on) {
+  p <- get_params(db_path); p$precursor_quality <- TRUE; invisible(write_params(p, db_path))
+  pq_info <- pq_profile_apply(db_path, p)
+  cat(sprintf("Precursor quality (profile): removed %d of %d tested precursors (residual CV > %s%%)\n",
+              pq_info$precursors_removed, pq_info$precursors_tested, p$precursor_quality_sd))
+}
 if (nrow(read_table("precursor_filter", db_path)) == 0)
   stop("The filter removed every precursor. Known app behavior: with no rows failing the SPQC ratio (or misaligned, target=dataset) ",
        "filter, df[-integer(0),] drops all rows. Turn that filter off or loosen it and re-run.")
@@ -120,6 +133,9 @@ cascade <- lapply(seq_along(removed), function(i) {
   list(stage = stage_names[i] %||% paste0("stage_", i), proteins_removed = v[1], peptides_removed = v[2], precursors_removed = v[3])
 })
 mis_line <- grep("Misaligned rows -->|Misaligned dataset rows -->", log_lines, value = TRUE)
+# profile quality filter ran after the app's filter (after its SPQC ratio and duplicate stages); report it in the precursor_quality slot
+if (!is.null(pq_info)) for (k in seq_along(cascade)) if (cascade[[k]]$stage == "precursor_quality")
+  cascade[[k]] <- pq_info[c("stage", "proteins_removed", "peptides_removed", "precursors_removed", "method", "precursors_tested")]
 
 p <- get_params(db_path)
 df <- read_table("precursor_filter", db_path)

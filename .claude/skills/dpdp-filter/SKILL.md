@@ -18,6 +18,7 @@ only apply settings the user has approved.
 | `checkbox_misaligned` / `misaligned_cutoff` / `misaligned_target` (group, dataset) | FALSE / 50 / dataset (**pipeline default: TRUE / 50 / dataset**) | **TRUE / 51 / dataset** |
 | `intensity_cutoff_sd` (misaligned cutoff = mean + this × SD) | 0.5 | 0.5 |
 | `precursor_quality` / `_sd` / `_intensity` / `_min` | FALSE / 50 / 500 / 300 | **TRUE** / 50 / 500 / 300 |
+| `precursor_quality_method` (pipeline: `app` or `profile`) | app | - |
 | `precursor_spqc_ratio` / `_accuracy` / `_intensity` | FALSE / 50 / 500 | **TRUE** / 50 / 500 |
 
 **Misaligned filter (user decision 2026-11-06):** on by default with `misaligned_target=dataset`. It flags a precursor when a group is
@@ -26,6 +27,13 @@ flagged 0.19% of precursors, mostly wrong lone values, and gave slightly more tr
 flagged group instead; imputation then treats that group as low/absent and it added false calls, so **limpa is refused after target=group**
 (Step 7 stops) and the other imputations warn. Recommend dataset; only use group if the analyst asks. Groups of 2 are never flagged
 (1 of 2 missing is exactly 50%); when nothing is flagged, the pipeline skips the filter for that run and says so.
+
+**Precursor quality filter (tested 2026-11-06, PLAN.md):** the app's method (`precursor_quality_method=app`) takes each precursor's
+share of itself + the weaker precursors across all samples; missing values shrink that sum, so it removes good precursors of proteins
+that change (triple-spike at 50%: 12-15% of E. coli / yeast precursors, more false calls). `profile` (pipeline/filter_quality.R) scores
+each precursor by its residual to the protein's median-polish profile (CV %, same cutoff meaning) and removed 1-3% of each species with a
+small gain. If the analyst turns the filter on, recommend `profile`; the app method only to match a Shiny run. `profile` runs after the
+app's SPQC ratio and duplicate stages.
 
 To reuse a previous run's settings: `--settings_from=<that run's .db>`. Explicit `--name=value` args override it.
 
