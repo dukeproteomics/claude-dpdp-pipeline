@@ -399,12 +399,44 @@ def make_app(cfg):
                "note": str(dec.get("note", ""))[:500], "analyst": (pw.pw_gecos.split(",")[0] or s["user"])[:100],
                "user": s["user"], "submitted": time.strftime("%Y-%m-%d %H:%M:%S"), "source": "web app"}
         path = os.path.join(d, "review", "pending_decision.json")
+        waiter = waiting(s["user"], d)   # before writing: the wait exits as soon as the file appears
         with open(path + ".tmp", "w") as fh:
             json.dump(rec, fh, indent=1)
         os.chmod(path + ".tmp", 0o664); chown_to(path + ".tmp", s["user"])
         os.replace(path + ".tmp", path)
         log("decision", s["user"], rec["run"], step, rec["choice"])
+        if not waiter:
+            asyncio.ensure_future(nudge_if_no_waiter(s["user"], d, step, path))
         return web.json_response({"ok": True, "submitted": rec["submitted"]})
+
+    def waiting(user, d):
+        """Is a wait_decision.py for this run running as this user (Claude's background wait)?"""
+        uid = pwd.getpwnam(user).pw_uid
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            try:
+                if os.stat("/proc/" + pid).st_uid != uid:
+                    continue
+                cmd = open("/proc/%s/cmdline" % pid, "rb").read().split(b"\0")
+            except OSError:
+                continue
+            if any(c.endswith(b"wait_decision.py") for c in cmd) and any(os.path.basename(c.decode(errors="replace").split("=", 1)[-1].rstrip("/")) == os.path.basename(d) for c in cmd if c.startswith(b"--run")):
+                return True
+        return False
+
+    async def nudge_if_no_waiter(user, d, step, path):
+        """No background wait (e.g. the session was restarted): tell Claude in the user's terminal, as if they typed it."""
+        await asyncio.sleep(3)
+        if not os.path.exists(path):
+            return
+        t = T.by_user.get(user)
+        log("no background wait for", os.path.basename(d), step, "- telling Claude" if t and t.alive else "- no open session")
+        if t and t.alive:
+            t.write(("I sent my decision for run %s, step %s, from the review page (%s). Please read it and apply it."
+                     % (os.path.basename(d), step, path)).encode())
+            await asyncio.sleep(0.3)
+            t.write(b"\r")
 
     # -- upload: report + sample sheet into <data>/input/<name>/
     @routes.post(B + "/api/upload")
