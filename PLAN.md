@@ -266,6 +266,19 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
     rt_loess is a small, consistent gain when RT is exported; loess is not better than sltmm in Stats on these data.
 - Exports without `EG.ApexRT`: 11485, 11517, 11531, 11538 (11531 and 11538 also lack run-wise `EG.Qvalue`). Asked the user to add both to the report schema.
 
+## Misaligned filter test (2026-11-06, triple-spike raw export)
+- Runs zz_misal_off / _dataset / _group: same settings (Noise none, Filter defaults, sltmm human subset, limpa Impute + Rollup, dpcDE,
+  6 comparisons); only the misaligned filter differs (cutoff 50%, intensity mean + 0.5 SD = 1,674). Off reproduces the earlier baseline exactly.
+- Flags 664 group-rows in 565 precursors (0.19%); dataset target removes them (3 one-precursor human proteins lost, one is trypsin);
+  group target blanks the group. Read-only check on 10658_110426: flagged human lone values sit +0.87 log2 (median) above the row's
+  level in fully measured groups; 52% are off by more than 2x vs 4% for normal human precursors.
+- Mean over 6 comparisons (off / dataset / group): true calls 4,527 / 4,537 / 4,534; false 151.3 / 149.8 / 153.7; observed FDR
+  4.17 / 4.11 / 4.26% (worst 9.09 / 8.86 / 9.41%); human MAD 0.17 for all. Protein-level, summed over comparisons vs off:
+  dataset +67 / -7 true, +13 / -16 false; group +44 / -5 true, +16 / -8 false.
+- Reading: dataset target is a small, consistent gain (more true calls, slightly fewer false); group target adds false calls (blanking the
+  group makes limpa treat it as low). App detail: the step-5 re-apply of the X%-per-group rule is not assigned (`filter_min_group(df, ...)`
+  without `df <-`, Shiny_Filter.R), so groups the misaligned filter blanks are not re-checked.
+
 ## Live run 10658_110426 (triple-spike background export, complete 2026-11-04)
 - Load accept; Parameters accept; Noise none; Filter as shown (294,715 precursors / 15,114 proteins; 311,693 background values back);
   Normalize SL, human only; Impute perseus (81,509 empty values); Rollup iq_maxlfq scaled; QC accept, no spikes (the 11488 ADH/casein
