@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "dpdp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Claude-driven DPDP proteomics pipeline (Duke Proteomics, from the shiny_DPDP app): one step per nav-menu tab, an HTML review page per step, and analyst decisions asked and recorded at every step.",
   "author": { "name": "Duke Proteomics" },
   "keywords": ["proteomics", "spectronaut", "shiny_DPDP", "mass-spectrometry"],
