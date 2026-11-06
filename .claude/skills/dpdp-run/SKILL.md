@@ -63,10 +63,13 @@ Ask for anything missing. Ask which spike-ins the project uses if they aren't th
 | 5 | Filter | dpdp-filter | filter settings |
 | 6 | Normalize | dpdp-normalize | exclude rule, method (after the 06b method comparison) |
 | 7 | Impute | dpdp-impute | duke / bottomx / perseus / minprob / qrilc, settings |
-| 8 | Rollup | dpdp-rollup | sum / iq_maxlfq |
+| 8 | Rollup | dpdp-rollup | sum / iq_maxlfq (Peptide output: sum); limpa after limpa |
 | 9 | QC | dpdp-qc | accept, flag samples |
 | 10 | Stats | dpdp-stats | settings + comparisons, then accept results |
 | 11-13 | Pathway, Phos, Report | - | not built yet |
+
+**Phospho / PTM runs (Peptide output):** the result is per peptide. Precursors roll up to peptides (charge states), Stats tests
+peptides, and the protein level isn't used except to name a peptide's protein and for the QC spike checks. Say "peptide" to the analyst.
 
 To reuse a finished run's settings: most steps take `--settings_from=<that run's .db>`. The analyst still approves each step.
 

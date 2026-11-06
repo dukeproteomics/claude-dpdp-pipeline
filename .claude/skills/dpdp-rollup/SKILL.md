@@ -14,7 +14,15 @@ description: Step 8 of the DPDP proteomics pipeline (same as the Shiny app's Rol
 | `rollup_topn` | 1–5 (only for topn, which doesn't work) | 3 | 3 |
 | `maxlfq_scale` | TRUE/FALSE (scale MaxLFQ output to summed protein intensity) | FALSE | **TRUE** |
 
-Only for Protein output. For Peptide output, the app rolls up during Impute; that isn't wired up in the pipeline yet.
+## Peptide output (phospho / PTM runs)
+The unit is the **peptide** (modified sequence + site localization, `feature_key()`), not the protein: precursors roll up to peptides
+and nothing is rolled up to proteins. A peptide's precursors are its charge states.
+- Methods: `sum` (adds the charge states) or `limpa` after limpa in Impute (DPC-Quant per peptide). iq_maxlfq is refused: it combines
+  peptides of a protein. The page form offers only these.
+- The page follows the unit: peptide CV by group, precursors (charge states) per peptide, and a **peptide explorer** (charge states +
+  sum / DPC-Quant; spike-in proteins show their 2 peptides with the most charge states). Talk about peptides, not proteins, with the analyst.
+- Summary fields: `level`, `features` (output rows), `total_cv_pct`, `features_cv_under_20_pct`; `proteins` is the number of protein
+  accessions behind them. The old names `protein_total_cv_pct` / `proteins_cv_under_20_pct` are kept with the same values.
 
 ## limpa (after `--impute_type=limpa`)
 `--rollup_method=limpa` is then the only allowed rollup (`pipeline/limpa.R`). Preview and apply both run DPC-Quant for every normalization

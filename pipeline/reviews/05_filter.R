@@ -95,9 +95,10 @@ review_filter <- function(db_path) {
     c("CV of one group", onoff("filter_cv"), sprintf("group <b>%s</b>, CV &lt; <b>%s%%</b>", esc(getp("filter_cv_group")), esc(getp("filter_cv_value"))),
       "Removes precursors that vary too much within the chosen group (usually SPQC)."),
     c("Precursor quality", onoff("precursor_quality"),
-      sprintf("%s: CV &gt; <b>%s%%</b>, intensity &ge; %s, values &ge; %s", if (identical(getp("precursor_quality_method"), "profile")) "<b>profile</b> (residual to the protein profile)" else "app (share of the protein signal)",
+      sprintf("%s: CV &gt; <b>%s%%</b>, intensity &ge; %s, values &ge; %s", if (identical(getp("precursor_quality_method"), "profile")) paste0("<b>profile</b> (residual to the ", feat(p, FALSE), " profile)") else "app (share of the protein signal)",
               esc(getp("precursor_quality_sd")), esc(getp("precursor_quality_intensity")), esc(getp("precursor_quality_min"))),
-      "Within each protein (3+ precursors), removes precursors whose share of the protein signal varies too much across samples."),
+      if (is_peptide_output(p)) "Peptide output: within each peptide (3+ charge states), removes charge states that don't follow the peptide (profile method; the app's method does nothing for peptides). Phosphopeptides of one protein are never compared with each other."
+      else "Within each protein (3+ precursors), removes precursors that don't follow the protein (profile) or whose share of the protein signal varies too much (app)."),
     c("SPQC ratio", onoff("precursor_spqc_ratio"),
       sprintf("SPQC/sample mean outside 100 &plusmn; <b>%s%%</b>, SPQC mean &gt; %s", esc(getp("precursor_spqc_accuracy")), esc(getp("precursor_spqc_intensity"))),
       "The pool should sit near the sample average; precursors where it doesn't are removed."),

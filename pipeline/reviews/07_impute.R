@@ -84,10 +84,11 @@ review_impute <- function(db_path) {
 (mean &minus; <b>%s</b> SD, width <b>%s</b> SD). Every empty value is treated as low.</li>
 <li><b>minprob</b> - per sample, random values around the <b>%s</b> quantile of the measured values (imputeLCMD MinProb).</li>
 <li><b>qrilc</b> - per sample, values from the low tail of a normal fitted to the measured values by quantile regression (imputeLCMD QRILC).</li>
-<li><b>limpa</b> - no imputation. The gaps stay; Rollup estimates each protein with DPC-Quant (using the detection curve below and giving
+<li><b>limpa</b> - no imputation. The gaps stay; Rollup estimates each __UNIT__ with DPC-Quant (using the detection curve below and giving
 every value a standard error) and Stats tests with limpa&apos;s dpcDE (limma with precision weights). Best false-call control in both benchmarks
 (triple-spike 3.1 / 5.1%%; 11488 no-difference splits 0.21%% vs 1%% expected).</li>',
     esc(s$perseus_shift %||% 1.8), esc(s$perseus_width %||% 0.3), esc(s$minprob_q %||% 0.01))
+  pipe_opts <- sub("__UNIT__", feat(p, FALSE), pipe_opts, fixed = TRUE)   # protein, or peptide for Peptide output
   evidence <- '<p class="note"><b>Benchmark</b> (three-species spike-in with known ratios, 10 comparisons, calls adj p &le; 0.05 and FC &ge; 1.5;
 <code>tools/impute_benchmark</code>): false call rate mean / worst comparison: perseus 3.7 / 9.0%, minprob 4.0 / 10.5%, qrilc 3.7 / 9.8%,
 duke + bottom-X 8.3 / 22.5%, Spectronaut background (+ perseus for empty values) 3.5 / 6.8%. Duke finds the most changes but fills

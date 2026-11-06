@@ -44,6 +44,11 @@ FC comes from the model (difference of log2 means), not the ratio of means. Adju
 The summary's `test` field says which test was used: report it. 11488 B vs A: 229 calls by raw p, 1 by adjusted p (duke run: 221 / 72;
 the duke adjusted calls are mostly false positives, step 07b).
 
+## Peptide output (phospho / PTM runs)
+Every test is per **peptide** (the rows of `peptide_impute_<norm>`): the page says "peptides tested", "significant peptides", and the
+summary has `level = "peptide"` and `features` (rows tested after the missing factor; `proteins` holds the same number for older readers).
+Contaminant flags come from the peptide's protein. "Add peptide plots" takes protein accessions and plots their peptides.
+
 ## Run
 ```bash
 cd /home/user/Claude_Shiny

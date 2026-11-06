@@ -43,6 +43,7 @@ review_stats <- function(db_path) {
   if (!is.null(last_acc) && !is.null(summ$generated) && last_acc$time < summ$generated) last_acc <- NULL
   if (!is.null(last_acc)) { status <- "Results accepted"; status_class <- "done" }
 
+  U <- feat(p); Uc <- feat(p, cap = TRUE)   # proteins, or peptides for Peptide output (phospho)
   set_df <- data.frame(Setting = c("Normalization tested", "Pooled QC carried along", "p-value cutoff", "Fold change cutoff",
                                    "Up/Down calls use", "Adjusted p column", "Missing factor", "Peptide refilter"),
     Value = c(esc(summ$stat_norm %||% p$stat_norm), esc(summ$comp_spqc %||% p$comp_spqc), esc(pc), esc(fcc),
@@ -50,7 +51,7 @@ review_stats <- function(db_path) {
               if (as_flag(g("checkbox_adjpval"))) esc(g("padjust_options")) else "off", esc(g("missing_factor")), "replaced by flags (no re-rollup per comparison)"),
     Meaning = c("Which normalized data the tests use.", "Pool shown in tables and plots; not part of the test.", "",
                 "Absolute fold change needed for Up/Down.", "Raw p gives more calls but no false-discovery control; adjusted p controls FDR.",
-                "Added to the tables either way.", "Proteins with a smaller share of measured (not imputed) values in the comparison are removed.",
+                "Added to the tables either way.", paste(Uc, "with a smaller share of measured (not imputed) values in the comparison are removed."),
                 "Re-filters precursors for the comparison's samples and rolls up again."), stringsAsFactors = FALSE)
   if (is_peptide_output(p)) set_df <- rbind(set_df, data.frame(Setting = "Peptides tested",
     Value = if (ptm_report(p)) sprintf("<b>%s only</b> (Sequence matches <code>%s</code>)", esc(g("peptide_report_grep")), esc(g("peptide_report_grep"))) else "all peptides",
@@ -69,10 +70,10 @@ review_stats <- function(db_path) {
   if (length(cres)) res_html <- paste0('<section><h2>Significance</h2>', paste(vapply(cres, function(r) {
     pd <- r$pvalue_distribution
     warn <- if (!use_adj && (r$significant_if_adjusted_p %||% 0) == 0 && (r$significant %||% 0) > 0)
-      sprintf('<p class="missing">The %s Up/Down calls use <b>raw p</b>. <b>None pass FDR</b> (smallest adjusted p = %s). With %s proteins tested, about %s would have raw p &lt; %s by chance alone.</p>',
-              fmt_n(r$significant), esc(pd$min_adjpval), fmt_n(r$proteins), fmt_n(round(r$proteins * pc)), esc(pc)) else ""
+      sprintf('<p class="missing">The %s Up/Down calls use <b>raw p</b>. <b>None pass FDR</b> (smallest adjusted p = %s). With %s %s tested, about %s would have raw p &lt; %s by chance alone.</p>',
+              fmt_n(r$significant), esc(pd$min_adjpval), fmt_n(r$features %||% r$proteins), if (identical(r$level, "peptide")) "peptides" else "proteins", fmt_n(round((r$features %||% r$proteins) * pc)), esc(pc)) else ""
     paste0('<h3>', esc(r$comparison), ' (', esc(r$N), ' vs ', esc(r$D), ')</h3><div class="tiles">',
-      sprintf('<div class="tile"><div class="v">%s</div><div class="l">%s tested (%s removed by missing factor)</div></div>', fmt_n(r$proteins), if (identical(r$level, "peptide")) "peptides" else "proteins", fmt_n(r$removed_by_missing_factor)),
+      sprintf('<div class="tile"><div class="v">%s</div><div class="l">%s tested (%s removed by missing factor)</div></div>', fmt_n(r$features %||% r$proteins), if (identical(r$level, "peptide")) "peptides" else "proteins", fmt_n(r$removed_by_missing_factor)),
       if (isTRUE(r$not_tested_non_ptm > 0)) sprintf('<div class="tile"><div class="v">%s</div><div class="l">non-%s peptides not tested</div></div>', fmt_n(r$not_tested_non_ptm), esc(g("peptide_report_grep"))) else "",
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">Up / Down by %s p: %s / %s</div></div>', fmt_n(r$significant), if (use_adj) "adjusted" else "raw", fmt_n(r$up), fmt_n(r$down)),
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">would pass with adjusted p &le; %s</div></div>', fmt_n(r$significant_if_adjusted_p), esc(pc)),
@@ -88,14 +89,14 @@ review_stats <- function(db_path) {
   volc_html <- if (length(comps)) paste0('<section><h2>Volcano explorer</h2>',
     '<p class="note">Change the p type and cutoffs to see how the Up/Down calls change (same rule as the app&apos;s Stats column). ',
     'Ringed points were measured in only one group (the other group is all imputed); their large fold changes come from imputation. ',
-    'Diamonds mark <b>flagged</b> proteins (digestion trypsin, human keratins, QC spike-ins): kept in the analysis, but likely not biology.</p>',
+    'Diamonds mark <b>flagged</b> ', if (is_peptide_output(p)) "peptides of flagged proteins" else "proteins", ' (digestion trypsin, human keratins, QC spike-ins): kept in the analysis, but likely not biology.</p>',
     '<div class="control">', if (length(comps) > 1) paste0('<label for="vcomp">Comparison</label><select id="vcomp">', paste0('<option>', esc(names(comps)), '</option>', collapse = ""), '</select>') else "",
     '<label for="vpt">p type</label><select id="vpt"><option value="p"', if (!use_adj) " selected" else "", '>raw p</option><option value="adj"', if (use_adj) " selected" else "", '>adjusted p</option></select>',
     '<label for="vpc">p cutoff</label><select id="vpc">', paste0('<option', ifelse(c(0.001, 0.01, 0.05, 0.1, 0.2) == pc, " selected", ""), '>', c(0.001, 0.01, 0.05, 0.1, 0.2), '</option>', collapse = ""), '</select>',
     '<label for="vfc">FC cutoff</label><input type="range" id="vfc" min="1" max="4" step="0.1" value="', fcc, '"/><span class="val" id="vfcv"></span>',
-    '<label><input type="checkbox" id="vonoff"/> leave out proteins measured in one group only</label></div>',
+    '<label><input type="checkbox" id="vonoff"/> leave out ', U, ' measured in one group only</label></div>',
     '<div class="tiles" id="vtiles"></div><div id="volcano" style="height:520px" role="img" aria-label="Volcano plot"></div>',
-    '<details open><summary>Significant proteins at these settings (table view)</summary><div class="control"><input type="search" id="vq" placeholder="filter by gene or accession" style="font:inherit;font-size:13px;padding:3px 8px"/></div><div id="vtable" style="max-height:420px;overflow:auto"></div></details>',
+    '<details open><summary>Significant ', U, ' at these settings (table view)</summary><div class="control"><input type="search" id="vq" placeholder="filter by gene or accession" style="font:inherit;font-size:13px;padding:3px 8px"/></div><div id="vtable" style="max-height:420px;overflow:auto"></div></details>',
     '<h2>Raw p-value distribution</h2><p class="note">Under no real differences the bars are flat. A peak at low p means real signal; how far the first bar rises above the flat level is a rough count of true differences.</p>',
     '<div id="phist" style="height:260px" role="img" aria-label="Histogram of raw p-values"></div><p class="note" id="phistnote"></p></section>') else ""
 
@@ -119,7 +120,7 @@ review_stats <- function(db_path) {
   pinfo <- if (!is.null(pp$proteins)) Filter(function(x) !is.null(x$values), pp$proteins) else list()
   pep_lvl <- identical(pp$level, "peptide")
   prot_html <- if (length(pinfo)) paste0('<section><h2>', if (pep_lvl) "Peptide plots" else "Protein plots", ' (', esc(pp$comp), ')</h2>',
-    '<p class="note">The top significant ', if (pep_lvl) "peptides" else "proteins", ' by p-value (add more with the &quot;Add protein plots&quot; choice). ',
+    '<p class="note">The top significant ', if (pep_lvl) "peptides" else "proteins", ' by p-value (add more with the &quot;', if (pep_lvl) "Add peptide plots" else "Add protein plots", '&quot; choice). ',
     'Left: the value in each sample. Right: every ', if (pep_lvl) "PTM peptide" else "peptide", ' of the same protein, mean &plusmn; SD per group (log2)',
     if (pep_lvl) '; the selected peptide is marked &#9654; (with many peptides, the 25 nearest to it in the sequence)' else '', '.</p>',
     '<div class="control"><label for="ppsel">Show</label><select id="ppsel">', paste0('<option value="', seq_along(pinfo) - 1, '">',
@@ -135,7 +136,7 @@ review_stats <- function(db_path) {
     if (length(xl)) paste0('<section><h2>Output files</h2><ul>', paste0('<li><code>', esc(xl), '</code></li>', collapse = ""), '</ul>',
       if (!use_adj) '<p class="note">The Excel Up/Down column uses raw p (checkbox_filter_adjpval off). Table1 Sample Info is created empty by the app.</p>' else "", '</section>') else "")
 
-  js_data <- list(comps = comps, pc = pc, fcc = fcc, order = group_order, sg = if (length(ginfo)) ginfo else NULL,
+  js_data <- list(U = U, comps = comps, pc = pc, fcc = fcc, order = group_order, sg = if (length(ginfo)) ginfo else NULL,
                   pp = if (length(pinfo)) list(items = unname(pinfo), samples = pp$samples, groups = pp$groups) else NULL)
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA, na = "null"), ';', STATS_JS, '</script>')
   extra_css <- '<style>.viz-root { --up:#e34948; --down:#2a78d6; } td.flag { color:var(--warn-ink); font-weight:600; } section h3 { font-size:15px; margin:14px 0 4px; }
@@ -196,12 +197,12 @@ function vdraw() {
   // p histogram
   const bins = new Array(20).fill(0); X.p.forEach(v => { if (v !== null) bins[Math.min(19, Math.floor(v * 20))]++; });
   const flat = bins.slice(10).reduce((s, v) => s + v, 0) / 10, excess = Math.max(0, Math.round(bins[0] - flat));
-  Plotly.react("phist", [{ type: "bar", x: bins.map((_, i) => (i + 0.5) / 20), y: bins, width: 0.045, marker: { color: C("--series-1") }, hovertemplate: "p %{x:.3f}: %{y:,} proteins<extra></extra>" }],
+  Plotly.react("phist", [{ type: "bar", x: bins.map((_, i) => (i + 0.5) / 20), y: bins, width: 0.045, marker: { color: C("--series-1") }, hovertemplate: "p %{x:.3f}: %{y:,} " + D.U + "<extra></extra>" }],
     Object.assign(base(), { margin: { l: 60, r: 20, t: 10, b: 45 }, showlegend: false,
       shapes: [{ type: "line", x0: 0, x1: 1, y0: flat, y1: flat, line: { dash: "dot", color: C("--text-muted") } }],
       annotations: [{ x: 0.98, y: flat, text: "flat level, estimated from p > 0.5", showarrow: false, yanchor: "bottom", xanchor: "right", font: { size: 12, color: C("--text-primary") } }],
-      xaxis: ax("raw p-value"), yaxis: Object.assign(ax("proteins"), { rangemode: "tozero" }) }), cfg);
-  document.getElementById("phistnote").textContent = `First bar (p < 0.05): ${fmt(bins[0])} proteins against a flat level of about ${fmt(flat)}, so roughly ${fmt(excess)} more than chance alone would give.`;
+      xaxis: ax("raw p-value"), yaxis: Object.assign(ax(D.U), { rangemode: "tozero" }) }), cfg);
+  document.getElementById("phistnote").textContent = `First bar (p < 0.05): ${fmt(bins[0])} ${D.U} against a flat level of about ${fmt(flat)}, so roughly ${fmt(excess)} more than chance alone would give.`;
 }
 ["vcomp", "vpt", "vpc", "vonoff"].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener("change", vdraw); });
 ["vfc", "vq"].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener("input", vdraw); });

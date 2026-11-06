@@ -34,6 +34,10 @@ that change (triple-spike at 50%: 12-15% of E. coli / yeast precursors, more fal
 each precursor by its residual to the protein's median-polish profile (CV %, same cutoff meaning) and removed 1-3% of each species with a
 small gain. If the analyst turns the filter on, recommend `profile`; the app method only to match a Shiny run. `profile` runs after the
 app's SPQC ratio and duplicate stages.
+**Peptide output (phospho):** the quality filter groups by **peptide**, not protein: phosphopeptides of one protein change
+independently, so comparing them would remove real site changes (on 11517, grouping by protein would have removed 14,644 precursors;
+by peptide it tests the 3,475 precursors of peptides with 3+ charge states and removes 56). The app's method does nothing for
+peptides, so the step refuses `precursor_quality_method=app` there.
 
 To reuse a previous run's settings: `--settings_from=<that run's .db>`. Explicit `--name=value` args override it.
 

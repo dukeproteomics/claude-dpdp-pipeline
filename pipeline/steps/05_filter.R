@@ -45,6 +45,9 @@ spec <- list(
 settings <- resolve_settings(spec, args)
 if (!settings$misaligned_target %in% c("group", "dataset")) stop("--misaligned_target must be group or dataset")
 if (!settings$precursor_quality_method %in% c("app", "profile")) stop("--precursor_quality_method must be app or profile")
+if (settings$precursor_quality && settings$precursor_quality_method == "app" && is_peptide_output(get_params(db_path)))
+  stop("Peptide output: the app's precursor quality filter does nothing for peptides (it only sets an error message). ",
+       "Use --precursor_quality_method=profile (compares each peptide's charge states) or --precursor_quality=FALSE.")
 
 p <- get_params(db_path)
 groups <- read_table("sample_groups", db_path)
@@ -101,8 +104,8 @@ pq_info <- NULL
 if (pq_profile_on) {
   p <- get_params(db_path); p$precursor_quality <- TRUE; invisible(write_params(p, db_path))
   pq_info <- pq_profile_apply(db_path, p)
-  cat(sprintf("Precursor quality (profile): removed %d of %d tested precursors (residual CV > %s%%)\n",
-              pq_info$precursors_removed, pq_info$precursors_tested, p$precursor_quality_sd))
+  cat(sprintf("Precursor quality (profile, per %s): removed %d of %d tested precursors (residual CV > %s%%)\n",
+              pq_info$unit, pq_info$precursors_removed, pq_info$precursors_tested, p$precursor_quality_sd))
 }
 if (nrow(read_table("precursor_filter", db_path)) == 0)
   stop("The filter removed every precursor. Known app behavior: with no rows failing the SPQC ratio (or misaligned, target=dataset) ",
@@ -135,7 +138,7 @@ cascade <- lapply(seq_along(removed), function(i) {
 mis_line <- grep("Misaligned rows -->|Misaligned dataset rows -->", log_lines, value = TRUE)
 # profile quality filter ran after the app's filter (after its SPQC ratio and duplicate stages); report it in the precursor_quality slot
 if (!is.null(pq_info)) for (k in seq_along(cascade)) if (cascade[[k]]$stage == "precursor_quality")
-  cascade[[k]] <- pq_info[c("stage", "proteins_removed", "peptides_removed", "precursors_removed", "method", "precursors_tested")]
+  cascade[[k]] <- pq_info[c("stage", "proteins_removed", "peptides_removed", "precursors_removed", "method", "unit", "precursors_tested")]
 
 p <- get_params(db_path)
 df <- read_table("precursor_filter", db_path)

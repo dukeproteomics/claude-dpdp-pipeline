@@ -45,6 +45,10 @@ Rscript pipeline/steps/09_qc.R --db=<db> --action=accept --decided_by=user --ana
 ```
 Flagged samples are recorded for the report; they are not removed.
 
+## Peptide output (phospho / PTM runs)
+The spike-in and constant-protein checks are protein-level by nature, so QC sums each protein's peptides into `protein_qc_<norm>`
+(QC only; nothing downstream uses it). Everything else in the run is per peptide.
+
 ## Show the user
 From `steps/09_qc/summary.json`, and **open every file in `plots`**:
 1. **Spike plot** (`QC_Spike_<norm>_barplot.png`): bars per sample, grouped by design spike level.

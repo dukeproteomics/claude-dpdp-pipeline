@@ -144,4 +144,7 @@ PEPTIDE_KEY <- c("Accession", "Description", "Name", "Genes", "Sequence", "PTM_L
 is_ptm_run <- function(p) isTRUE(as_flag(p$ptm %||% FALSE)) && nzchar(p$ptm_grep %||% "")
 is_ptm_row <- function(d, p) grepl(p$ptm_grep, d$Sequence, ignore.case = TRUE)
 ptm_report <- function(p) is_peptide_output(p) && isTRUE(as_flag(p$checkbox_report_ptm %||% FALSE)) && !p$peptide_report_grep %in% c("", "Enter value here")
+# The word for one output row on the pages: "protein", or "peptide" for Peptide output (phospho / PTM runs roll precursors up to peptides).
+feat <- function(p, plural = TRUE, cap = FALSE) { w <- paste0(if (is_peptide_output(p)) "peptide" else "protein", if (plural) "s" else "")
+  if (cap) paste0(toupper(substring(w, 1, 1)), substring(w, 2)) else w }
 feature_key <- function(d, p) if (is_peptide_output(p)) do.call(paste, c(lapply(d[intersect(PEPTIDE_KEY, names(d))], as.character), sep = "\r")) else as.character(d$Accession)

@@ -63,7 +63,7 @@ if (is_limpa) {   # DPC-Quant at preview (the page shows it) and again at apply,
     t1 <- Sys.time(); obj <- limpa_quant(db_path, n, background = settings$limpa_background)
     cat(sprintf("limpa DPC-Quant (%s): %d %s, %.0f s; DPC beta0 %.3f beta1 %.3f\n", n, nrow(obj$Q$E), if (is_peptide) "peptides" else "proteins",
                 as.numeric(difftime(Sys.time(), t1, units = "secs")), obj$dpc[1], obj$dpc[2]))
-    list(norm = n, proteins = nrow(obj$Q$E), background = obj$background, dpc = as.list(round(obj$dpc, 4)),
+    list(norm = n, level = if (is_peptide) "peptide" else "protein", features = nrow(obj$Q$E), proteins = nrow(obj$Q$E), background = obj$background, dpc = as.list(round(obj$dpc, 4)),
          se_median = round(median(obj$Q$other$standard.error), 3), se_q90 = round(unname(quantile(obj$Q$other$standard.error, 0.9)), 3))
   })
 }
@@ -96,10 +96,14 @@ tables <- lapply(norms, function(n) {
   pcv <- read_table(str_c(out_t, "_cv"), db_path)
   tot <- colSums(prot[(ncol(prot) - n_s + 1):ncol(prot)], na.rm = TRUE)
   cv_cols <- grep("_CV$", names(pcv), value = TRUE)
-  list(norm = n, proteins = nrow(prot), peptides = nrow(pep),
-       protein_total_cv_pct = round(sd(tot) / mean(tot) * 100, 2),
+  u20 <- as.list(round(sapply(pcv[cv_cols], function(v) mean(v < 20, na.rm = TRUE) * 100), 1)); tcv <- round(sd(tot) / mean(tot) * 100, 2)
+  # level / features / *_cv_* name the output rows (proteins, or peptides for Peptide output). protein_total_cv_pct and
+  # proteins_cv_under_20_pct are kept for older readers and hold the same values as total_cv_pct / features_cv_under_20_pct.
+  list(norm = n, level = if (is_peptide) "peptide" else "protein", features = nrow(prot),
+       proteins = length(unique(prot$Accession)), peptides = nrow(pep),
+       total_cv_pct = tcv, protein_total_cv_pct = tcv,
        median_cv_by_group = as.list(round(sapply(pcv[cv_cols], median, na.rm = TRUE), 1)),
-       proteins_cv_under_20_pct = as.list(round(sapply(pcv[cv_cols], function(v) mean(v < 20, na.rm = TRUE) * 100), 1)))
+       features_cv_under_20_pct = u20, proteins_cv_under_20_pct = u20)
 })
 summary <- list(
   step = "08_rollup", action = "apply", db_path = db_path, settings = settings, norm_type = norms,
@@ -113,7 +117,7 @@ log_decision(run_dir, "08_rollup", settings, analyst = args$analyst,
 
 cat("\n==== Rollup applied ====\n")
 cat(sprintf("Method: %s (topn %s, maxlfq_scale %s)\n", settings$rollup_method, settings$rollup_topn, settings$maxlfq_scale))
-for (t in tables) if (is_peptide) cat(sprintf("  %-7s %d peptides, total CV %.2f%%\n", t$norm, t$peptides, t$protein_total_cv_pct)) else
+for (t in tables) if (is_peptide) cat(sprintf("  %-7s %d peptides (from %d proteins), total CV %.2f%%\n", t$norm, t$peptides, t$proteins, t$total_cv_pct)) else
   cat(sprintf("  %-7s %d proteins, %d peptides, protein total CV %.2f%%\n", t$norm, t$proteins, t$peptides, t$protein_total_cv_pct))
 cat("Average CV% by group (summary_cv):\n"); print(cv, row.names = FALSE)
 cat("Plots:\n", paste0("  ", summary$plots, collapse = "\n"), "\n")

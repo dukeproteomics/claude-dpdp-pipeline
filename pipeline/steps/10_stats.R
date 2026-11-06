@@ -159,7 +159,7 @@ comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
   flagged_sig$Flag <- flag[sig & flag != ""]
   list(comparison = nm, N = stats_comp$FactorsN[i], D = stats_comp$FactorsD[i],
        samples = list(N = as.integer(stats_comp$N[i]), D = as.integer(stats_comp$D[i]), SPQC = as.integer(stats_comp$SPQC[i])),
-       table = final_table(stats_comp, i, p), proteins = nrow(df), level = if (is_peptide_output(p)) "peptide" else "protein",
+       table = final_table(stats_comp, i, p), features = nrow(df), proteins = nrow(df), level = if (is_peptide_output(p)) "peptide" else "protein",   # rows tested after the missing factor; proteins kept for older readers
        columns = names(df)[!names(df) %in% names(read_table(base_table(p), db_path))],
        tested = n_tested, not_tested_non_ptm = nrow(base_df) - n_tested, removed_by_missing_factor = removed_mf,
        significant = sum(sig), up = sum(up), down = sum(down),

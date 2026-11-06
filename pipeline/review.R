@@ -151,6 +151,7 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
       ch("limpa", "limpa: no imputation (DPC-Quant rollup and dpcDE stats follow)")))),
     "08_rollup" = list(q = "Which rollup?", nxt = "Step 9 - QC", choices = if (!is.null(run_dir) && identical(applied_impute_type(file.path(run_dir, "x.db")), "limpa"))
       list(ch("limpa", "limpa DPC-Quant (Impute was limpa, so this is the only rollup)", list(fld("limpa_background", "Spectronaut background values (background exports)", "select", g("limpa_background", "missing"), c("missing", "use")))))
+      else if (identical(g("data_output"), "Peptide")) list(ch("sum", "sum of the charge states (Peptide output: the only rollup without limpa)"))
       else list(ch("iq_maxlfq_scaled", "iq_maxlfq, scaled"), ch("iq_maxlfq", "iq_maxlfq, not scaled"), ch("sum", "sum"))),
     "09_qc" = list(q = "Accept the QC and continue to Stats?", nxt = "Step 10 - Stats", choices = list(
       ch("accept_flag", "Accept and flag samples", list(fld("flag_samples", "samples to flag (comma separated)", "text", ""))),
@@ -160,7 +161,7 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
       ch("change", "Change settings or comparisons", list(fld("change", "What to change?"))))),
     "10_stats:results" = list(q = "Accept the stats results?", nxt = "Finished (Pathway and Report are not built yet)", choices = list(
       ch("accept", "Accept"), ch("change", "Change cutoffs and re-run", list(fld("change", "New p type / p cutoff / FC cutoff"))),
-      ch("plots", "Add protein plots", list(fld("proteins", "accessions (comma separated)"))))),
+      ch("plots", if (identical(g("data_output"), "Peptide")) "Add peptide plots (the peptides of these proteins)" else "Add protein plots", list(fld("proteins", "protein accessions (comma separated)"))))),
     NULL)
   if (!is.null(spec)) spec$choices <- Filter(Negate(is.null), spec$choices)
   spec

@@ -1,4 +1,6 @@
-# Review page for Step 8 - Rollup (precursor -> protein).
+# Review page for Step 8 - Rollup (precursor -> protein; precursor -> peptide for Peptide output, e.g. phospho).
+# Peptide output: the unit is the peptide (feature_key: modified sequence + localization), its precursors are its charge states,
+# and the methods are sum and limpa (MaxLFQ is not offered for peptides). The page words follow feat(p).
 # Decision: rollup_method (only sum and iq_maxlfq work in the app) and maxlfq_scale.
 # Shows: precursors per protein, a sum vs iq_maxlfq comparison computed here (protein CV per group, same CV formula as
 # the app's percentCV_gw on the raw scale), a protein explorer (precursor profiles with both rollups), and after apply the
@@ -24,6 +26,7 @@ review_rollup <- function(db_path) {
 
   cvs <- function(m) sapply(gcols, function(cc) { x <- m[, cc, drop = FALSE]; signif(100 * apply(x, 1, stats::sd, na.rm = TRUE) / rowMeans(x, na.rm = TRUE), 3) })
   is_limpa <- identical(applied_impute_type(db_path), "limpa")
+  pep <- is_peptide_output(p); U <- feat(p); u <- feat(p, FALSE); Uc <- feat(p, cap = TRUE); uc <- feat(p, FALSE, TRUE)
   ecdf_pts <- function(v) { v <- sort(v[is.finite(v)]); g <- c(seq(0, 50, by = 0.5), seq(51, 100, by = 1)); list(x = g, y = round(vapply(g, function(t) mean(v <= t), 0) * 100, 2)) }
 
   comp <- list(); explorer <- NULL; ppp <- NULL
@@ -32,18 +35,19 @@ review_rollup <- function(db_path) {
     if (!table_exists(tab, db_path)) next
     df <- read_table(tab, db_path)
     x <- as.matrix(df[, (ncol(df) - n_s + 1):ncol(df)])
-    acc <- df$Accession
+    acc <- feature_key(df, p)   # protein accession, or the peptide (Peptide output)
     summed <- rowsum(x, acc, reorder = TRUE, na.rm = TRUE)
     lx <- log2(x); lx[!is.finite(lx)] <- NA
     long <- data.frame(protein_list = rep(acc, n_s), sample_list = rep(colnames(x), each = nrow(x)), quant = as.vector(lx), id = rep(seq_len(nrow(x)), n_s))
     long <- long[!is.na(long$quant), ]
-    est <- suppressMessages(utils::capture.output(fl <- iq::fast_MaxLFQ(long), type = "output")); lfq <- 2^fl$estimate
-    lfq <- lfq[rownames(summed), , drop = FALSE]
-    lfq_s <- lfq * (rowMeans(summed) / rowMeans(lfq, na.rm = TRUE))
+    lfq <- lfq_s <- NULL
+    if (!pep) { est <- suppressMessages(utils::capture.output(fl <- iq::fast_MaxLFQ(long), type = "output")); lfq <- 2^fl$estimate
+      lfq <- lfq[rownames(summed), , drop = FALSE]
+      lfq_s <- lfq * (rowMeans(summed) / rowMeans(lfq, na.rm = TRUE)) }
     summed[summed == 0] <- NA
-    # the comparison is protein-level; for Peptide output limpa estimates peptides, so it isn't added here
-    lim <- if (is_limpa && !identical(p$data_output, "Peptide") && file.exists(limpa_rds(run_dir, n))) readRDS(limpa_rds(run_dir, n)) else NULL
-    cvl <- list(sum = cvs(summed), iq_maxlfq = cvs(lfq))
+    # limpa's DPC-Quant rows use the same key (feature_key), so proteins and peptides both compare here
+    lim <- if (is_limpa && file.exists(limpa_rds(run_dir, n))) readRDS(limpa_rds(run_dir, n)) else NULL
+    cvl <- if (pep) list(sum = cvs(summed)) else list(sum = cvs(summed), iq_maxlfq = cvs(lfq))
     if (!is.null(lim)) cvl$limpa <- cvs(2^lim$Q$E[rownames(summed), , drop = FALSE])
     comp[[n]] <- c(lapply(cvl, function(cv) lapply(seq_along(gcols), function(i) ecdf_pts(cv[, i]))),
       list(median = lapply(cvl, function(cv) round(apply(cv, 2, median, na.rm = TRUE), 1)),
@@ -53,15 +57,23 @@ review_rollup <- function(db_path) {
     if (is.null(explorer)) {
       npre <- table(acc)
       ppp <- list(k = 1:20, n = vapply(1:20, function(k) if (k < 20) sum(npre == k) else sum(npre >= 20), 0), proteins = length(npre))
-      spikes <- intersect(c("P00330", "P00331", "P02662", "P02663", "P02666"), names(npre))
+      spike_acc <- c("P00330", "P00331", "P02662", "P02663", "P02666")
+      spikes <- intersect(unique(acc[df$Accession %in% spike_acc]), names(npre))
+      if (pep && length(spikes)) {   # a spike-in protein has many peptides: show its 2 with the most charge states
+        sp_acc <- df$Accession[match(spikes, acc)]
+        spikes <- unlist(lapply(split(spikes, sp_acc), function(k) head(k[order(-npre[k])], 2)), use.names = FALSE) }
       set.seed(1); mid <- names(npre)[npre >= 2 & npre <= 15]
       pick <- unique(c(spikes, names(sort(npre, decreasing = TRUE))[1:8], sample(mid, min(25, length(mid)))))
-      genes <- setNames(df$Genes[match(pick, acc)], pick); desc <- setNames(df$Description[match(pick, acc)], pick)
+      first <- match(pick, acc)
+      bare <- function(q) { q <- gsub("\\[[^]]*\\]|_", "", q); ifelse(nchar(q) > 28, paste0(substr(q, 1, 26), ".."), q) }   # sequence without mods
+      genes <- setNames(if (pep) gsub("\\s+", " ", trimws(paste(df$Genes[first], df$Protein_PTM_Loc[first] %||% "", bare(df$Sequence[first])))) else df$Genes[first], pick)
+      desc <- setNames(if (pep) paste0(df$Sequence[first], " - ", df$Description[first]) else df$Description[first], pick)
       explorer <- list(norm = n, proteins = lapply(pick, function(a) {
         r <- which(acc == a)
-        list(acc = a, label = sprintf("%s %s (%d precursors)%s", a, genes[[a]] %||% "", length(r), if (a %in% spikes) " - spike-in" else ""),
+        list(acc = a, label = sprintf("%s %s (%d %s)%s", if (pep) df$Accession[r[1]] else a, genes[[a]] %||% "", length(r),
+               paste0(if (pep) "charge state" else "precursor", if (length(r) == 1) "" else "s"), if (a %in% spikes) " - spike-in" else ""),
              desc = desc[[a]], prec = unname(lapply(r, function(i) round(lx[i, ], 3))),
-             sum = round(log2(summed[a, ]), 3), lfq = round(log2(if (scale) lfq_s[a, ] else lfq[a, ]), 3),
+             sum = round(log2(summed[a, ]), 3), lfq = if (!pep) round(log2(if (scale) lfq_s[a, ] else lfq[a, ]), 3) else NULL,
              limpa = if (!is.null(lim)) round(lim$Q$E[a, ], 3) else NULL, se = if (!is.null(lim)) round(lim$Q$other$standard.error[a, ], 3) else NULL)
       }))
     }
@@ -71,7 +83,13 @@ review_rollup <- function(db_path) {
   status <- if (applied) sprintf("Applied: %s", method) else "Waiting for the analyst's decision"
   status_class <- if (applied) "done" else "waiting"
   dec <- read_decisions(run_dir, "08_rollup"); last_dec <- if (length(dec)) dec[[length(dec)]] else NULL
-  options_html <- '<ul class="options">
+  options_html <- if (pep) '<ul class="options">
+<li>Peptide output: each peptide (modified sequence and site localization) is rolled up from its precursors, i.e. its charge states.</li>
+<li><b>sum</b> - add the charge states. Dominated by the most intense one.</li>
+<li><b>limpa</b> - DPC-Quant (only after limpa in Impute, and then the only choice): every peptide in every sample is estimated from its measured
+charge states plus the detection curve for the missing ones, with a standard error that Stats uses as a precision weight. Its CVs can look higher
+than imputed data: imputation shrinks the spread artificially.</li>
+<li>Not offered for peptides: <b>iq_maxlfq</b> (it combines several peptides of a protein) and the app&apos;s median / mean / median_polish / topn.</li></ul>' else '<ul class="options">
 <li><b>iq_maxlfq</b> - MaxLFQ (iq package): protein value from the median of precursor ratios between samples. Robust to a precursor that is off
 in some samples. <b>maxlfq_scale</b> on: each protein is rescaled to the level of its summed intensity (does not change CVs or fold changes).</li>
 <li><b>sum</b> - add the precursor intensities. Dominated by the most intense precursors.</li>
@@ -85,7 +103,7 @@ background values to the detection curve; <code>use</code> counts them as measur
     if (applied) paste0('<div class="tiles">',
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">rollup_method</div></div>', esc(method)),
       sprintf('<div class="tile"><div class="v">%s</div><div class="l">maxlfq_scale</div></div>', if (scale) "on" else "off"),
-      if (!is.null(summ$tables)) paste(vapply(summ$tables, function(t) sprintf('<div class="tile"><div class="v">%s</div><div class="l">proteins (%s)</div></div>', fmt_n(t$proteins), esc(t$norm)), ""), collapse = "") else "",
+      if (!is.null(summ$tables)) paste(vapply(summ$tables, function(t) sprintf('<div class="tile"><div class="v">%s</div><div class="l">%s (%s)</div></div>', fmt_n(t$features %||% t$proteins), U, esc(t$norm)), ""), collapse = "") else "",
       '</div>', if (!is.null(last_dec)) sprintf('<p class="note">Recorded %s%s. %s</p>', esc(last_dec$time), if (!is.null(last_dec$analyst)) paste0(" by ", esc(last_dec$analyst)) else "", esc(last_dec$note %||% "")) else "",
       '<details><summary>Options</summary>', options_html, '</details>') else options_html,
     if (!applied) '<p class="note">Compare the methods below, then give the choice in the Claude session.</p>' else "",
@@ -97,36 +115,39 @@ background values to the detection curve; <code>use</code> counts them as measur
     rows <- lapply(summ$tables, function(t) {
       data.frame(Normalization = t$norm, Group = groups$Group,
                  `Mean CV (app)` = vapply(groups$Group, function(g) { r <- Filter(function(z) z$Group == g, scv)[[1]]; sprintf("%.1f%%", as.numeric(r[[t$norm]])) }, ""),
-                 `Median CV` = sprintf("%.1f%%", unlist(t$median_cv_by_group)), `Proteins CV < 20%` = sprintf("%.1f%%", unlist(t$proteins_cv_under_20_pct)), check.names = FALSE)
+                 `Median CV` = sprintf("%.1f%%", unlist(t$median_cv_by_group)), cv20 = sprintf("%.1f%%", unlist(t$features_cv_under_20_pct %||% t$proteins_cv_under_20_pct)), check.names = FALSE) |>
+        stats::setNames(c("Normalization", "Group", "Mean CV (app)", "Median CV", paste(Uc, "CV < 20%")))
     })
-    applied_html <- paste0('<section><h2>Result: protein CV by group</h2><p class="note">The app reports the mean CV, which a high-CV tail pulls up; the median is the typical protein. ',
+    applied_html <- paste0('<section><h2>Result: ', u, ' CV by group</h2><p class="note">The app reports the mean CV, which a high-CV tail pulls up; the median is the typical ', u, '. ',
       'The pooled QC (SPQC) should be lowest: it measures technical variation only.</p>', html_table(do.call(rbind, rows), 3:5), '</section>')
   }
 
-  ppp_html <- if (!is.null(ppp)) sprintf('<section><h2>Precursors per protein</h2><div class="tiles"><div class="tile"><div class="v">%s</div><div class="l">proteins</div></div>
+  ppp_html <- if (!is.null(ppp)) sprintf('<section><h2>Precursors per %s</h2><div class="tiles"><div class="tile"><div class="v">%s</div><div class="l">%s</div></div>
 <div class="tile"><div class="v">%s</div><div class="l">with 1 precursor (%s)</div></div><div class="tile"><div class="v">%s</div><div class="l">with 1 or 2 precursors (%s)</div></div></div>
-<p class="note">With one precursor, every method gives the same protein value; differences between methods come from proteins with several precursors.</p>
-<div id="pppplot" style="height:260px" role="img" aria-label="Number of proteins by precursor count"></div></section>',
-    fmt_n(ppp$proteins), fmt_n(ppp$n[1]), fmt_pct(ppp$n[1] / ppp$proteins * 100, 1), fmt_n(ppp$n[1] + ppp$n[2]), fmt_pct((ppp$n[1] + ppp$n[2]) / ppp$proteins * 100, 1)) else ""
+<p class="note">With one precursor, every method gives the same %s value; differences between methods come from %s with several precursors.%s</p>
+<div id="pppplot" style="height:260px" role="img" aria-label="Number of %s by precursor count"></div></section>',
+    u, fmt_n(ppp$proteins), U, fmt_n(ppp$n[1]), fmt_pct(ppp$n[1] / ppp$proteins * 100, 1), fmt_n(ppp$n[1] + ppp$n[2]), fmt_pct((ppp$n[1] + ppp$n[2]) / ppp$proteins * 100, 1), u, U,
+    if (pep) " A peptide&apos;s precursors are its charge states." else "", U) else ""
 
   limpa_html <- if (is_limpa && !is.null(summ$limpa)) paste0('<section><h2>limpa DPC-Quant</h2><div class="tiles">',
-    paste(vapply(summ$limpa, function(l) sprintf('<div class="tile"><div class="v">%s</div><div class="l">proteins (%s)</div></div><div class="tile"><div class="v">%s / %s</div><div class="l">standard error, median / 90th pct (log2)</div></div>%s',
-      fmt_n(l$proteins), esc(l$norm), l$se_median, l$se_q90, if (!identical(l$background %||% "none", "none")) sprintf('<div class="tile"><div class="v">%s</div><div class="l">background values (%s)</div></div>', esc(l$background), esc(l$norm)) else ""), ""), collapse = ""), '</div>',
-    '<p class="note">Every protein gets a value in every sample. The standard error grows where precursors are missing; Stats weights each value by it.</p></section>') else ""
-  comp_html <- paste0('<section><h2>Rollups compared: protein CV within each group</h2>',
-    '<p class="note">Calculated here from the precursor table (for limpa runs it has gaps: sum and iq_maxlfq use the measured values only). Each curve is the share of proteins with a CV at or below x. ',
+    paste(vapply(summ$limpa, function(l) sprintf('<div class="tile"><div class="v">%s</div><div class="l">%s (%s)</div></div><div class="tile"><div class="v">%s / %s</div><div class="l">standard error, median / 90th pct (log2)</div></div>%s',
+      fmt_n(l$features %||% l$proteins), U, esc(l$norm), l$se_median, l$se_q90, if (!identical(l$background %||% "none", "none")) sprintf('<div class="tile"><div class="v">%s</div><div class="l">background values (%s)</div></div>', esc(l$background), esc(l$norm)) else ""), ""), collapse = ""), '</div>',
+    '<p class="note">Every ', u, ' gets a value in every sample. The standard error grows where precursors are missing; Stats weights each value by it.</p></section>') else ""
+  comp_html <- paste0('<section><h2>Rollups compared: ', u, ' CV within each group</h2>',
+    '<p class="note">Calculated here from the precursor table (for limpa runs it has gaps: ', if (pep) "sum uses" else "sum and iq_maxlfq use", ' the measured values only). Each curve is the share of ', U, ' with a CV at or below x. ',
     'A curve further up and left means tighter replicates. Same CV formula as the app.</p>',
     if (length(comp) > 1) paste0('<div class="control"><label for="cnorm">Normalization</label><select id="cnorm">', paste0('<option>', esc(names(comp)), '</option>', collapse = ""), '</select></div>') else "",
     '<div class="grid3" id="cvgrid">', paste0('<div><div id="cv_', seq_along(gcols), '" style="height:300px" role="img" aria-label="CV curves group ', esc(groups$Group), '"></div></div>', collapse = ""), '</div>',
     '<details open><summary>Table view</summary><div id="cvtable"></div></details></section>')
 
-  expl_html <- if (!is.null(explorer)) sprintf('<section><h2>Protein explorer</h2>
-<p class="note">Grey lines: the protein&apos;s precursors (log2, %s). Coloured: the protein value from sum, iq_maxlfq%s and, for limpa runs, DPC-Quant with &plusmn; 2 standard errors. Proteins shown: spike-ins, the
-proteins with the most precursors, and a random set with 2 to 15 precursors.</p>
-<div class="control"><label for="prot">Protein</label><select id="prot">%s</select>
+  expl_html <- if (!is.null(explorer)) sprintf('<section><h2>%s explorer</h2>
+<p class="note">Grey lines: the %s&apos;s %s (log2, %s). Coloured: the %s value from %s and, for limpa runs, DPC-Quant with &plusmn; 2 standard errors. %s shown: spike-ins, the
+%s with the most precursors, and a random set with 2 to 15 precursors.</p>
+<div class="control"><label for="prot">%s</label><select id="prot">%s</select>
 <label for="pview">Show</label><select id="pview"><option value="rel">relative: each line centred on its mean</option><option value="abs">absolute log2</option></select></div>
-<div id="protplot" style="height:380px" role="img" aria-label="Precursor and protein values across samples"></div></section>',
-    esc(explorer$norm), if (scale) " (scaled to the sum level)" else "",
+<div id="protplot" style="height:380px" role="img" aria-label="Precursor and rolled-up values across samples"></div></section>',
+    uc, u, if (pep) "charge states" else "precursors", esc(explorer$norm), u,
+    if (pep) "sum" else paste0("sum, iq_maxlfq", if (scale) " (scaled to the sum level)" else ""), Uc, U, uc,
     paste0('<option value="', seq_along(explorer$proteins) - 1, '">', vapply(explorer$proteins, function(z) esc(z$label), ""), '</option>', collapse = "")) else ""
 
   qc <- p$qc_path
@@ -147,7 +168,7 @@ proteins with the most precursors, and a random set with 2 to 15 precursors.</p>
       app_png_panel(c(file.path(qc, "CV_barplot.png"), file.path(qc, paste0("protein_", norms, "_barplot.png")))), '</section>')
   }
 
-  js_data <- list(groups = groups$Group, samples = labels, comp = comp, ppp = ppp, explorer = explorer, method = method)
+  js_data <- list(groups = groups$Group, samples = labels, comp = comp, ppp = ppp, explorer = explorer, method = method, U = U)
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA), ';', ROLLUP_JS, '</script>')
   extra_css <- '<style>.viz-root { } .grid3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
 .control select { font:inherit; font-size:13px; max-width:560px; }</style>'
@@ -167,9 +188,9 @@ function drawCV() {
   const sel = document.getElementById("cnorm"), n = sel ? sel.value : Object.keys(D.comp)[0], c = D.comp[n];
   D.groups.forEach((g, i) => {
     const tr = c.methods.map(m => ({ type: "scatter", mode: "lines", name: m + (m === D.method ? " (current setting)" : ""), x: c[m][i].x, y: c[m][i].y,
-      line: { width: 2, color: C(MC[m]), dash: m === "sum" ? "dot" : m === "limpa" ? "dash" : "solid" }, hovertemplate: m + ": %{y:.1f}% of proteins with CV ≤ %{x}%<extra></extra>" }));
+      line: { width: 2, color: C(MC[m]), dash: m === "sum" ? "dot" : m === "limpa" ? "dash" : "solid" }, hovertemplate: m + ": %{y:.1f}% of " + D.U + " with CV ≤ %{x}%<extra></extra>" }));
     Plotly.react("cv_" + (i + 1), tr, Object.assign(base(), { title: { text: g, font: { size: 14, color: C("--text-primary") } }, margin: { l: 55, r: 10, t: 36, b: 45 },
-      showlegend: i === 0, legend: { x: 0.45, y: 0.1 }, xaxis: Object.assign(ax("protein CV %"), { range: [0, 60] }), yaxis: Object.assign(ax("% of proteins"), { range: [0, 100] }) }), { displayModeBar: false, responsive: true });
+      showlegend: i === 0, legend: { x: 0.45, y: 0.1 }, xaxis: Object.assign(ax(D.U.slice(0, -1) + " CV %"), { range: [0, 60] }), yaxis: Object.assign(ax("% of " + D.U), { range: [0, 100] }) }), { displayModeBar: false, responsive: true });
   });
   const M = c.methods, hd = k => M.map(m => `<th class=num>${k} ${m}</th>`).join("");
   document.getElementById("cvtable").innerHTML = "<table><thead><tr><th>Group</th>" + hd("median CV") + hd("mean CV") + hd("CV &lt; 20%") + "</tr></thead><tbody>" +
@@ -177,8 +198,8 @@ function drawCV() {
 }
 const cn = document.getElementById("cnorm"); if (cn) cn.addEventListener("change", drawCV); drawCV();
 if (D.ppp) Plotly.newPlot("pppplot", [{ type: "bar", x: D.ppp.k.map(k => k === 20 ? "20+" : String(k)), y: D.ppp.n, marker: { color: C("--series-1") },
-  hovertemplate: "%{x} precursors: %{y:,} proteins<extra></extra>" }], Object.assign(base(), { margin: { l: 60, r: 10, t: 10, b: 45 }, bargap: 0.2,
-  xaxis: { title: "precursors per protein", type: "category" }, yaxis: Object.assign(ax("proteins"), { rangemode: "tozero" }) }), cfg);
+  hovertemplate: "%{x} precursors: %{y:,} " + D.U + "<extra></extra>" }], Object.assign(base(), { margin: { l: 60, r: 10, t: 10, b: 45 }, bargap: 0.2,
+  xaxis: { title: "precursors per " + D.U.slice(0, -1), type: "category" }, yaxis: Object.assign(ax(D.U), { rangemode: "tozero" }) }), cfg);
 if (D.explorer) {
   const ps = document.getElementById("prot");
   function drawP() {
@@ -188,7 +209,7 @@ if (D.explorer) {
       name: "precursors", legendgroup: "p", showlegend: j === 0, hovertemplate: "precursor " + (j + 1) + "<br>%{x}: %{y:.2f}<extra></extra>" }));
     tr.push({ type: "scatter", mode: "lines+markers", name: "sum", x: D.samples, y: ctr(z.sum), line: { width: 2, color: C("--series-1"), dash: "dot" },
       marker: { size: 8, color: C("--series-1") }, hovertemplate: "sum %{x}: %{y:.2f}<extra></extra>" });
-    tr.push({ type: "scatter", mode: "lines+markers", name: "iq_maxlfq", x: D.samples, y: ctr(z.lfq), line: { width: 2, color: C("--series-2") },
+    if (Array.isArray(z.lfq) && z.lfq.length) tr.push({ type: "scatter", mode: "lines+markers", name: "iq_maxlfq", x: D.samples, y: ctr(z.lfq), line: { width: 2, color: C("--series-2") },
       marker: { size: 8, color: C("--series-2") }, hovertemplate: "iq_maxlfq %{x}: %{y:.2f}<extra></extra>" });
     if (Array.isArray(z.limpa) && z.limpa.length) { const lo = z.limpa.map((v, j) => v - 2 * z.se[j]), hi = z.limpa.map((v, j) => v + 2 * z.se[j]);
       tr.push({ type: "scatter", mode: "lines+markers", name: "limpa (± 2 SE)", x: D.samples, y: ctr(z.limpa), line: { width: 2, color: C("--series-3"), dash: "dash" },

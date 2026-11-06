@@ -11,12 +11,17 @@
 # precursor_quality_sd cutoff keeps its meaning. Same limits as the app: proteins with 3+ precursors, values below
 # precursor_quality_min ignored, precursors with mean intensity >= precursor_quality_intensity and 3+ values are tested. Worst first,
 # and a protein always keeps at least 2 precursors.
+#
+# Peptide output (phospho / PTM): the unit is the peptide (feature_key: modified sequence + localization), not the protein. Different
+# phosphopeptides of one protein change independently (that is the biology), so grouping them by protein would remove real site changes.
+# Here a peptide's precursors are its charge states, which must agree; only peptides with 3+ charge states can be tested.
+# (The app's precursor_quality() is a no-op for Peptide output: it only sets an error message.)
 
-pq_profile <- function(f, n_s, cv_cut = 50, int_min = 500, val_min = 300) {
+pq_profile <- function(f, n_s, cv_cut = 50, int_min = 500, val_min = 300, unit = f$Accession) {
   X <- as.matrix(f[(ncol(f) - n_s + 1):ncol(f)]); X[!is.finite(X) | X < val_min] <- NA
   L <- log2(X); avg <- rowMeans(X, na.rm = TRUE); nval <- rowSums(!is.na(X))
   cv <- rep(NA_real_, nrow(f)); bad <- rep(FALSE, nrow(f))
-  for (i in split(seq_len(nrow(f)), f$Accession)) {
+  for (i in split(seq_len(nrow(f)), unit)) {
     i <- i[nval[i] > 0]; if (length(i) < 3) next
     M <- L[i, , drop = FALSE]
     mp <- suppressWarnings(stats::medpolish(M, na.rm = TRUE, trace.iter = FALSE, maxiter = 20))   # non-convergence warnings: residuals still usable
@@ -35,9 +40,10 @@ pq_profile <- function(f, n_s, cv_cut = 50, int_min = 500, val_min = 300) {
 pq_profile_apply <- function(db_path, p) {
   n_s <- as.integer(p$sample_number)
   f <- read_table("precursor_filter", db_path); info <- ncol(f) - n_s
-  r <- pq_profile(f, n_s, as.numeric(p$precursor_quality_sd), as.numeric(p$precursor_quality_intensity), as.numeric(p$precursor_quality_min))
+  r <- pq_profile(f, n_s, as.numeric(p$precursor_quality_sd), as.numeric(p$precursor_quality_intensity), as.numeric(p$precursor_quality_min),
+                  unit = feature_key(f, p))   # protein accession, or the peptide for Peptide output
   kept <- f[!r$bad, , drop = FALSE]
-  out <- list(stage = "precursor_quality", method = "profile",
+  out <- list(stage = "precursor_quality", method = "profile", unit = if (is_peptide_output(p)) "peptide" else "protein",
               proteins_removed = length(unique(f$Accession)) - length(unique(kept$Accession)),
               peptides_removed = length(unique(f$Sequence)) - length(unique(kept$Sequence)),
               precursors_removed = sum(r$bad), precursors_tested = r$tested)

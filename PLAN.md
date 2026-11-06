@@ -311,6 +311,19 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   - Reading: the fix removes the species bias; at 50% a small gain (fewer false calls), like the misaligned filter. Not yet tested on a
     background export or a dataset where nothing changes. Defaults unchanged (precursor_quality off, method app) pending the user.
 
+## Peptide output wording and quality filter (2026-11-06)
+- Phospho / PTM runs (Peptide output) are per peptide: precursors (charge states) roll up to peptides, Stats tests peptides. Pages
+  said "protein" for those rows. `feat(p)` (common.R) gives the word; Impute, Impute comparison, Rollup, Stats pages and the Rollup /
+  Stats forms use it. Rollup page in Peptide output: peptide CV, precursors per peptide, a peptide explorer (charge states + sum /
+  DPC-Quant; the comparison now includes limpa for peptides), only sum / limpa offered. 07b rolls up per peptide (`feature_key`).
+- Summaries: 08 `tables[]` and `limpa` add `level`, `features`, `total_cv_pct`, `features_cv_under_20_pct` (`proteins` = protein
+  accessions for Peptide output; old names kept); 10 `comparisons[]` adds `features` (rows tested after the missing factor).
+- Precursor quality filter in Peptide output groups by peptide (charge states), not protein: phosphopeptides of one protein change
+  independently. 11517: by protein it would remove 14,644 precursors (10%); by peptide it tests 3,439 and removes 51. The app's method
+  is a no-op for peptides, so Step 5 refuses `precursor_quality_method=app` there.
+- Tested: test run zz_pep_11517 (11517 raw export, Load to Stats, limpa, profile quality filter) and Rollup + Stats re-applied on
+  zz_pq_off (protein output, fields unchanged in value); pages rebuilt on the live runs 11517_110526 and 10658_110426 (HTML only).
+
 ## Live run 10658_110426 (triple-spike background export, complete 2026-11-04)
 - Load accept; Parameters accept; Noise none; Filter as shown (294,715 precursors / 15,114 proteins; 311,693 background values back);
   Normalize SL, human only; Impute perseus (81,509 empty values); Rollup iq_maxlfq scaled; QC accept, no spikes (the 11488 ADH/casein

@@ -39,8 +39,8 @@ X <- as.matrix(filt[, (info + 1):ncol(filt)]); X[!is.na(X) & X <= 0] <- NA; coln
 nd <- read_table("precursor_normdata", db_path); ND <- as.matrix(nd[, (ncol(nd) - n_s + 1):ncol(nd)])
 sl <- mean(colSums(ND, na.rm = TRUE)) / colSums(ND, na.rm = TRUE)
 L <- log2(sweep(X, 2, sl, "*"))
-prot <- filt$Accession
-cat(sprintf("Start: %d precursors, %d proteins, %d gaps (%.1f%%); SL factors from measured values\n", nrow(L), length(unique(prot)), sum(is.na(L)), 100 * mean(is.na(L))))
+prot <- feature_key(filt, p)   # protein accession, or the peptide for Peptide output (phospho): MaxLFQ / DPC-Quant roll up to that unit
+cat(sprintf("Start: %d precursors, %d %s, %d gaps (%.1f%%); SL factors from measured values\n", nrow(L), length(unique(prot)), feat(p), sum(is.na(L)), 100 * mean(is.na(L))))
 
 # --- helpers ---
 lfq <- function(M) {
@@ -145,7 +145,7 @@ for (m in methods) {
 
 labels_m <- c(sapply(IMPUTE_METHODS, `[[`, "label"), background = "Spectronaut background (+ Perseus for empty gaps)",
               none = "no imputation (MaxLFQ with gaps)", limpa = "limpa DPC-Quant (no imputation)")
-out <- list(step = "07b_impute_compare", db_path = db_path, comparison = paste0(compN, "_v_", compD), pool = pool,
+out <- list(step = "07b_impute_compare", db_path = db_path, level = if (is_peptide_output(p)) "peptide" else "protein", comparison = paste0(compN, "_v_", compD), pool = pool,
             start = list(precursors = nrow(L), proteins = length(unique(prot)), gaps = sum(is.na(L))),
             masking = list(hidden = sum(mask), complete_precursors = length(complete), model = as.list(round(coef(gm), 3))),
             methods = lapply(setNames(methods, methods), function(m) c(list(label = unname(labels_m[m])), res[[m]], masked = list(masked[[m]]))),

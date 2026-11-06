@@ -78,4 +78,5 @@ Rscript pipeline/compare.R --run=<db> --ref=<shiny>.db \
 ```
 
 ## Next
-Step 8 — Rollup. For Peptide output, the app runs rollup and QC automatically after imputation; the pipeline doesn't do that yet.
+Step 8 — Rollup (precursors to proteins; to peptides for Peptide output, e.g. phospho). For Peptide output the page says "peptide" where
+it means the rolled-up unit, and limpa estimates each peptide from its charge states.
