@@ -15,10 +15,17 @@ only apply settings the user has approved.
 | `filter_x_percent` / `filter_x_percent_value` (measured in ≥ X% of a group) | TRUE / 50 | TRUE / 50 |
 | `filter_cv` / `filter_cv_group` / `filter_cv_value` | FALSE / SPQC / 99 | off |
 | `filter_ptm` (keep only `ptm_grep` sequences) | FALSE | off |
-| `checkbox_misaligned` / `misaligned_cutoff` / `misaligned_target` (group, dataset) | FALSE / 50 / dataset | **TRUE / 51 / dataset** |
+| `checkbox_misaligned` / `misaligned_cutoff` / `misaligned_target` (group, dataset) | FALSE / 50 / dataset (**pipeline default: TRUE / 50 / dataset**) | **TRUE / 51 / dataset** |
 | `intensity_cutoff_sd` (misaligned cutoff = mean + this × SD) | 0.5 | 0.5 |
 | `precursor_quality` / `_sd` / `_intensity` / `_min` | FALSE / 50 / 500 / 300 | **TRUE** / 50 / 500 / 300 |
 | `precursor_spqc_ratio` / `_accuracy` / `_intensity` | FALSE / 50 / 500 | **TRUE** / 50 / 500 |
+
+**Misaligned filter (user decision 2026-11-06):** on by default with `misaligned_target=dataset`. It flags a precursor when a group is
+more than 50% missing (not 100%) and the values it has are above the intensity cutoff, then removes that precursor. On the triple-spike it
+flagged 0.19% of precursors, mostly wrong lone values, and gave slightly more true and fewer false calls (PLAN.md). `target=group` blanks the
+flagged group instead; imputation then treats that group as low/absent and it added false calls, so **limpa is refused after target=group**
+(Step 7 stops) and the other imputations warn. Recommend dataset; only use group if the analyst asks. Groups of 2 are never flagged
+(1 of 2 missing is exactly 50%); when nothing is flagged, the pipeline skips the filter for that run and says so.
 
 To reuse a previous run's settings: `--settings_from=<that run's .db>`. Explicit `--name=value` args override it.
 
@@ -61,7 +68,7 @@ Then ask the user to accept, or change settings and re-run.
 - The "reapply minimum" stage doesn't reapply the % per group filter (result of `filter_min_group()` isn't assigned). It always removes 0 for that part.
 - `meta_*_filter` params are taken after precursor quality, before SPQC ratio and duplicate removal.
 - With `checkbox_misaligned=TRUE` and `misaligned_target=dataset`, **zero misaligned rows would delete all rows** in the app.
-  The pipeline stops before this happens.
+  The pipeline turns the misaligned filter off for that run instead (NOTE in the output and on the page).
 - The SPQC ratio filter has the same flaw (`df[-bad_final,]` with no failing rows deletes every row). The pipeline stops if the
   filter leaves 0 precursors. The SPQC ratio explorer shows whether the setting would remove anything.
 

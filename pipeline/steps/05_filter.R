@@ -36,7 +36,7 @@ if (!table_exists("precursor_noise", db_path)) stop("Run Step 4 (Noise) first: p
 spec <- list(
   filter_min_measured_all = 2, filter_x_percent = TRUE, filter_x_percent_value = 50,
   filter_cv = FALSE, filter_cv_group = "SPQC", filter_cv_value = 99, filter_ptm = FALSE,
-  checkbox_misaligned = FALSE, misaligned_cutoff = 50, misaligned_target = "dataset", intensity_cutoff_sd = 0.5,
+  checkbox_misaligned = TRUE, misaligned_cutoff = 50, misaligned_target = "dataset", intensity_cutoff_sd = 0.5,
   precursor_quality = FALSE, precursor_quality_sd = 50, precursor_quality_intensity = 500, precursor_quality_min = 300,
   precursor_spqc_ratio = FALSE, precursor_spqc_intensity = 500, precursor_spqc_accuracy = 50
 )
@@ -60,6 +60,21 @@ cutoff_info <- list(intensity_cutoff = p$intensity_cutoff, intensity_cutoff_log2
                     total_na_by_group = setNames(as.list(as.numeric(strsplit(p$total_na, ",\\s*")[[1]])), groups$Group),
                     total_misaligned_by_group = setNames(as.list(as.numeric(strsplit(p$total_misaligned, ",\\s*")[[1]])), groups$Group))
 
+# Misaligned filter checks. On by default (target=dataset, user decision 2026-11-06, triple-spike test in PLAN.md).
+# - No flagged rows with target=dataset: the app would drop ALL rows (df[-integer(0),]), so skip the filter for this run.
+# - target=group blanks the flagged group; limpa (and any left-censored imputation) then treats that group as low/absent,
+#   which added false calls in the test. Step 7 refuses limpa after it.
+mis_notes <- character(0)
+if (settings$checkbox_misaligned && settings$misaligned_target == "dataset" && sum(unlist(cutoff_info$total_misaligned_by_group)) == 0) {
+  settings$checkbox_misaligned <- FALSE; p <- get_params(db_path); p$checkbox_misaligned <- FALSE; invisible(write_params(p, db_path))
+  mis_notes <- c(mis_notes, "Misaligned filter: no precursor is flagged (e.g. groups of 2 can never be flagged), so it is skipped for this run.")
+}
+if (settings$checkbox_misaligned && settings$misaligned_target == "group")
+  mis_notes <- c(mis_notes, paste("Misaligned target=group blanks the flagged group; imputation then treats it as low/absent, which can create false",
+    "fold changes. limpa (Step 7) is not available after target=group; target=dataset is recommended."))
+for (m in mis_notes) cat("NOTE:", m, "\n")
+cutoff_info$misaligned_notes <- as.list(mis_notes)
+
 if (args$action == "preview") {
   summary <- list(step = "05_filter", action = "preview", db_path = db_path, settings = settings,
                   cutoff = cutoff_info, plots = existing_plots(qc_path, "Precursor_NoiseFiltered_Histogram.png"),
@@ -74,8 +89,6 @@ if (args$action == "preview") {
 
 # --- apply -------------------------------------------------------------------
 if (!identical(args$decided_by, "user")) stop("Apply needs the analyst's approval: run --action=preview, show the review page, then pass --decided_by=user.")
-if (settings$checkbox_misaligned && settings$misaligned_target == "dataset" && sum(unlist(cutoff_info$total_misaligned_by_group)) == 0)
-  stop("No misaligned rows expected; the app's filter would drop ALL rows in this case (df[-integer(0),]). Turn the misaligned filter off or use target=group.")
 
 err_alert <- run_bg(filter_data_bg, list("precursor_noise", "precursor_filter", db_path), "filter", db_path)
 if (nrow(read_table("precursor_filter", db_path)) == 0)

@@ -45,6 +45,16 @@ NO_IMPUTE <- "limpa"
 if (!settings$impute_type %in% c(APP_METHODS, PIPE_METHODS, NO_IMPUTE))
   stop("--impute_type must be one of: ", paste(c(APP_METHODS, PIPE_METHODS, NO_IMPUTE), collapse = ", "))
 
+# Misaligned filter with target=group blanks the flagged group (Step 5). limpa reads an all-missing group as low/absent, so a
+# precursor that is really there gets a false fold change (more false calls in the triple-spike test, PLAN.md). Not allowed with limpa;
+# the left-censored methods have the same problem, so they get a warning.
+mis_group <- as_flag(get_param("checkbox_misaligned", db_path) %||% FALSE) && identical(get_param("misaligned_target", db_path), "group")
+if (mis_group && settings$impute_type == "limpa")
+  stop("limpa is not available after the misaligned filter with target=group (Step 5): the blanked groups would be treated as low/absent. ",
+       "Re-run Step 5 with --misaligned_target=dataset (recommended) or --checkbox_misaligned=FALSE, then Normalize again.")
+if (mis_group) message("WARNING: the misaligned filter used target=group (Step 5). ", settings$impute_type,
+                       " will impute the blanked groups as low values, which can create false fold changes. target=dataset is recommended.")
+
 p <- get_params(db_path)
 for (k in names(settings)) p[[k]] <- settings[[k]]
 invisible(write_params(p, db_path))

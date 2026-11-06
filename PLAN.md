@@ -267,7 +267,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - Exports without `EG.ApexRT`: 11485, 11517, 11531, 11538 (11531 and 11538 also lack run-wise `EG.Qvalue`). Asked the user to add both to the report schema.
 
 ## Misaligned filter test (2026-11-06, triple-spike raw export)
-- Runs zz_misal_off / _dataset / _group: same settings (Noise none, Filter defaults, sltmm human subset, limpa Impute + Rollup, dpcDE,
+- Runs zz_misal_off / _dataset / _group (deleted after the test): same settings (Noise none, Filter defaults, sltmm human subset, limpa Impute + Rollup, dpcDE,
   6 comparisons); only the misaligned filter differs (cutoff 50%, intensity mean + 0.5 SD = 1,674). Off reproduces the earlier baseline exactly.
 - Flags 664 group-rows in 565 precursors (0.19%); dataset target removes them (3 one-precursor human proteins lost, one is trypsin);
   group target blanks the group. Read-only check on 10658_110426: flagged human lone values sit +0.87 log2 (median) above the row's
@@ -278,6 +278,8 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - Reading: dataset target is a small, consistent gain (more true calls, slightly fewer false); group target adds false calls (blanking the
   group makes limpa treat it as low). App detail: the step-5 re-apply of the X%-per-group rule is not assigned (`filter_min_group(df, ...)`
   without `df <-`, Shiny_Filter.R), so groups the misaligned filter blanks are not re-checked.
+- Decision (user, 2026-11-06): misaligned filter on by default, target=dataset. Step 7 refuses limpa after target=group (other imputations
+  warn). With nothing flagged (e.g. groups of 2), the filter is skipped for that run instead of the app dropping every row.
 
 ## Live run 10658_110426 (triple-spike background export, complete 2026-11-04)
 - Load accept; Parameters accept; Noise none; Filter as shown (294,715 precursors / 15,114 proteins; 311,693 background values back);

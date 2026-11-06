@@ -91,7 +91,7 @@ review_filter <- function(db_path) {
     c("Misaligned", onoff("checkbox_misaligned"),
       sprintf("missing > <b>%s%%</b> in a group, group mean &ge; mean + <b>%s</b> SD (%s); target <b>%s</b>", esc(getp("misaligned_cutoff")),
               esc(getp("intensity_cutoff_sd")), fmt_n(p$intensity_cutoff), esc(getp("misaligned_target"))),
-      "A precursor that is high where measured but missing in much of a group is likely misaligned. target=dataset removes the precursor; target=group blanks that group."),
+      "A precursor that is high where measured but missing in much of a group is likely misaligned. target=dataset (default) removes the precursor; target=group blanks that group, and limpa is then not available (blanked groups read as low)."),
     c("CV of one group", onoff("filter_cv"), sprintf("group <b>%s</b>, CV &lt; <b>%s%%</b>", esc(getp("filter_cv_group")), esc(getp("filter_cv_value"))),
       "Removes precursors that vary too much within the chosen group (usually SPQC)."),
     c("Precursor quality", onoff("precursor_quality"),
@@ -109,6 +109,7 @@ review_filter <- function(db_path) {
   dec <- read_decisions(run_dir, "05_filter"); last_dec <- if (length(dec)) dec[[length(dec)]] else NULL
   decision_html <- paste0('<section><h2>', if (applied) "Settings applied" else "Decision needed: approve these settings", '</h2>',
     html_table(set_df),
+    { mn <- unlist(summ$cutoff$misaligned_notes); if (length(mn)) paste0('<p class="missing">', paste(esc(mn), collapse = "<br/>"), '</p>') else "" },
     if (applied && !is.null(last_dec)) sprintf('<p class="note">Recorded %s%s. %s</p>', esc(last_dec$time),
        if (!is.null(last_dec$analyst)) paste0(" by ", esc(last_dec$analyst)) else "", esc(last_dec$note %||% "")) else "",
     if (!applied) '<p class="note">Use the explorers below to see what each filter would remove at other settings, then approve or change the settings in the Claude session.</p>' else "",
