@@ -11,6 +11,9 @@ PORT="${DPDP_WEB_PORT:-8770}"
 IP="${DPDP_WEB_IP:-$(hostname -I | awk '{print $1}')}"
 OWNER="${SUDO_USER:-root}"
 getent group "$GROUP" >/dev/null || { echo "Group $GROUP not found"; exit 1; }
+if ss -ltn | grep -q "127.0.0.1:$PORT " && ! systemctl is-active -q dpdp-web; then
+  echo "Port $PORT is in use by something else (a --dev test server?). Stop it first."; exit 1
+fi
 echo "== DPDP web app: $SRV, https://$IP/dpdp/, group $GROUP"
 
 # 1. Python environment (aiohttp + python-pam)
