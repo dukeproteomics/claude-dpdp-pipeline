@@ -6,18 +6,33 @@ The shiny_DPDP app's nav-menu steps as Claude Code skills and R scripts. Claude 
 
 ## Requirements
 - R with the shiny_DPDP packages. Run plain `Rscript`, never `--vanilla`.
-- A clone of the shiny_DPDP app. Set `DPDP_APP` to its path (default `/home/user/Claude_Shiny/shiny_DPDP`).
-- `DPDP_DATA`: where run folders are written (default `/home/user/Claude_Shiny/data`). Data never leaves this folder.
+- A clone of the shiny_DPDP app (`git clone https://github.com/dukeproteomics/shiny_DPDP`).
+- Two environment variables, set before starting Claude Code (e.g. in `~/.bashrc`):
+  - `DPDP_APP`: path to the shiny_DPDP clone.
+  - `DPDP_DATA`: where run folders are written. Data never leaves this folder.
+
+  The defaults (`/home/user/Claude_Shiny/shiny_DPDP` and `/home/user/Claude_Shiny/data`) only fit the machine the plugin was built on.
 - python3 (for the decision hook) and a web browser for the review pages.
 
 R packages: `renv/renv.lock` (363 packages, R 4.6.1, Bioconductor 3.23); see `renv/README.md` to set up a new machine.
 
 ## Install
 ```bash
-claude plugin marketplace add <path or git URL of the dpdp-marketplace folder>
+claude plugin marketplace add <path of the dpdp-marketplace folder>
 claude plugin install dpdp@dpdp-marketplace
 ```
-Then, in Claude Code: "process project <name> from <report.tsv> and <samples.xlsx>" (skill `dpdp-run`).
+Update to a new version: `claude plugin marketplace update dpdp-marketplace`, then `claude plugin update dpdp@dpdp-marketplace`,
+then restart Claude Code.
+
+## Use
+Start Claude Code in any folder and ask, e.g. "process project 11540 from <report.tsv> and <samples.xlsx>" (skill `dpdp-run`).
+Claude runs one step at a time: Load, Parameters, Noise, Filter, Normalize, Impute, Rollup, QC, Stats. After each step it opens the
+review page (served on localhost:8765). Choose there and click **Send to Claude**, or answer in the chat. Nothing is applied
+without your answer.
+
+## Input and output
+- Input: Spectronaut precursor report (`.tsv`) and the sample description Excel file.
+- Output level: **Protein**, or **Peptide** for phospho / PTM sets (precursors roll up to peptides, Stats tests peptides).
 
 ## What's included
 - `skills/`: `dpdp-run` (start to end) and one skill per step: load, parameters, noise, filter, normalize, impute, rollup, qc, stats.
@@ -27,4 +42,5 @@ Then, in Claude Code: "process project <name> from <report.tsv> and <samples.xls
   answered since the last one. One decision per answer.
 
 ## Not built yet
-TIC (needs raw files), Pathway, Phos, Report; other input types (protein, peptide, phospho, Proteome Discoverer). Cluster runs.
+Steps: TIC (needs raw files), Pathway, Phos, Report. Inputs: Proteome Discoverer, FragPipe, protein- or peptide-level exports.
+TMT and multi-batch sets. Cluster runs.
