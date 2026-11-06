@@ -474,7 +474,18 @@ def make_app(cfg):
                 x.clients.discard(ws)
         return ws
 
+    async def on_shutdown(app):   # quick restart: tell open tabs, end the sessions (Claude continues the conversation on restart)
+        for t in list(T.by_user.values()):
+            for ws in list(t.clients):
+                try:
+                    await ws.send_bytes(b"\r\n\x1b[33m[The DPDP web app is restarting. This page reconnects by itself and Claude continues the conversation.]\x1b[0m\r\n")
+                    await ws.close()
+                except Exception:
+                    pass
+            t.stop()
+
     app = web.Application(middlewares=[https_only], client_max_size=1 << 20)
+    app.on_shutdown.append(on_shutdown)
     app.add_routes(routes)
     app["auth"] = A
     return app
@@ -487,7 +498,7 @@ def main():
         print("DEV login link (this account only, valid while the server runs):\n  http://127.0.0.1:%d%s/dev-login?t=%s"
               % (cfg["port"], cfg["base"], app["auth"].dev_token), flush=True)
     log("DPDP web app on %s:%d%s/  data %s  group %s" % (cfg["host"], cfg["port"], cfg["base"], cfg["data"], cfg["group"]))
-    web.run_app(app, host=cfg["host"], port=cfg["port"], print=None, access_log=None)
+    web.run_app(app, host=cfg["host"], port=cfg["port"], print=None, access_log=None, shutdown_timeout=5)
 
 
 if __name__ == "__main__":
