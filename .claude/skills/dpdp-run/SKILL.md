@@ -12,6 +12,10 @@ second `--decided_by=user` command if the analyst has not answered in between.
 
 ## In-page decisions (default)
 The analyst can decide **on the review page** (radio buttons, fields, a note, and **Send to Claude**) or in the chat. Both work.
+**Web app sessions (`DPDP_WEB=1` in the environment):** skip steps 1 and 2. The DPDP web app serves the pages and opens each new
+one in its left panel by itself; say "the <step> page is ready on the left". Runs go in `$DPDP_DATA`, uploads are in
+`$DPDP_DATA/input/<name>/`. Steps 3 to 6 are the same.
+
 1. Once per session, start the server in the background: `python3 pipeline/review_server.py` (http://127.0.0.1:8765, localhost only).
 2. Open each page through it: `xdg-open http://127.0.0.1:8765/<prefix>/review/<step>.html`. Opened as a file, the buttons are disabled.
 3. Start the wait in the background: `python3 pipeline/wait_decision.py --run=<run_dir> --step=<step>`. Then tell the analyst

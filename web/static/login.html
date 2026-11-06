@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DPDP pipeline: log in</title>
+<link rel="stylesheet" href="__BASE__/static/app.css">
+</head>
+<body class="login-body">
+<form class="login" method="post" action="__BASE__/login">
+  <h1>DPDP pipeline</h1>
+  <p class="sub">Duke Proteomics data processing, with Claude</p>
+  <label>Username <input name="username" autocomplete="username" autofocus required></label>
+  <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+  <button type="submit">Log in</button>
+  <p class="err">__MSG__</p>
+  <p class="hint">Same username and password as RStudio on this server.</p>
+</form>
+</body></html>

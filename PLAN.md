@@ -119,6 +119,21 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   `tools/renv/README.md` (restore steps, Ubuntu system libraries). Copied into the plugin as `renv/`. Partial restore tested.
   Not locked: rmotifx, PTMphinder (Phos only, not installed).
 
+## Web app for other users (decided 2026-11-06)
+- Users won't SSH; they have the Shiny/RStudio bookmark. The user wants an app-like page, not RStudio.
+- No central API key (Duke has no contact for it), and Remote Control is off by Duke's policy (tested: "disabled by your
+  organization's policy"). So: **official Claude Code in a browser terminal**, each user on their own Linux account and own
+  Duke Claude login. That is the same as RStudio's Terminal tab, so it is allowed; an Agent SDK app with claude.ai logins is not.
+- Built `web/`: `server.py` (aiohttp; PAM login, group `rstudio-users`; one PTY per user running `session_start.sh` as that user;
+  review pages + decisions in the review-server format; upload to `<data>/input/<name>/`), `static/` (page, xterm.js 6),
+  `install.sh` (sudo: `/srv/dpdp/{data,web,dpdp-marketplace,shiny_DPDP,venv}`, PAM file, self-signed cert, Apache `/dpdp/`
+  on 80->443, systemd `dpdp-web`). User choices: shared run folder, upload in the page, HTTPS self-signed.
+- Review pages now call the API relative to the page (`API` in `review.R`), so they work under the review server and the web
+  app; the web app also rewrites old pages. In the web app the analyst is the logged-in user (the page field is read-only).
+- Tested in `--dev` mode (as user, one-time login link): login/401, runs list, pages with token, status, decision file (analyst
+  from the login, not the body), upload (names cleaned), path traversal 404, bad websocket origin 403, terminal runs Claude
+  Code (trust prompt shown), reattach, Restart Claude. Not tested yet: `install.sh` (needs sudo), PAM password login, Apache.
+
 ## Spectronaut imputation path (discussion 2026-11-04, next major piece of work)
 - The lab finds Spectronaut's imputation gives better data quality than the app's duke/bottom-X. Plan: use Spectronaut's filled
   values (not replicate them) and track which values were measured vs filled.

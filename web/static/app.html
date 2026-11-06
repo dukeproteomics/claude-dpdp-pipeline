@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DPDP pipeline</title>
+<meta name="dpdp-base" content="__BASE__"><meta name="dpdp-csrf" content="__CSRF__"><meta name="dpdp-user" content="__USER__">
+<link rel="stylesheet" href="__BASE__/static/xterm.css">
+<link rel="stylesheet" href="__BASE__/static/app.css">
+</head>
+<body>
+<header>
+  <span class="brand">DPDP pipeline</span>
+  <label class="runsel">Run <select id="run"></select></label>
+  <label class="follow" title="Show each new review page as Claude builds it"><input type="checkbox" id="follow" checked> Follow Claude</label>
+  <button id="newproj" type="button">New project</button>
+  <span class="spacer"></span>
+  <span class="who">__NAME__ (__USER__)</span>
+  <button id="logout" type="button" class="quiet">Log out</button>
+</header>
+<main>
+  <section id="left">
+    <nav id="steps"></nav>
+    <div id="pending" hidden>A decision is waiting for Claude.</div>
+    <iframe id="page" title="Review page"></iframe>
+    <div id="empty"><h2>No review page yet</h2>
+      <p>Start with <b>New project</b> to upload a Spectronaut report and sample sheet, or pick a run above.</p>
+      <p>Claude builds a review page at each step; it opens here, and you decide on the page or in the chat.</p></div>
+  </section>
+  <div id="split" title="Drag to resize"></div>
+  <section id="right">
+    <div class="termbar"><span>Claude Code (your own Claude account)</span><span class="spacer"></span>
+      <span id="tstat">connecting...</span>
+      <button id="restart" type="button" class="quiet" title="End this Claude session and start a new one">Restart Claude</button></div>
+    <div id="term"></div>
+  </section>
+</main>
+
+<dialog id="upload">
+  <form id="upform" method="dialog">
+    <h2>New project</h2>
+    <label>Project name <input id="upname" required pattern="[A-Za-z0-9_.\-]+" placeholder="e.g. 11540_Liver"></label>
+    <label>Spectronaut report (.tsv) <input id="uprep" type="file" accept=".tsv,.txt,.csv,.zip" required></label>
+    <label>Sample sheet (.xlsx) <input id="upss" type="file" accept=".xlsx,.xls,.csv" required></label>
+    <progress id="upprog" max="100" value="0" hidden></progress>
+    <p id="upmsg"></p>
+    <div class="dlgbtns"><button type="button" id="upcancel" class="quiet">Cancel</button><button type="submit" id="upgo">Upload</button></div>
+  </form>
+</dialog>
+
+<script src="__BASE__/static/xterm.js"></script>
+<script src="__BASE__/static/addon-fit.js"></script>
+<script src="__BASE__/static/addon-web-links.js"></script>
+<script src="__BASE__/static/app.js"></script>
+</body></html>

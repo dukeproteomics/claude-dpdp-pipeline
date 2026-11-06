@@ -185,6 +185,7 @@ DECISION_JS <- '
 (function () {
   const S = window.DPDP_DECISION; if (!S) return;
   const box = document.getElementById("dform"), help = document.getElementById("dhelp");
+  const API = location.pathname.replace(/[^\\/]+\\/review\\/[^\\/]*$/, "") + "api/";   // review_server: /api/; web app: <base>/runs/api/
   const token = document.querySelector("meta[name=dpdp-token]").content, served = location.protocol.startsWith("http") && token !== "__DPDP_" + "TOKEN__";
   const el = (t, a = {}, h = "") => { const e = document.createElement(t); Object.entries(a).forEach(([k, v]) => e.setAttribute(k, v)); e.innerHTML = h; return e; };
   const field = (f, pre) => { const w = el("label", { class: "dfield" }, f.label + " ");
@@ -200,7 +201,7 @@ DECISION_JS <- '
     (c.fields || []).forEach(f => row.appendChild(field(f, c.value))); box.appendChild(row); });
   (S.spec.global || []).forEach(f => box.appendChild(field(f, "")));
   const note = el("input", { type: "text", size: "60", placeholder: "optional: why (goes in the decision log)" });
-  const who = el("input", { type: "text", size: "20", placeholder: "your name" }); who.value = localStorage.getItem("dpdp_analyst") || "";
+  const who = el("input", { type: "text", size: "20", placeholder: "your name" }); who.value = window.DPDP_WEB_ANALYST || localStorage.getItem("dpdp_analyst") || ""; if (window.DPDP_WEB_ANALYST) who.readOnly = true;
   const bar = el("div", { class: "dbar" }); bar.appendChild(el("span", {}, "Note ")); bar.appendChild(note); bar.appendChild(el("span", {}, " Analyst ")); bar.appendChild(who);
   const btn = el("button", { type: "button", class: "dsend" }, "Send to Claude"); bar.appendChild(btn); box.appendChild(bar);
   const msg = el("p", { class: "dmsg" }); box.appendChild(msg);
@@ -210,7 +211,7 @@ DECISION_JS <- '
   box.addEventListener("input", e => { if (e.target.dataset) e.target.dataset.edited = "1"; });
   if (!served) { btn.disabled = true; msg.innerHTML = "Buttons need the review server. Ask Claude to start it, then open <code>http://127.0.0.1:8765/" + S.run + "/review/" + S.step + ".html</code>. Or answer in the Claude window."; return; }
   let mtime0 = null;
-  const poll = () => fetch("/api/status?run=" + encodeURIComponent(S.run) + "&step=" + S.step).then(r => r.json()).then(st => {
+  const poll = () => fetch(API + "status?run=" + encodeURIComponent(S.run) + "&step=" + S.step).then(r => r.json()).then(st => {
     if (mtime0 === null) mtime0 = st.page_mtime; else if (st.page_mtime > mtime0) { location.reload(); return; }
     if (st.pending_step === S.step && !btn.disabled) { btn.disabled = true; msg.textContent = "A decision for this step is waiting for Claude."; }
   }).catch(() => {});
@@ -220,13 +221,13 @@ DECISION_JS <- '
     box.querySelectorAll("[data-name]").forEach(i => { if (i.dataset.pre === "" || i.dataset.pre === choice) fields[i.dataset.name] = i.type === "checkbox" ? String(i.checked) : i.value; });
     localStorage.setItem("dpdp_analyst", who.value);
     btn.disabled = true; msg.textContent = "Sending...";
-    fetch("/api/decision", { method: "POST", headers: { "Content-Type": "application/json", "X-DPDP-Token": token },
+    fetch(API + "decision", { method: "POST", headers: { "Content-Type": "application/json", "X-DPDP-Token": token },
       body: JSON.stringify({ run: S.run, step: S.step, choice: choice, fields: fields, note: note.value, analyst: who.value }) })
       .then(r => r.json().then(j => ({ ok: r.ok, j }))).then(({ ok, j }) => {
         if (!ok) { btn.disabled = false; msg.textContent = "Not sent: " + (j.error || "error"); return; }
         msg.textContent = "Sent to Claude at " + j.submitted.slice(11, 16) + ". This page reloads when Claude has applied it.";
         help.textContent = ""; })
-      .catch(() => { btn.disabled = false; msg.textContent = "Not sent: is the review server running?"; });
+      .catch(() => { btn.disabled = false; msg.textContent = "Not sent: is the review server running? (web app: reload the page)"; });
   });
 })();
 '
