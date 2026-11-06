@@ -247,7 +247,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   mti (never existed). directlfq: belongs in Rollup, not built (Python package not installed).
 - Step 6b `06b_normalize_compare.R` + page: CVs (groups, pool), sample spread by intensity and by RT, fold-change spread vs SL,
   median FC per comparison, ADH CV (information only), known-truth error for species-mix designs.
-- Tested on six datasets (test runs `data/zz_norm_11488`, `_11538`, `_11531`, `_11485` are code tests, Steps 1-5 defaults):
+- Tested on six datasets (code-test runs `data/zz_norm_*`, Steps 1-5 defaults; deleted 2026-11-06):
   - TMM / medianratio / sltmm agree everywhere; plain sl and median leave more intensity bias (11488: 0.08 / 0.045 vs 0.02).
   - loess flattens the intensity bias in every dataset (0.004-0.027) with FC spread 0.98-1.01 and CVs equal to sltmm.
   - rt / rt_loess remove a gradient drift (11488 RT spread 0.059 -> 0.006) and lower CVs (11488 groups 19.6 -> 19.0%, SPQC 14.3 -> 13.5%);
@@ -257,7 +257,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   - ADH CV is lowest with none in 5 of 6 (constant spike, loads differ), so it can't rank methods.
   - 11531 (design unknown to the user; mouse, albumin / fibrinogen top, totals vary 7x, within-group CV 57-66% for every method): looks
     like a pulldown from plasma/serum where everything changes. No method fixes the replicate spread; ADH-only factors made it worse (71%).
-- **Through Stats (2026-11-06; limpa impute + rollup + dpcDE, test runs zz_norm_11488 and zz_norm_10658 = raw triple-spike export,
+- **Through Stats (2026-11-06; limpa impute + rollup + dpcDE, test runs zz_norm_11488 and zz_norm_10658, since deleted; 10658 = raw triple-spike export,
   human-only subset, 6 comparisons of the pure groups):** the 06b gains barely change the calls.
   - 11488 B_v_A: sltmm / loess / rt_loess 224 / 225 / 224 raw-p calls, 1 adjusted call each, same p-value distribution.
   - 10658, adj p <= 0.05 and FC >= 1.5, mean over 6 comparisons: true calls 4,527 / 4,526 / 4,518; false calls 151 / 171 / 139;
