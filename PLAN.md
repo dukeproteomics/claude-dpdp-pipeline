@@ -257,6 +257,14 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   - ADH CV is lowest with none in 5 of 6 (constant spike, loads differ), so it can't rank methods.
   - 11531 (design unknown to the user; mouse, albumin / fibrinogen top, totals vary 7x, within-group CV 57-66% for every method): looks
     like a pulldown from plasma/serum where everything changes. No method fixes the replicate spread; ADH-only factors made it worse (71%).
+- **Through Stats (2026-11-06; limpa impute + rollup + dpcDE, test runs zz_norm_11488 and zz_norm_10658 = raw triple-spike export,
+  human-only subset, 6 comparisons of the pure groups):** the 06b gains barely change the calls.
+  - 11488 B_v_A: sltmm / loess / rt_loess 224 / 225 / 224 raw-p calls, 1 adjusted call each, same p-value distribution.
+  - 10658, adj p <= 0.05 and FC >= 1.5, mean over 6 comparisons: true calls 4,527 / 4,526 / 4,518; false calls 151 / 171 / 139;
+    observed FDR 4.17 / 4.53 / 4.01% (worst 9.1 / 9.3 / 9.7%, E10 vs E5); human log2 FC MAD 0.17 / 0.17 / 0.16.
+  - Reading: the biases these methods remove (0.04-0.06 log2) are far below the FC cutoff (0.585), so they rarely move a call.
+    rt_loess is a small, consistent gain when RT is exported; loess is not better than sltmm in Stats on these data.
+- Exports without `EG.ApexRT`: 11485, 11517, 11531, 11538 (11531 and 11538 also lack run-wise `EG.Qvalue`). Asked the user to add both to the report schema.
 
 ## Live run 10658_110426 (triple-spike background export, complete 2026-11-04)
 - Load accept; Parameters accept; Noise none; Filter as shown (294,715 precursors / 15,114 proteins; 311,693 background values back);
