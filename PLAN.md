@@ -8,11 +8,17 @@ steps, reads the plots and summaries, suggests options, and the user decides.
 - `shiny_DPDP/` — clone of the Shiny app (source of the R logic; don't modify in place)
 - `data/input/<project>/` — starting files (data report + sample description), one folder per project. Kept out of git.
   - `10658_triple_spike/` — three-species spike-in (known ratios); designs `_101926` (with SPQC), `_noSPQC`, `_noSPQC_mix`; raw + background exports, old `_MOD` files.
-  - `11485_phos/` — phospho, groups 1050 / DMSO / SPQC x3; `_RePrep_Report.tsv` (raw) + `_ImputeBackground_Report.tsv`. Not run yet.
+  - Exports replaced 2026-11-06: every current `_Report.tsv` has `EG.ApexRT` and run-wise `EG.Qvalue` (only the old 10658 `_MOD` files lack them).
+  - `11431_IP/` — immunoprecipitation (new 2026-11-06); raw `_Report.tsv` + `_impute_background_Report.tsv`. Not run yet.
+  - `11484_Tissue/` — tissue (new 2026-11-06); raw + `_impute_background_Report.tsv`. Not run yet.
+  - `11485_phos/` — phospho, groups 1050 / DMSO / SPQC x3; raw `_Report.tsv` + `_ImputeBackground_Report.tsv`.
   - `11488/` — main test set (below); four Spectronaut exports (none / background / global / run-wise) + Shiny reference `.zip`.
-  - `11517_phos/` — phospho, WT/KO x 30/37 C + SPQC; `_Report.tsv` (raw) + `_preimpute.tsv` (background).
-  - `11531/` — groups CreNeg/CrePos x Biotin/NoBiotin + SPQC (CrePos_Biotin x6, others x3); raw + `_Impute_Report.tsv`. Not run yet.
-  - `11538/` — groups KD / NTC / SPQC x3; raw + `_preimpute.tsv` (background). Not run yet.
+  - `11502_BrainTissue/` — brain tissue (new 2026-11-06); raw + `_impute_background_Report.tsv`. Not run yet.
+  - `11504_BioID/` — BioID proximity labeling (new 2026-11-06); raw + `_impute_background_Report.tsv`. Not run yet.
+  - `11517_phos/` — phospho, WT/KO x 30/37 C + SPQC; raw `_Report.tsv` + `_ImputeBackground_Report.tsv`.
+  - `11531_secretome/` — secretome (folder name, 2026-11-06), groups CreNeg/CrePos x Biotin/NoBiotin + SPQC (CrePos_Biotin x6, others x3);
+    raw + `_ImputeBackground_Report.tsv`.
+  - `11538_StemCells/` — stem cells, groups KD / NTC / SPQC x3; raw + `_ImputeBackground_Report.tsv`.
 - `PLAN.md` — this file; update the status as each step is finished.
 - `pipeline/` — `common.R`, `compare.R`, `steps/NN_<step>.R`
 - `.claude/skills/dpdp-<step>/SKILL.md` — one skill per step
@@ -255,7 +261,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   - vsn has the lowest CVs everywhere but shrinks fold changes (spread 0.36-0.80; triple-spike truth error 0.60 vs 0.08).
   - quantile: no advantage on these datasets (no large cohort available).
   - ADH CV is lowest with none in 5 of 6 (constant spike, loads differ), so it can't rank methods.
-  - 11531 (design unknown to the user; mouse, albumin / fibrinogen top, totals vary 7x, within-group CV 57-66% for every method): looks
+  - 11531 (secretome, per the folder name added 2026-11-06; design unknown to the user at the time; mouse, albumin / fibrinogen top, totals vary 7x, within-group CV 57-66% for every method): looks
     like a pulldown from plasma/serum where everything changes. No method fixes the replicate spread; ADH-only factors made it worse (71%).
 - **Through Stats (2026-11-06; limpa impute + rollup + dpcDE, test runs zz_norm_11488 and zz_norm_10658, since deleted; 10658 = raw triple-spike export,
   human-only subset, 6 comparisons of the pure groups):** the 06b gains barely change the calls.
@@ -264,7 +270,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
     observed FDR 4.17 / 4.53 / 4.01% (worst 9.1 / 9.3 / 9.7%, E10 vs E5); human log2 FC MAD 0.17 / 0.17 / 0.16.
   - Reading: the biases these methods remove (0.04-0.06 log2) are far below the FC cutoff (0.585), so they rarely move a call.
     rt_loess is a small, consistent gain when RT is exported; loess is not better than sltmm in Stats on these data.
-- Exports without `EG.ApexRT`: 11485, 11517, 11531, 11538 (11531 and 11538 also lack run-wise `EG.Qvalue`). Asked the user to add both to the report schema.
+- Exports without `EG.ApexRT`: 11485, 11517, 11531, 11538 (11531 and 11538 also lack run-wise `EG.Qvalue`). Replaced by the user 2026-11-06 with exports that have both.
 
 ## Misaligned filter test (2026-11-06, triple-spike raw export)
 - Runs zz_misal_off / _dataset / _group (deleted after the test): same settings (Noise none, Filter defaults, sltmm human subset, limpa Impute + Rollup, dpcDE,
