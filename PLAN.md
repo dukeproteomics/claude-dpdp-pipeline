@@ -281,6 +281,20 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - Decision (user, 2026-11-06): misaligned filter on by default, target=dataset. Step 7 refuses limpa after target=group (other imputations
   warn). With nothing flagged (e.g. groups of 2), the filter is skipped for that run instead of the app dropping every row.
 
+## Precursor quality filter test (2026-11-06, triple-spike raw export)
+- Runs zz_pq_off / zz_pq_50 / zz_pq_100: new defaults (misaligned on, dataset) + sltmm human subset, limpa, dpcDE, 6 comparisons; only
+  precursor_quality differs (off; CV of share > 50% (app default); > 100%; intensity 500, min 300). Off reproduces zz_misal_dataset exactly.
+- The filter (Shiny_Filter.R precursor_quality): proteins with 3+ precursors; each precursor's share of (itself + the weaker precursors),
+  CV across all samples. Missing values in the weaker precursors shrink the denominator, so the share moves when a protein changes a lot.
+- At 50%: removes 16,595 precursors: 0.9% of human, 11.7% of E. coli, 15.3% of yeast. Removed human precursors fit their protein badly
+  (residual SD 0.87 vs 0.44 log2), but removed E. coli / yeast fit better than the kept ones (0.57 / 0.48 vs 0.67 / 0.58): it removes good
+  precursors of proteins that change. Stats mean: true calls 4,537 -> 4,502, false 149.8 -> 153.2, observed FDR 4.11 -> 4.57% (worst
+  8.86 -> 11.31%); protein-level vs off: true +68 / -279, false +41 / -21.
+- At 100%: removes 2,108 (human 62, mostly yeast); Stats unchanged (4,536 true, 149.8 false, 4.12%).
+- Reading: harmful at the app default on a design where proteins change; no gain at 100%. Kept off by default (pipeline and app default).
+  The idea has merit for constant proteins (removed human precursors are 2x worse); a fix would compute the share per group or only on
+  samples where the protein's precursors are all measured.
+
 ## Live run 10658_110426 (triple-spike background export, complete 2026-11-04)
 - Load accept; Parameters accept; Noise none; Filter as shown (294,715 precursors / 15,114 proteins; 311,693 background values back);
   Normalize SL, human only; Impute perseus (81,509 empty values); Rollup iq_maxlfq scaled; QC accept, no spikes (the 11488 ADH/casein
