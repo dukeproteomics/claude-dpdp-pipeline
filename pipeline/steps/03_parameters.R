@@ -4,10 +4,14 @@
 #   -> meta_data("start") -> bar/box plots -> start histogram.
 #
 # Usage:
-#   Rscript pipeline/steps/03_parameters.R --db=<db> [--primary_group=Full|Primary] [--data_output=Protein|Peptide]
-#       [--ptm=FALSE] [--ptm_grep=Phospho] [--ptm_local=0.75] [--multi_tmt=FALSE]
-#       [--peptide_select=Razor|Unique|Shared] [--use_isoform=FALSE]
-# Options left out keep the value detected at Load (data_output, ptm) or the app default.
+#   Rscript pipeline/steps/03_parameters.R --db=<db> [--from_page] [--force] [--primary_group=Full|Primary]
+#       [--data_output=Protein|Peptide] [--ptm=FALSE] [--ptm_grep=Phospho] [--ptm_local=0.75]
+#   (peptide_select, use_isoform: Proteome Discoverer only; multi_tmt: TMT only. Hidden and kept at the app default otherwise.)
+# Every option, its default and its checks are in pipeline/options/03_parameters.R (also the page's Options panel).
+# Options left out take their default: data_output and ptm as detected at Load, the rest as in the app.
+# --from_page: take the values the analyst sent with "Run with these settings" from the page (review/pending_decision.json).
+# Accept (pipeline/accept.R --step=03_parameters) only accepts the settings of the last run of this step.
+# Later steps already run: the step stops (their results would no longer match); --force re-runs anyway.
 #
 # Output: tables sample_groups, precursor_start; updated design; QC/Precursor_Start_{barplot,boxplot,Histogram}.png
 #         steps/03_parameters/summary.json
@@ -29,25 +33,43 @@ params <- get_params(db_path)
 run_dir <- dirname(db_path)
 
 # --- 3a. Widget values (app: parameter_widget_save) ---------------------------
-choices <- list(primary_group = c("Full", "Primary"), data_output = c("Protein", "Peptide"),
-                peptide_select = c("Razor", "Unique", "Shared"))
-settings <- list(
-  primary_group  = args$primary_group  %||% "Full",
-  data_output    = args$data_output    %||% params$data_output,
-  ptm            = if (!is.null(args$ptm)) as_flag(args$ptm) else as.logical(params$ptm),
-  ptm_grep       = args$ptm_grep       %||% "Phospho",
-  ptm_local      = as.numeric(args$ptm_local %||% 0.75),
-  multi_tmt      = if (!is.null(args$multi_tmt)) as_flag(args$multi_tmt) else FALSE,
-  peptide_select = args$peptide_select %||% "Razor",
-  use_isoform    = if (!is.null(args$use_isoform)) as_flag(args$use_isoform) else FALSE
-)
-for (k in names(choices)) if (!settings[[k]] %in% choices[[k]])
-  stop(sprintf("--%s must be one of: %s", k, paste(choices[[k]], collapse = ", ")))
+source(file.path(here, "..", "options.R")); source(file.path(here, "..", "options", "03_parameters.R"))
+load_summ <- file.path(run_dir, "steps", "01_load", "summary.json")
+detected <- if (file.exists(load_summ)) fromJSON(load_summ, simplifyVector = FALSE)$detected else NULL
+opts <- parameters_options(params, read_table("design", db_path), detected)
+spec <- opts_spec(opts)
+later <- list.files(file.path(run_dir, "steps"), pattern = "^(0[4-9]|1[0-9])")
+later <- later[file.exists(file.path(run_dir, "steps", later, "summary.json"))]
+if (length(later) && !as_flag(args$force %||% FALSE))
+  stop("Later steps were already run on this run: ", paste(later, collapse = ", "), ". Re-running Parameters changes their input, so ",
+       "they would all need re-running. Start a new run, or re-run with --force and then redo those steps.", call. = FALSE)
+args <- page_args(args, run_dir, "03_parameters", opts, "preview")
+settings <- resolve_settings(spec, args)
+all_opts <- opts_byname(opts)
+for (k in names(all_opts)) if (!is.null(all_opts[[k]]$hide) || !is.null(all_opts[[k]]$disabled)) settings[[k]] <- spec[[k]]
+opts_validate(opts, settings)
+if (settings$data_output == "Protein" && settings$ptm) settings$ptm <- FALSE   # PTM analysis needs Peptide output (the app hides it)
 if (settings$use_isoform) stop("use_isoform=TRUE is not supported yet in the pipeline (app's isoform_to_isoform() needs work).")
 for (k in names(settings)) params[[k]] <- settings[[k]]
 invisible(write_params(params, db_path))
 
 # --- 3b. Sample groups (app: set_sample_groups) --------------------------------
+# The app gives each group one block of columns (sample_groups start..end), so the design must list every group's samples
+# together. Its check (check_design_sort) only asks that each sample has a neighbour in the same group, so a sheet like
+# A_1 A_1 B_1 B_1 A_2 A_2 passes with primary_group=Primary although group A is split. Then Filter and Impute treat the wrong
+# samples as group A. Fix (pipeline): when the groups used (Primary or Full) or the full groups are not each in one block, sort
+# the design by group in sheet order (primary group, then full group, then sheet order; SPQC last). The columns follow
+# (order_rename_columns orders them by design$Raw_Order); the sample-to-ID match is unchanged.
+design <- read_table("design", db_path)
+gkey <- if (settings$primary_group == "Primary") sub("_.*$", "", design$Group) else design$Group
+one_block <- function(k) !anyDuplicated(rle(k)$values)
+design_sorted <- FALSE
+if (!one_block(gkey) || !one_block(design$Group)) {
+  ord <- order(gkey == "SPQC", match(gkey, unique(gkey)), match(design$Group, unique(design$Group)), seq_len(nrow(design)))
+  design <- design[ord, ]; rownames(design) <- NULL
+  write_table("design", design, db_path); design_sorted <- TRUE
+  cat("NOTE: the sample list's groups were not each in one block; samples sorted by group (sheet order kept within a group).\n")
+}
 run_bg(set_sample_groups_bg, list(db_path), "setsamplegroups", db_path)
 
 # --- 3c. Prepare data (app: prepare_data). Only the Spectronaut precursor paths are wired up so far.
@@ -97,6 +119,8 @@ per_sample$total_vs_median <- round(2^(per_sample$total_log2 - median(per_sample
 warnings_out <- character(0)
 if (sample_id_alert) warnings_out <- c(warnings_out, "STOP: sample ID order does not match the sample list.")
 if (isTRUE(sample_error)) warnings_out <- c(warnings_out, "STOP: number of sample columns extracted is not as expected.")
+if (design_sorted) warnings_out <- c(warnings_out, paste("The sample list's groups were not each in one block, so the samples were sorted by group",
+  "(sheet order kept within a group). Sample IDs still match; plots and tables list samples in the new order."))
 off <- per_sample$sample[abs(log2(per_sample$total_vs_median)) > log2(1.5)]
 if (length(off)) warnings_out <- c(warnings_out, sprintf("Total intensity differs >1.5x from the median sample: %s", paste(off, collapse = ", ")))
 
@@ -104,8 +128,8 @@ sd <- step_dir(run_dir, "03_parameters")
 plots <- file.path(qc_path, c("Precursor_Start_barplot.png", "Precursor_Start_boxplot.png", "Precursor_Start_Histogram.png"))
 plots <- gsub("/+", "/", plots)
 summary <- list(
-  step = "03_parameters", db_path = db_path,
-  settings = settings,
+  step = "03_parameters", action = "preview", db_path = db_path,   # "preview": accept.R accepts exactly these settings
+  settings = settings, detected_at_load = detected,
   info_columns = n_info, info_column_names = names(df)[seq_len(n_info)],
   counts_start = list(precursors = params$meta_precursor_start, peptides = params$meta_peptide_start,
                       proteins = params$meta_protein_start),
@@ -114,17 +138,17 @@ summary <- list(
   intensity = list(log2_mean = params$intensity_mean, log2_sd = params$intensity_sd,
                    intensity_cutoff = params$intensity_cutoff, intensity_cutoff_sd = params$intensity_cutoff_sd,
                    bottom_x = params$bottom_x, total_na = params$total_na, total_misaligned = params$total_misaligned),
-  background = bg_info,
+  background = bg_info, design_sorted = design_sorted,
   sample_id_alert = sample_id_alert, sample_error = isTRUE(sample_error),
   plots = plots[file.exists(plots)],
   warnings = warnings_out
 )
 write_summary(summary, sd)
-log_decision(run_dir, "03_parameters", settings)
+log_decision(run_dir, "03_parameters", settings, note = args$note %||% "", analyst = args$analyst)
 
 cat("\n==== Parameters complete ====\n")
 cat(sprintf("Start: %s precursors, %s peptides, %s proteins | %d info columns\n",
             params$meta_precursor_start, params$meta_peptide_start, params$meta_protein_start, n_info))
 cat("Plots:\n", paste0("  ", summary$plots, collapse = "\n"), "\n")
 if (length(warnings_out)) cat("Warnings:\n", paste0("  - ", warnings_out, collapse = "\n"), "\n") else cat("No warnings.\n")
-cat("Review page:", review_parameters(db_path), "\n>>> Waiting for the analyst's review (accept with pipeline/accept.R).\n")
+cat("Review page:", review_parameters(db_path), "\n>>> Waiting for the analyst's review (accept with pipeline/accept.R; changes: re-run this step).\n")

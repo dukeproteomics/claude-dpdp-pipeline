@@ -70,6 +70,9 @@ if (!settings$padjust_options %in% padj) stop("--padjust_options must be one of:
 
 p <- get_params(db_path)
 groups <- read_table("sample_groups", db_path)
+# Comparisons use the design's full group names, as the app does (unique_groups = design$Group). With primary_group=Primary the
+# sample_groups table holds the pooled names (part before the first "_"), which only Filter and Impute use.
+stat_groups <- unique(read_table("design", db_path)$Group)
 norms <- trimws(strsplit(p$norm_type, ",")[[1]])
 
 # Comparison setup: stats_norm_type, comp_spqc, comparisons
@@ -82,7 +85,7 @@ if (!is.null(args$settings_from)) {
 }
 stat_norm <- args$stats_norm_type %||% (if (!is.null(args$settings_from)) rp$stat_norm else norms[1])
 # Pooled QC group: SPQC when the design has one; otherwise none ("0"). The pipeline works without a pool.
-comp_spqc <- args$comp_spqc %||% (if (!is.null(args$settings_from)) rp$comp_spqc else if ("SPQC" %in% groups$Group) "SPQC" else "0")
+comp_spqc <- args$comp_spqc %||% (if (!is.null(args$settings_from)) rp$comp_spqc else if ("SPQC" %in% stat_groups) "SPQC" else "0")
 comp_args <- grep("^comp[0-9]+_[ND]$", names(args), value = TRUE)
 if (length(comp_args)) {
   ids <- sort(unique(as.integer(sub("^comp([0-9]+)_.*", "\\1", comp_args))))
@@ -94,8 +97,8 @@ if (length(comp_args)) {
 } else stop("Give comparisons with --comp1_N=<group> --comp1_D=<group> (or --settings_from=<db>).")
 
 if (!stat_norm %in% norms) stop("--stats_norm_type must be one of: ", paste(norms, collapse = ", "))
-if (comp_spqc != "0" && !comp_spqc %in% groups$Group) stop("--comp_spqc must be one of: ", paste(groups$Group, collapse = ", "), " (or 0)")
-for (cp in comps) { bad <- setdiff(c(cp$N, cp$D), groups$Group); if (length(bad)) stop("Unknown group(s): ", paste(bad, collapse = ", ")) }
+if (comp_spqc != "0" && !comp_spqc %in% stat_groups) stop("--comp_spqc must be one of: ", paste(stat_groups, collapse = ", "), " (or 0)")
+for (cp in comps) { bad <- setdiff(c(cp$N, cp$D), stat_groups); if (length(bad)) stop("Unknown group(s): ", paste(bad, collapse = ", ")) }
 
 # --- Setup + widget save (save_stat_options + stat_widget_save) ---
 for (k in names(settings)) p[[k]] <- settings[[k]]

@@ -123,8 +123,9 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
   spec <- switch(paste0(step, if (nzchar(variant)) paste0(":", variant) else ""),
     "01_load" = list(q = "Does the design match the data?", nxt = "Step 3 - Parameters", choices = list(
       ch("accept", "Yes, continue"), ch("fix", "No, fix the sample sheet", list(fld("problem", "What is wrong?"))))),
-    "03_parameters" = list(q = "Keep these parameters?", nxt = "Step 4 - Noise", choices = list(
-      ch("accept", "Yes, continue"), ch("change", "Change settings", list(fld("change", "Which setting and value?"))))),
+    "03_parameters" = list(q = "set the Parameters below, Run, then Accept", nxt = "Step 4 - Noise",
+      help = "Use the <b>Parameters</b> panel below: change any option and press <b>Run with these settings</b> (re-runs this step), or <b>Accept these settings</b> to continue. For anything else, write it here and press <b>Send to Claude</b>, or ask in the Claude window.",
+      choices = list(ch("other", "Something else (a question, or a change the options can't express)", list(fld("request", "What?"))))),
     "04_noise" = list(q = "Which noise setting?", nxt = "Step 5 - Filter", choices = list(
       ch("none", "none - keep every value"),
       ch("dynamic", paste0("dynamic - remove values below the inflection (", g("noise_inflection"), ")"), list(fld("noise_keep", "noise_keep (put values back for precursors that pass the filter)", "checkbox", "false"))),

@@ -119,7 +119,7 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   `tools/renv/README.md` (restore steps, Ubuntu system libraries). Copied into the plugin as `renv/`. Partial restore tested.
   Not locked: rmotifx, PTMphinder (Phos only, not installed).
 
-## Editable options panel on review pages (decided 2026-11-09; Filter built 2026-11-09)
+## Editable options panel on review pages (decided 2026-11-09; Filter and Parameters built 2026-11-09)
 - The step's options panel becomes the form, like the Shiny app: **every option** shown and editable (no "Advanced" split; options
   get retired over time instead). Fields that don't apply are greyed with the reason; changed-from-default fields are marked;
   Reset to defaults. The top box keeps status, next step and a note; a free-text box stays for anything the form can't say.
@@ -129,7 +129,8 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   validation and the page form; Claude runs the step with the sent settings (no choice->command table). One decision per answer
   stays. Finished steps show their settings read-only.
 - Order: Filter first (settles the layout), then Noise, Impute, Rollup, Normalize (method + subset rule), Stats (needs a
-  comparison builder). Load and Parameters stay accept/fix.
+  comparison builder). Load stays accept/fix. Parameters added (user, 2026-11-09).
+- The user's aim: not just replicate the Shiny app but improve on it; better ways are welcome as we go.
 - **Filter built:** `pipeline/options.R` (opt/opt_section, opts_spec, opts_validate, page_args for `--from_page`, apply_settings,
   options_form + OPTIONS_JS/CSS), `pipeline/options/05_filter.R` (the app's 18 options; labels from ui.R; the quality
   method option was removed 2026-11-09, profile only).
@@ -137,6 +138,20 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   (`decisions_done/*_preview.json`), so the buttons free up. The hook doesn't count a `preview` request as an answer for apply.
   Tested on a throwaway 11504 run (zz_opt, deleted): headless-Chrome clicks (edit -> Apply off + marked, Preview sends all 19
   values), preview/apply from the page, apply with a different value refused, apply without a new preview refused.
+- **Parameters built:** `pipeline/options/03_parameters.R`. Options that never apply to the data source are hidden (`hide`), as
+  the app hides them: peptide_select and use_isoform (Proteome Discoverer only), multi_tmt (TMT only); the page lists them as not
+  shown. `depends` can name a value: ptm needs `data_output=Peptide`; ptm_grep / ptm_local need ptm; ptm is disabled when the
+  report has no EG.PTMProbabilities; Primary is disabled when no group has a `_`. Buttons: **Run with these settings** (re-runs
+  the step, choice `preview`) and **Accept these settings** (`accept.R --from_page`, choice `apply`; refused when it differs from
+  the last run). The step refuses to re-run when later steps exist (`--force` overrides).
+  - User notes: Peptide output is also for sets that are not phospho-enriched; primary_group gives more choices for Stats groups.
+  - **Primary fixes:** Stats checked comparisons against sample_groups (the pooled names under Primary); the app uses the full
+    design groups (`unique_groups`), so Step 10 now does too. And the app's sort check (check_design_sort) passes a sheet whose
+    groups are split (A_1 A_1 B_1 B_1 A_2 A_2 under Primary), so sample_groups start..end covered the wrong samples. Step 3 now
+    sorts the design by group when a group is not one block (sheet order kept, SPQC last); columns follow Raw_Order.
+  - Tested on throwaway runs (deleted): 11531 secretome Primary + Peptide output without PTM, Load to Stats (CreNeg = CreNeg_Biotin
+    + CreNeg_NoBiotin after the sort; CrePos_Biotin v CreNeg_Biotin used samples 7-12 v 1-3); 11517 phospho defaults (Peptide + PTM);
+    headless-Chrome clicks on the page; accept refusals (different value, a `preview` request, chat accept with a different value).
 
 ## Web app for other users (decided 2026-11-06)
 - Users won't SSH; they have the Shiny/RStudio bookmark. The user wants an app-like page, not RStudio.

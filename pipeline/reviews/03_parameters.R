@@ -1,17 +1,18 @@
-# Review page for Step 3 - Parameters. Shows the settings (primary group, output level, PTM, peptide selection), sample groups,
-# per-sample start numbers, and the app's start bar/box plots and histogram. Accept with:
-#   Rscript pipeline/accept.R --db=<db> --step=03_parameters --decided_by=user
+# Review page for Step 3 - Parameters. The Options panel (pipeline/options/03_parameters.R: every option that applies to this data
+# source; Run with these settings / Accept), start counts, per-sample start numbers, and the app's start bar/box plots and histogram.
+# Accept with: Rscript pipeline/accept.R --db=<db> --step=03_parameters --decided_by=user [--from_page]
 
 review_parameters <- function(db_path) {
   run_dir <- dirname(db_path)
   summ <- fromJSON(file.path(run_dir, "steps", "03_parameters", "summary.json"), simplifyVector = FALSE)
   a <- review_accept_status(run_dir, "03_parameters", summ$generated)
   s <- summ$settings
-  set_df <- data.frame(Setting = c("primary_group", "data_output", "ptm", "peptide_select", "use_isoform", "multi_tmt"),
-    Value = c(esc(s$primary_group), esc(s$data_output), if (isTRUE(s$ptm)) paste0("yes (", esc(s$ptm_grep), ", localization ", esc(s$ptm_local), ")") else "no",
-              esc(s$peptide_select), if (isTRUE(s$use_isoform)) "yes" else "no", if (isTRUE(s$multi_tmt)) "yes" else "no"),
-    Meaning = c("Full = use every protein accession in a group; Primary = only the first.", "Report proteins (rollup in Step 8) or peptides.",
-                "Phospho/PTM analysis.", "Which peptides count for a protein: Razor, Unique or Shared.", "Keep protein isoforms apart.", "Several TMT sets."))
+  ls <- file.path(run_dir, "steps", "01_load", "summary.json")
+  opts <- parameters_options(get_params(db_path), read_table("design", db_path),
+                             if (file.exists(ls)) fromJSON(ls, simplifyVector = FALSE)$detected else NULL)
+  form <- options_form("03_parameters", opts, s, previewed = s, applied = !is.null(a), run_dir = run_dir, title = "Parameters",
+    words = list(preview = "Run", apply = "Accept", previewing = "the last run", applied = "accepted",
+                 effect = "(re-runs this step, about a minute, and rebuilds this page)"))
   ps <- summ$per_sample
   lab <- read_table("design", db_path)$Label
   grp <- unlist(lapply(summ$sample_groups, function(g) rep(g$Group, g$Count)))
@@ -28,7 +29,7 @@ review_parameters <- function(db_path) {
     `misaligned cutoff` = list(x = log2(as.numeric(pp$intensity_cutoff)), color = "--series-3", dash = "dash"))
   ref$`bottom 2%` <- list(x = b2, color = "--series-2", dash = "dash")
   start_charts <- sample_charts(sm, pdat$s, grp, "start", ref)
-  body <- paste0('<section><h2>', if (is.null(a)) "Review needed" else "Review recorded", '</h2>', html_table(set_df), accept_note(a), '</section>',
+  body <- paste0(if (!is.null(a)) paste0('<section><h2>Review recorded</h2>', accept_note(a), '</section>') else "", form,
     '<section><h2>Start data</h2><div class="tiles">',
     sprintf('<div class="tile"><div class="v">%s</div><div class="l">precursors</div></div>', fmt_n(summ$counts_start$precursors)),
     sprintf('<div class="tile"><div class="v">%s</div><div class="l">peptides</div></div>', fmt_n(summ$counts_start$peptides)),

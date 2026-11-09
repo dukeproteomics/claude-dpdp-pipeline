@@ -7,22 +7,38 @@
 #   settings (user decision 2026-11-09: apply only after preview).
 # - The page sends all values with the decision (choice "preview" or "apply"); the step script reads them with --from_page
 #   (page_args), so Claude doesn't retype them. Apply must match the last preview (apply_settings).
+# - hide = "<reason>": the option never applies to this run (e.g. a Proteome Discoverer option in a Spectronaut run). It keeps its
+#   default and is left off the page, like the app hides it. disabled = "<reason>": shown greyed with the reason.
+# - depends = "<checkbox>" or "<option>=<value>": the option is in use only when that checkbox is on (or that option has that value),
+#   and only if the option it depends on is in use too. Greyed on the page while not in use.
 
 opt <- function(name, label, type = c("number", "checkbox", "select", "text"), default, meaning = "", choices = NULL,
-                depends = NULL, min = NULL, max = NULL, step = NULL, app = TRUE, disabled = NULL, info = NULL) {
+                depends = NULL, min = NULL, max = NULL, step = NULL, app = TRUE, disabled = NULL, info = NULL, hide = NULL) {
   type <- match.arg(type)
   list(name = name, label = label, type = type, default = default, meaning = meaning, choices = choices, depends = depends,
-       min = min, max = max, step = step, app = app, disabled = disabled, info = info)
+       min = min, max = max, step = step, app = app, disabled = disabled, info = info, hide = hide)
 }
 opt_section <- function(title, options, note = NULL) list(title = title, note = note, options = options)
 
 opts_flat <- function(sections) do.call(c, lapply(sections, `[[`, "options"))
 opts_spec <- function(sections) { o <- opts_flat(sections); setNames(lapply(o, `[[`, "default"), vapply(o, `[[`, "", "name")) }
+opts_byname <- function(sections) { o <- opts_flat(sections); setNames(o, vapply(o, `[[`, "", "name")) }
+
+# Is the option in use with these settings? (its depends chain is on, and it isn't hidden or disabled)
+opt_in_use <- function(o, settings, all) {
+  if (!is.null(o$hide) || !is.null(o$disabled)) return(FALSE)
+  if (is.null(o$depends)) return(TRUE)
+  d <- strsplit(o$depends, "=", fixed = TRUE)[[1]]
+  v <- settings[[d[1]]]
+  on <- if (length(d) == 1) as_flag(v %||% FALSE) else identical(as.character(v), d[2])
+  on && (is.null(all[[d[1]]]) || opt_in_use(all[[d[1]]], settings, all))
+}
 
 # Stop on a value the step can't use (select outside its choices, number outside min/max).
 opts_validate <- function(sections, settings) {
-  for (o in opts_flat(sections)) {
-    if (!is.null(o$depends) && !as_flag(settings[[o$depends]])) next   # option not in use
+  all <- opts_byname(sections)
+  for (o in all) {
+    if (!opt_in_use(o, settings, all)) next   # option not in use
     v <- settings[[o$name]]
     if (o$type == "select" && !is.null(o$choices) && is.null(o$disabled) && !as.character(v) %in% o$choices)
       stop(sprintf("--%s must be one of: %s (got %s)", o$name, paste(o$choices, collapse = ", "), v), call. = FALSE)
@@ -75,17 +91,27 @@ apply_settings <- function(run_dir, step, spec, args, settings) {
 }
 
 # The Options panel. values: what the form starts with; previewed: the settings the page shows (NULL if none); applied: read-only.
-options_form <- function(step, sections, values, previewed = NULL, applied = FALSE, run_dir = NULL, title = "Options") {
+# words: the button words. Filter: preview / apply. Parameters: run (re-run the step) / accept.
+options_form <- function(step, sections, values, previewed = NULL, applied = FALSE, run_dir = NULL, title = "Options",
+                         words = list(preview = "Preview", apply = "Apply", previewing = "a preview", applied = "applied",
+                                      effect = "to see the effect on this page")) {
   secs <- lapply(sections, function(s) {
+    s$options <- Filter(function(o) is.null(o$hide), s$options)
     s$options <- lapply(s$options, function(o) { o$value <- values[[o$name]] %||% o$default; o })
     s })
-  d <- list(step = step, run = if (!is.null(run_dir)) basename(run_dir) else "", applied = applied,
-            previewed = if (is.null(previewed)) NULL else previewed[intersect(names(previewed), vapply(opts_flat(sections), `[[`, "", "name"))],
+  secs <- Filter(function(s) length(s$options) > 0, secs)
+  shown <- unlist(lapply(secs, function(s) vapply(s$options, `[[`, "", "name")))
+  hidden <- Filter(function(o) !is.null(o$hide), opts_flat(sections))
+  d <- list(step = step, run = if (!is.null(run_dir)) basename(run_dir) else "", applied = applied, words = words,
+            previewed = if (is.null(previewed)) NULL else previewed[intersect(names(previewed), shown)],
             sections = secs)
-  sprintf('<section id="options"><h2>%s</h2>%s<div id="optform"></div></section><style>%s</style><script>window.DPDP_OPTIONS = %s;</script>',
+  sprintf('<section id="options"><h2>%s</h2>%s<div id="optform"></div>%s</section><style>%s</style><script>window.DPDP_OPTIONS = %s;</script>',
     esc(title),
-    if (applied) '<p class="note">These are the settings that were applied (read-only).</p>'
-    else '<p class="note">Every option of this step, as in the app. Change any of them, press <b>Preview with these settings</b> to see the effect on this page, then <b>Apply</b>. Changed options are marked; <b>pipeline</b> marks options the app does not have.</p>',
+    if (applied) sprintf('<p class="note">These are the settings that were %s (read-only).</p>', words$applied)
+    else sprintf('<p class="note">Every option of this step that applies to this run. Change any of them, press <b>%s with these settings</b> %s, then <b>%s</b>. Changed options are marked; <b>pipeline</b> marks options the app does not have.</p>',
+                 words$preview, words$effect, words$apply),
+    if (length(hidden)) sprintf('<p class="note">Not shown (they don&apos;t apply to this run): %s.</p>',
+      paste(vapply(hidden, function(o) sprintf("%s (%s)", o$label, o$hide), ""), collapse = "; ")) else "",
     OPTIONS_CSS, toJSON(d, auto_unbox = TRUE, null = "null", digits = NA))
 }
 
@@ -141,10 +167,15 @@ OPTIONS_JS <- '
     root.appendChild(tb);
   });
   const val = x => x.inp.type === "checkbox" ? x.inp.checked : x.inp.value;
+  const W = O.words || { preview: "Preview", apply: "Apply", previewing: "a preview" };
+  // depends: "<checkbox>" or "<option>=<value>"; the option it depends on must be in use too.
+  const inUse = o => { if (!o.depends) return true; const [n, v] = o.depends.split("="), d = X[n]; if (!d) return true;
+    if (d.o.disabled) return false;
+    const on = v === undefined ? d.inp.checked : String(val(d)) === v; return on && inUse(d.o); };
   const bar = el("div", { id: "optbar" });
   const reset = el("button", { type: "button", class: "quiet" }, "Reset to defaults");
-  const prev = el("button", { type: "button" }, "Preview with these settings");
-  const apply = el("button", { type: "button" }, "Apply these settings");
+  const prev = el("button", { type: "button" }, W.preview + " with these settings");
+  const apply = el("button", { type: "button" }, W.apply + " these settings");
   const note = el("input", { type: "text", size: "40", placeholder: "optional: why (goes in the decision log)" });
   const who = el("input", { type: "text", size: "16", placeholder: "your name" });
   who.value = window.DPDP_WEB_ANALYST || localStorage.getItem("dpdp_analyst") || ""; if (window.DPDP_WEB_ANALYST) who.readOnly = true;
@@ -156,7 +187,7 @@ OPTIONS_JS <- '
   function update() {
     const dirty = [];
     Object.values(X).forEach(x => {
-      const o = x.o, dep = o.depends && X[o.depends], on = !dep || dep.inp.checked;
+      const o = x.o, on = inUse(o);
       x.inp.disabled = O.applied || !!o.disabled || !on;
       x.tr.classList.toggle("off", !on || !!o.disabled);
       const ch = !eq(o, val(x), o.default);
@@ -169,9 +200,9 @@ OPTIONS_JS <- '
     apply.disabled = busy || !O.previewed || dirty.length > 0;
     if (!served) msg.textContent = "Buttons need the review server (or the DPDP web app). You can also tell Claude in the chat.";
     else if (sent || pending) msg.textContent = "Sent to Claude. This page reloads when Claude has run it.";
-    else if (!O.previewed) msg.textContent = "Preview these settings first; Apply turns on when the page shows them.";
-    else if (dirty.length) msg.textContent = "Changed since the preview: " + dirty.join(", ") + ". Preview to see the effect before applying.";
-    else msg.textContent = "The page shows these settings. Apply them, or change options and preview again.";
+    else if (!O.previewed) msg.textContent = W.preview + " these settings first; " + W.apply + " turns on when the page shows them.";
+    else if (dirty.length) msg.textContent = "Changed since " + W.previewing + ": " + dirty.join(", ") + ". " + W.preview + " with these settings to see the effect first.";
+    else msg.textContent = "The page shows these settings. " + W.apply + " them, or change options and " + W.preview.toLowerCase() + " again.";
   }
   reset.onclick = () => { Object.values(X).forEach(x => { const d = x.o.default;
     if (x.inp.type === "checkbox") x.inp.checked = isTrue(d); else x.inp.value = String(d); }); update(); };
@@ -182,7 +213,7 @@ OPTIONS_JS <- '
       body: JSON.stringify({ run: O.run, step: O.step, choice: choice, fields: fields, note: note.value, analyst: who.value }) })
       .then(r => r.json().then(j => ({ ok: r.ok, j }))).then(({ ok, j }) => {
         if (!ok) { sent = false; update(); msg.textContent = "Not sent: " + (j.error || "error"); return; }
-        msg.textContent = (choice === "apply" ? "Apply" : "Preview") + " sent to Claude at " + j.submitted.slice(11, 16) + ". This page reloads when Claude has run it."; })
+        msg.textContent = (choice === "apply" ? W.apply : W.preview) + " sent to Claude at " + j.submitted.slice(11, 16) + ". This page reloads when Claude has run it."; })
       .catch(() => { sent = false; update(); msg.textContent = "Not sent: is the server running? Reload the page."; });
   };
   prev.onclick = () => send("preview");

@@ -29,7 +29,7 @@ one in its left panel by itself; say "the <step> page is ready on the left". Run
 | Step | choice -> command |
 |---|---|
 | 01_load | `accept` -> `accept.R --step=01_load`; `fix` -> stop, discuss `fields.problem` |
-| 03_parameters | `accept` -> `accept.R --step=03_parameters`; `change` -> re-run 03 with the change, then ask again |
+| 03_parameters | Options panel: `preview` ("Run with these settings") -> `03_parameters.R --from_page` (re-runs the step; then wait again); `apply` ("Accept these settings") -> `accept.R --step=03_parameters --from_page --decided_by=user`; `other` -> discuss `fields.request` |
 | 04_noise | `none` / `dynamic` / `fixed` -> `04_noise.R --action=apply --noise_type=<choice>` [`--noise_baseline_value`] [`--noise_keep=TRUE` if `fields.noise_keep` is true] |
 | 05_filter | Options panel: `preview` -> `05_filter.R --action=preview --from_page` (then wait again); `apply` -> `05_filter.R --action=apply --from_page --decided_by=user`; `other` -> discuss `fields.request` |
 | 06_normalize | `default_exclude` -> default rule (PTM runs: PTM peptides only); `all_peptides` (PTM runs) -> default exclude + `--norm_include=not_used`; `current_exclude` -> current `norm_exclude_grep`; `custom_exclude` -> preview with `fields.norm_exclude_grep` first, then apply; `preset_adh` / `preset_carboxylases` -> `--norm_preset=adh` / `carboxylases`; `custom_include` -> `--norm_include=accession --norm_include_grep=<fields.norm_include_grep>` (presets and include: re-preview and re-run 06b first). Method = `fields.norm_type` |
