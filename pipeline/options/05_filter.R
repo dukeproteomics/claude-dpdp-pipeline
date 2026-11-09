@@ -1,4 +1,4 @@
-# Step 5 - Filter: every option of the app's Filter tab (ui.R, filter_widget_save) plus the pipeline's precursor quality method.
+# Step 5 - Filter: every option of the app's Filter tab (ui.R, filter_widget_save). Precursor quality uses the pipeline's profile method.
 # Used by steps/05_filter.R (defaults, checks) and reviews/05_filter.R (the Options panel). Order and labels follow the app.
 # p: run params (NULL = no run context), groups: sample_groups table.
 filter_options <- function(p = NULL, groups = NULL) {
@@ -39,13 +39,10 @@ filter_options <- function(p = NULL, groups = NULL) {
           choices = c("dataset", "group"), depends = "checkbox_misaligned"))),
     opt_section("Precursor quality", list(
       opt("precursor_quality", "Precursor quality filter", "checkbox", FALSE,
-          if (pep) "Within each peptide (3+ charge states), removes charge states that don't follow the peptide. Phosphopeptides of one protein are never compared with each other."
-          else "Within each protein (3+ precursors), removes precursors that don't follow the others."),
-      opt("precursor_quality_method", "Method", "select", if (pep) "profile" else "app",
-          if (pep) "profile: residual to the peptide's median-polish profile. (The app's method does nothing for peptides.)"
-          else "profile: residual to the protein's median-polish profile (tested 2026-11-06: keeps proteins that change). app: share of the protein signal; removes good precursors of proteins that change.",
-          choices = if (pep) "profile" else c("app", "profile"), depends = "precursor_quality", app = FALSE),
-      opt("precursor_quality_sd", "Percent SD cutoff", "number", 50, "Precursors above this CV % are removed (worst first, at least 2 kept).",
+          paste(if (pep) "Within each peptide (3+ charge states), removes charge states that don't follow the peptide's median-polish profile. Phosphopeptides of one protein are never compared with each other."
+                else "Within each protein (3+ precursors), removes precursors that don't follow the protein's median-polish profile.",
+                "Pipeline method (profile); the app's method was retired (2026-11-09): it removed good precursors of proteins that change.")),
+      opt("precursor_quality_sd", "Percent SD cutoff", "number", 50, "Precursors whose residual CV % is above this are removed (worst first, at least 2 kept).",
           depends = "precursor_quality", min = 0),
       opt("precursor_quality_intensity", "Minimum average intensity", "number", 500, "Only precursors with this mean intensity or more are tested.",
           depends = "precursor_quality", min = 0),

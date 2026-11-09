@@ -131,7 +131,8 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
 - Order: Filter first (settles the layout), then Noise, Impute, Rollup, Normalize (method + subset rule), Stats (needs a
   comparison builder). Load and Parameters stay accept/fix.
 - **Filter built:** `pipeline/options.R` (opt/opt_section, opts_spec, opts_validate, page_args for `--from_page`, apply_settings,
-  options_form + OPTIONS_JS/CSS), `pipeline/options/05_filter.R` (18 app options + precursor_quality_method; labels from ui.R).
+  options_form + OPTIONS_JS/CSS), `pipeline/options/05_filter.R` (the app's 18 options; labels from ui.R; the quality
+  method option was removed 2026-11-09, profile only).
   Page choices: `preview` / `apply` from the panel, `other` (free text) in the top box. A preview archives the page request
   (`decisions_done/*_preview.json`), so the buttons free up. The hook doesn't count a `preview` request as an answer for apply.
   Tested on a throwaway 11504 run (zz_opt, deleted): headless-Chrome clicks (edit -> Apply off + marked, Preview sends all 19
@@ -342,7 +343,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
     4.11 -> 4.05% (worst 8.86 -> 8.90%), human MAD 0.17 -> 0.16; protein-level vs off: true +76 / -32, false +43 / -67.
   - At 100%: removes 815; true 4,542, false 151.0, FDR 4.14%: no change.
   - Reading: the fix removes the species bias; at 50% a small gain (fewer false calls), like the misaligned filter. Not yet tested on a
-    background export or a dataset where nothing changes. Defaults unchanged (precursor_quality off, method app) pending the user.
+    background export or a dataset where nothing changes. **User decision 2026-11-09: profile is the only method; the app's method is retired** (no benefit). precursor_quality stays off by default.
 
 ## Peptide output wording and quality filter (2026-11-06)
 - Phospho / PTM runs (Peptide output) are per peptide: precursors (charge states) roll up to peptides, Stats tests peptides. Pages
@@ -353,7 +354,7 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
   accessions for Peptide output; old names kept); 10 `comparisons[]` adds `features` (rows tested after the missing factor).
 - Precursor quality filter in Peptide output groups by peptide (charge states), not protein: phosphopeptides of one protein change
   independently. 11517: by protein it would remove 14,644 precursors (10%); by peptide it tests 3,439 and removes 51. The app's method
-  is a no-op for peptides, so Step 5 refuses `precursor_quality_method=app` there.
+  is a no-op for peptides.
 - Tested: test run zz_pep_11517 (11517 raw export, Load to Stats, limpa, profile quality filter) and Rollup + Stats re-applied on
   zz_pq_off (protein output, fields unchanged in value); pages rebuilt on the live runs 11517_110526 and 10658_110426 (HTML only).
 

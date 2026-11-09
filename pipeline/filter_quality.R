@@ -1,5 +1,5 @@
-# Precursor quality filter, pipeline version ("profile"): replaces the app's precursor_quality() when
-# --precursor_quality_method=profile (Step 5).
+# Precursor quality filter, pipeline version ("profile"): replaces the app's precursor_quality() in Step 5 whenever
+# precursor_quality is on. The app's method was retired (user, 2026-11-09).
 #
 # The app (Shiny_Filter.R precursor_quality) takes each precursor's share of (itself + the weaker precursors of its protein) and its CV
 # across all samples. Missing values count as 0 in that sum, so when a protein drops to a low level in some groups and its weaker

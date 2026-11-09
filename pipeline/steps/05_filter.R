@@ -49,10 +49,6 @@ args <- page_args(args, run_dir, "05_filter", opts, args$action)
 settings <- resolve_settings(spec, args)
 if (args$action == "apply") settings <- apply_settings(run_dir, "05_filter", spec, args, settings)
 opts_validate(opts, settings)
-if (settings$precursor_quality && settings$precursor_quality_method == "app" && is_peptide_output(p))
-  stop("Peptide output: the app's precursor quality filter does nothing for peptides (it only sets an error message). ",
-       "Use --precursor_quality_method=profile (compares each peptide's charge states) or --precursor_quality=FALSE.")
-
 for (k in names(settings)) p[[k]] <- settings[[k]]
 invisible(write_params(p, db_path))
 
@@ -95,8 +91,9 @@ if (args$action == "preview") {
 
 # --- apply -------------------------------------------------------------------
 
-# profile quality filter: the app runs without its own quality step, then the pipeline's version runs on the measured values
-pq_profile_on <- settings$precursor_quality && settings$precursor_quality_method == "profile"
+# Precursor quality uses the pipeline's profile method only (the app's method was retired 2026-11-09): the app's filter runs
+# without its own quality stage, then the profile version runs on the measured values.
+pq_profile_on <- settings$precursor_quality
 if (pq_profile_on) { p <- get_params(db_path); p$precursor_quality <- FALSE; invisible(write_params(p, db_path)) }
 err_alert <- run_bg(filter_data_bg, list("precursor_noise", "precursor_filter", db_path), "filter", db_path)
 pq_info <- NULL

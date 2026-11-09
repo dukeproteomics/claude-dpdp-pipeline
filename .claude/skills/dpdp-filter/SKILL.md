@@ -18,7 +18,6 @@ only apply settings the user has approved.
 | `checkbox_misaligned` / `misaligned_cutoff` / `misaligned_target` (group, dataset) | FALSE / 50 / dataset (**pipeline default: TRUE / 50 / dataset**) | **TRUE / 51 / dataset** |
 | `intensity_cutoff_sd` (misaligned cutoff = mean + this × SD) | 0.5 | 0.5 |
 | `precursor_quality` / `_sd` / `_intensity` / `_min` | FALSE / 50 / 500 / 300 | **TRUE** / 50 / 500 / 300 |
-| `precursor_quality_method` (pipeline: `app` or `profile`) | app | - |
 | `precursor_spqc_ratio` / `_accuracy` / `_intensity` | FALSE / 50 / 500 | **TRUE** / 50 / 500 |
 
 **Misaligned filter (user decision 2026-11-06):** on by default with `misaligned_target=dataset`. It flags a precursor when a group is
@@ -28,16 +27,17 @@ flagged group instead; imputation then treats that group as low/absent and it ad
 (Step 7 stops) and the other imputations warn. Recommend dataset; only use group if the analyst asks. Groups of 2 are never flagged
 (1 of 2 missing is exactly 50%); when nothing is flagged, the pipeline skips the filter for that run and says so.
 
-**Precursor quality filter (tested 2026-11-06, PLAN.md):** the app's method (`precursor_quality_method=app`) takes each precursor's
-share of itself + the weaker precursors across all samples; missing values shrink that sum, so it removes good precursors of proteins
-that change (triple-spike at 50%: 12-15% of E. coli / yeast precursors, more false calls). `profile` (pipeline/filter_quality.R) scores
-each precursor by its residual to the protein's median-polish profile (CV %, same cutoff meaning) and removed 1-3% of each species with a
-small gain. If the analyst turns the filter on, recommend `profile`; the app method only to match a Shiny run. `profile` runs after the
-app's SPQC ratio and duplicate stages.
+**Precursor quality filter: profile method only (user, 2026-11-09).** When `precursor_quality` is on, the pipeline's `profile`
+method (pipeline/filter_quality.R) runs: it scores each precursor by its residual to the protein's median-polish profile (CV %, same
+cutoff meaning as the app) and runs after the app's SPQC ratio and duplicate stages. The app's method was retired: it takes each
+precursor's share of itself + the weaker precursors, missing values shrink that sum, and it removed good precursors of proteins that
+change (triple-spike at 50%: 12-15% of E. coli / yeast precursors, more false calls; profile removed 1-3% with a small gain, PLAN.md).
+There is no `precursor_quality_method` option any more (an old one passed in is ignored), so a Shiny run's quality filter can't be
+reproduced exactly.
 **Peptide output (phospho):** the quality filter groups by **peptide**, not protein: phosphopeptides of one protein change
 independently, so comparing them would remove real site changes (on 11517, grouping by protein would have removed 14,644 precursors;
 by peptide it tests the 3,475 precursors of peptides with 3+ charge states and removes 56). The app's method does nothing for
-peptides, so the step refuses `precursor_quality_method=app` there.
+peptides.
 
 To reuse a previous run's settings: `--settings_from=<that run's .db>`. Explicit `--name=value` args override it.
 
@@ -50,7 +50,7 @@ Rscript pipeline/steps/05_filter.R --db=<db> --action=preview [--from_page] [--s
 Rscript pipeline/steps/05_filter.R --db=<db> --action=apply [--from_page] --decided_by=user [--analyst=<name>] [--note="<reason>"]
 ```
 - Every option and its default, allowed values and meaning are in `pipeline/options/05_filter.R` (the app's 18 Filter-tab
-  options plus `precursor_quality_method`). The script checks values against it.
+  options). The script checks values against it.
 - **Apply only after preview** (user, 2026-11-09): apply uses the settings of the last preview. Option arguments that differ from
   it are refused ("Preview them first"); apply right after an apply is refused too. A preview with no option arguments uses the
   defaults, so pass every change you want to keep.
