@@ -9,8 +9,10 @@
 # Usage:
 #   Rscript pipeline/steps/05_filter.R --db=<db> --action=preview|apply [--settings_from=<shiny.db>] [--<setting>=<value> ...]
 #       apply also needs --decided_by=user (after the analyst approves); optional --analyst=<name> --note="<why>"
+#   --from_page: take the settings the analyst sent from the page's Options panel (review/pending_decision.json).
 # Both actions (re)build the review page <run_dir>/review/05_filter.html.
-# Settings: app defaults, then values copied from --settings_from, then explicit --<setting> args.
+# Settings: defaults (pipeline/options/05_filter.R), then values copied from --settings_from, then the page's values
+# (--from_page), then explicit --<setting> args. Apply uses the last preview's settings; different settings are refused.
 #
 # Output: precursor_filter, missing_values, missing_values_plots;
 #         QC/Precursor_NoiseFiltered_Histogram.png, QC/Precursor_Filter_{barplot,boxplot}.png; steps/05_filter/summary.json
@@ -22,6 +24,8 @@ source(file.path(here, "..", "noise_keep.R"))
 source(file.path(here, "..", "background.R"))
 source(file.path(here, "..", "filter_quality.R"))
 source(file.path(here, "..", "review.R"))
+source(file.path(here, "..", "options.R"))
+source(file.path(here, "..", "options", "05_filter.R"))
 source(file.path(here, "..", "reviews", "05_filter.R"))
 
 args <- parse_args()
@@ -32,27 +36,23 @@ run_dir <- dirname(db_path)
 use_app(c("Shiny_File.R", "Shiny_Filter.R", "Shiny_Plots.R"))
 if (get_param("raw_data_format", db_path) != "precursor") stop("Filter step is only wired up for precursor data so far.")
 if (!table_exists("precursor_noise", db_path)) stop("Run Step 4 (Noise) first: precursor_noise is missing.")
+if (args$action == "apply" && !identical(args$decided_by, "user"))
+  stop("Apply needs the analyst's approval: run --action=preview, show the review page, then pass --decided_by=user.")
 
-# Widgets saved by the app's filter_widget_save(), with the app defaults.
-spec <- list(
-  filter_min_measured_all = 2, filter_x_percent = TRUE, filter_x_percent_value = 50,
-  filter_cv = FALSE, filter_cv_group = "SPQC", filter_cv_value = 99, filter_ptm = FALSE,
-  checkbox_misaligned = TRUE, misaligned_cutoff = 50, misaligned_target = "dataset", intensity_cutoff_sd = 0.5,
-  precursor_quality = FALSE, precursor_quality_sd = 50, precursor_quality_intensity = 500, precursor_quality_min = 300,
-  precursor_spqc_ratio = FALSE, precursor_spqc_intensity = 500, precursor_spqc_accuracy = 50,
-  precursor_quality_method = "app"   # pipeline: app (Shiny_Filter.R) or profile (pipeline/filter_quality.R)
-)
+# Every option of the app's Filter tab (pipeline/options/05_filter.R): defaults, checks, and the page's Options panel.
+# --from_page takes the values the analyst sent from that panel. Apply uses the last preview's settings and refuses others.
+p <- get_params(db_path)
+groups <- read_table("sample_groups", db_path)
+opts <- filter_options(p, groups)
+spec <- opts_spec(opts)
+args <- page_args(args, run_dir, "05_filter", opts, args$action)
 settings <- resolve_settings(spec, args)
-if (!settings$misaligned_target %in% c("group", "dataset")) stop("--misaligned_target must be group or dataset")
-if (!settings$precursor_quality_method %in% c("app", "profile")) stop("--precursor_quality_method must be app or profile")
-if (settings$precursor_quality && settings$precursor_quality_method == "app" && is_peptide_output(get_params(db_path)))
+if (args$action == "apply") settings <- apply_settings(run_dir, "05_filter", spec, args, settings)
+opts_validate(opts, settings)
+if (settings$precursor_quality && settings$precursor_quality_method == "app" && is_peptide_output(p))
   stop("Peptide output: the app's precursor quality filter does nothing for peptides (it only sets an error message). ",
        "Use --precursor_quality_method=profile (compares each peptide's charge states) or --precursor_quality=FALSE.")
 
-p <- get_params(db_path)
-groups <- read_table("sample_groups", db_path)
-if (settings$filter_cv && !settings$filter_cv_group %in% groups$Group)
-  stop("--filter_cv_group must be one of: ", paste(groups$Group, collapse = ", "))
 for (k in names(settings)) p[[k]] <- settings[[k]]
 invisible(write_params(p, db_path))
 
@@ -94,7 +94,6 @@ if (args$action == "preview") {
 }
 
 # --- apply -------------------------------------------------------------------
-if (!identical(args$decided_by, "user")) stop("Apply needs the analyst's approval: run --action=preview, show the review page, then pass --decided_by=user.")
 
 # profile quality filter: the app runs without its own quality step, then the pipeline's version runs on the measured values
 pq_profile_on <- settings$precursor_quality && settings$precursor_quality_method == "profile"

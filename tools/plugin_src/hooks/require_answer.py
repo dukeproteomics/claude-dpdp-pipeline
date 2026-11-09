@@ -21,7 +21,8 @@ def page_decision_for(cmd):
         rec = json.load(open(os.path.join(run_dir, "review", "pending_decision.json")))
     except Exception:
         return False
-    return bool(s) and str(rec.get("step", "")).startswith(s.group(1) + "_")
+    # A "preview" request from a step's Options panel asks for a preview, not an apply.
+    return bool(s) and str(rec.get("step", "")).startswith(s.group(1) + "_") and rec.get("choice") != "preview"
 
 def main():
     try:

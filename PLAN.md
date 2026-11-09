@@ -119,7 +119,7 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   `tools/renv/README.md` (restore steps, Ubuntu system libraries). Copied into the plugin as `renv/`. Partial restore tested.
   Not locked: rmotifx, PTMphinder (Phos only, not installed).
 
-## Editable options panel on review pages (decided 2026-11-09, not built yet)
+## Editable options panel on review pages (decided 2026-11-09; Filter built 2026-11-09)
 - The step's options panel becomes the form, like the Shiny app: **every option** shown and editable (no "Advanced" split; options
   get retired over time instead). Fields that don't apply are greyed with the reason; changed-from-default fields are marked;
   Reset to defaults. The top box keeps status, next step and a note; a free-text box stays for anything the form can't say.
@@ -130,6 +130,12 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   stays. Finished steps show their settings read-only.
 - Order: Filter first (settles the layout), then Noise, Impute, Rollup, Normalize (method + subset rule), Stats (needs a
   comparison builder). Load and Parameters stay accept/fix.
+- **Filter built:** `pipeline/options.R` (opt/opt_section, opts_spec, opts_validate, page_args for `--from_page`, apply_settings,
+  options_form + OPTIONS_JS/CSS), `pipeline/options/05_filter.R` (18 app options + precursor_quality_method; labels from ui.R).
+  Page choices: `preview` / `apply` from the panel, `other` (free text) in the top box. A preview archives the page request
+  (`decisions_done/*_preview.json`), so the buttons free up. The hook doesn't count a `preview` request as an answer for apply.
+  Tested on a throwaway 11504 run (zz_opt, deleted): headless-Chrome clicks (edit -> Apply off + marked, Preview sends all 19
+  values), preview/apply from the page, apply with a different value refused, apply without a new preview refused.
 
 ## Web app for other users (decided 2026-11-06)
 - Users won't SSH; they have the Shiny/RStudio bookmark. The user wants an app-like page, not RStudio.

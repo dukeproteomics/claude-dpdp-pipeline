@@ -130,15 +130,9 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
       ch("dynamic", paste0("dynamic - remove values below the inflection (", g("noise_inflection"), ")"), list(fld("noise_keep", "noise_keep (put values back for precursors that pass the filter)", "checkbox", "false"))),
       ch("fixed", "fixed - remove values below a baseline", list(fld("noise_baseline_value", "baseline intensity", "number", g("noise_baseline_value", "1")),
                                                               fld("noise_keep", "noise_keep (put values back for precursors that pass the filter)", "checkbox", "false"))))),
-    "05_filter" = list(q = "Apply these filter settings?", nxt = "Step 6 - Normalize", choices = list(
-      ch("apply", "Apply as shown"),
-      ch("quality", "Precursor quality filter: turn on/off, method, CV cutoff (re-preview)", list(
-        fld("precursor_quality", "on", "checkbox", if (toupper(g("precursor_quality", "FALSE")) %in% c("TRUE", "1")) "true" else "false"),
-        fld("precursor_quality_method", "method (profile: residual to the protein/peptide profile; app: share of the protein signal, protein output only)", "select",
-            if (identical(g("data_output"), "Peptide") || !toupper(g("precursor_quality", "FALSE")) %in% c("TRUE", "1")) "profile" else g("precursor_quality_method", "profile"),
-            if (identical(g("data_output"), "Peptide")) "profile" else c("profile", "app")),
-        fld("precursor_quality_sd", "CV cutoff %", "number", g("precursor_quality_sd", "50")))),
-      ch("change", "Change other settings", list(fld("change", "Which filter and value? (e.g. misaligned_cutoff=60)"))))),
+    "05_filter" = list(q = "set the Filter options below, Preview, then Apply", nxt = "Step 6 - Normalize",
+      help = "Use the <b>Filter options</b> panel below: change any option, <b>Preview with these settings</b>, then <b>Apply</b>. For anything else, write it here and press <b>Send to Claude</b>, or ask in the Claude window.",
+      choices = list(ch("other", "Something else (a question, or a change the options can't express)", list(fld("request", "What?"))))),
     "06_normalize" = list(q = "Which proteins to leave out of the factors, and which method?", nxt = "Step 7 - Impute",
       global = list(fld("norm_type", "Method", "select", "sltmm", if (exists("norm_method_names")) norm_method_names() else
         c("sltmm", "sl", "tmm", "median", "medianratio", "rlr", "loess", "rt", "rt_loess", "vsn", "quantile", "none"))),
@@ -183,9 +177,10 @@ next_step_box <- function(run_dir, step, status_class, variant = "") {
   if (!identical(status_class, "waiting"))
     return(sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude continues in the session.</p></section>', esc(spec$nxt)))
   sprintf('<section class="nextbox" id="decision"><h2>Your decision: %s</h2><div id="dform"></div>
-<p class="note" id="dhelp">Pick an option and press <b>Send to Claude</b>, or answer in the Claude window instead.</p></section>
+<p class="note" id="dhelp">%s</p></section>
 <script>window.DPDP_DECISION = %s;</script>', esc(spec$q),
-    toJSON(list(run = basename(run_dir), step = step, spec = spec), auto_unbox = TRUE, null = "null"))
+    spec$help %||% "Pick an option and press <b>Send to Claude</b>, or answer in the Claude window instead.",
+    toJSON(list(run = basename(run_dir), step = step, spec = spec[setdiff(names(spec), "help")]), auto_unbox = TRUE, null = "null"))
 }
 
 DECISION_JS <- '
@@ -244,6 +239,7 @@ write_review_page <- function(run_dir, step, title, status, status_class, body, 
   need_plotly <- function() if (!grepl("Plotly.newPlot", body, fixed = TRUE) && !grepl("plotly", extra_head, fixed = TRUE)) body <<- paste0(body, '<script>', plotly_js(), '</script>')
   if (grepl("DPDP_CHARTS", body, fixed = TRUE)) { need_plotly(); body <- paste0(body, '<script>', SAMPLE_CHARTS_JS, '</script>') }
   if (grepl("DPDP_BARS", body, fixed = TRUE)) { need_plotly(); body <- paste0(body, '<script>', SAMPLE_BAR_JS, '</script>') }
+  if (grepl("DPDP_OPTIONS", body, fixed = TRUE) && exists("OPTIONS_JS")) body <- paste0(body, '<script>', OPTIONS_JS, '</script>')
   extra_head <- paste0('<meta name="dpdp-token" content="__DPDP_TOKEN__"/>', extra_head)
   p_prefix <- basename(run_dir)
   html <- sprintf('<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>

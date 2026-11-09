@@ -81,41 +81,20 @@ review_filter <- function(db_path) {
                     current_series = paste0("SPQC mean > ", formatC(num("precursor_spqc_intensity"), format = "d", big.mark = ",")))
   }
 
-  # --- settings table ---
-  onoff <- function(k) if (flag(k)) "<b>on</b>" else "off"
-  set_rows <- list(
-    c("Minimum measured, all samples", "always on", sprintf("at least <b>%s</b> of %d samples", esc(getp("filter_min_measured_all")), n_s),
-      "Removes precursors measured in too few samples overall."),
-    c("Measured in X% of a group", onoff("filter_x_percent"), sprintf("X = <b>%s%%</b>", esc(getp("filter_x_percent_value"))),
-      "Keeps a precursor only if at least one group has it in X% of its samples."),
-    c("Misaligned", onoff("checkbox_misaligned"),
-      sprintf("missing > <b>%s%%</b> in a group, group mean &ge; mean + <b>%s</b> SD (%s); target <b>%s</b>", esc(getp("misaligned_cutoff")),
-              esc(getp("intensity_cutoff_sd")), fmt_n(p$intensity_cutoff), esc(getp("misaligned_target"))),
-      "A precursor that is high where measured but missing in much of a group is likely misaligned. target=dataset (default) removes the precursor; target=group blanks that group, and limpa is then not available (blanked groups read as low)."),
-    c("CV of one group", onoff("filter_cv"), sprintf("group <b>%s</b>, CV &lt; <b>%s%%</b>", esc(getp("filter_cv_group")), esc(getp("filter_cv_value"))),
-      "Removes precursors that vary too much within the chosen group (usually SPQC)."),
-    c("Precursor quality", onoff("precursor_quality"),
-      sprintf("%s: CV &gt; <b>%s%%</b>, intensity &ge; %s, values &ge; %s", if (identical(getp("precursor_quality_method"), "profile")) paste0("<b>profile</b> (residual to the ", feat(p, FALSE), " profile)") else "app (share of the protein signal)",
-              esc(getp("precursor_quality_sd")), esc(getp("precursor_quality_intensity")), esc(getp("precursor_quality_min"))),
-      if (is_peptide_output(p)) "Peptide output: within each peptide (3+ charge states), removes charge states that don't follow the peptide (profile method; the app's method does nothing for peptides). Phosphopeptides of one protein are never compared with each other."
-      else "Within each protein (3+ precursors), removes precursors that don't follow the protein (profile) or whose share of the protein signal varies too much (app)."),
-    c("SPQC ratio", onoff("precursor_spqc_ratio"),
-      sprintf("SPQC/sample mean outside 100 &plusmn; <b>%s%%</b>, SPQC mean &gt; %s", esc(getp("precursor_spqc_accuracy")), esc(getp("precursor_spqc_intensity"))),
-      "The pool should sit near the sample average; precursors where it doesn't are removed."),
-    c("PTM only", onoff("filter_ptm"), esc(p$ptm_grep %||% ""), "Keeps only sequences matching the PTM pattern (PTM datasets)."))
-  set_df <- as.data.frame(do.call(rbind, set_rows), stringsAsFactors = FALSE); names(set_df) <- c("Filter", "Status", "Setting", "What it does")
-
   # --- status + decision ---
   status <- if (applied) "Applied" else "Waiting for approval of the settings"
   status_class <- if (applied) "done" else "waiting"
   dec <- read_decisions(run_dir, "05_filter"); last_dec <- if (length(dec)) dec[[length(dec)]] else NULL
-  decision_html <- paste0('<section><h2>', if (applied) "Settings applied" else "Decision needed: approve these settings", '</h2>',
-    html_table(set_df),
+  opts <- filter_options(p, groups)
+  vals <- setNames(lapply(opts_flat(opts), function(o) getp(o$name) %||% o$default), vapply(opts_flat(opts), `[[`, "", "name"))
+  previewed <- if (!is.null(summ) && identical(summ$action, "preview")) summ$settings else NULL
+  decision_html <- paste0(
+    options_form("05_filter", opts, vals, previewed = previewed, applied = applied, run_dir = run_dir,
+                 title = if (applied) "Filter settings applied" else "Filter options"),
     { mn <- unlist(summ$cutoff$misaligned_notes); if (length(mn)) paste0('<p class="missing">', paste(esc(mn), collapse = "<br/>"), '</p>') else "" },
     if (applied && !is.null(last_dec)) sprintf('<p class="note">Recorded %s%s. %s</p>', esc(last_dec$time),
        if (!is.null(last_dec$analyst)) paste0(" by ", esc(last_dec$analyst)) else "", esc(last_dec$note %||% "")) else "",
-    if (!applied) '<p class="note">Use the explorers below to see what each filter would remove at other settings, then approve or change the settings in the Claude session.</p>' else "",
-    '</section>')
+    if (!applied) '<p class="note">The explorers below show what each filter would remove on its own at other settings.</p>' else "")
 
   # --- applied results ---
   results_html <- ""; result_data <- NULL

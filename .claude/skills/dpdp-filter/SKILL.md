@@ -45,27 +45,36 @@ To reuse a previous run's settings: `--settings_from=<that run's .db>`. Explicit
 ```bash
 cd /home/user/Claude_Shiny
 # 1) preview: saves settings, redraws histogram with the misaligned intensity cutoff
-Rscript pipeline/steps/05_filter.R --db=<db> --action=preview [--settings_from=<db>] [--name=value ...]
-# 2) after the analyst approves:
-Rscript pipeline/steps/05_filter.R --db=<db> --action=apply  [--settings_from=<db>] [--name=value ...] \
-  --decided_by=user --analyst=<name> [--note="<reason>"]
+Rscript pipeline/steps/05_filter.R --db=<db> --action=preview [--from_page] [--settings_from=<db>] [--name=value ...]
+# 2) after the analyst approves (applies the last preview's settings):
+Rscript pipeline/steps/05_filter.R --db=<db> --action=apply [--from_page] --decided_by=user [--analyst=<name>] [--note="<reason>"]
 ```
-Apply refuses to run without `--decided_by=user`. Both actions (re)build **`data/<prefix>/review/05_filter.html`**
-(rebuild any time: `Rscript pipeline/review_page.R --db=<db> --step=05_filter`).
+- Every option and its default, allowed values and meaning are in `pipeline/options/05_filter.R` (the app's 18 Filter-tab
+  options plus `precursor_quality_method`). The script checks values against it.
+- **Apply only after preview** (user, 2026-11-09): apply uses the settings of the last preview. Option arguments that differ from
+  it are refused ("Preview them first"); apply right after an apply is refused too. A preview with no option arguments uses the
+  defaults, so pass every change you want to keep.
+- `--from_page` takes the values the analyst sent from the page's Options panel (`review/pending_decision.json`). A preview
+  archives that page request; an apply leaves it for the decision log.
+Both actions (re)build **`data/<prefix>/review/05_filter.html`** (rebuild any time: `Rscript pipeline/review_page.R --db=<db> --step=05_filter`).
 
 ## Review page and decision
-Give the analyst the page path after preview (offer `xdg-open <path>`). The page has:
-- **Settings table:** each filter, on/off, its values, and what it does.
+Give the analyst the page path after preview (offer `xdg-open <path>`; in the web app it opens by itself). The page has:
+- **Filter options panel:** every option, editable, as in the app, with what it does. Changed-from-default options are marked;
+  options that don't apply are greyed. **Preview with these settings**, **Apply these settings** (off until the page shows the
+  current values) and **Reset to defaults**. After apply the panel is read-only.
 - **Graphs:** the noise-filtered histogram (misaligned intensity cutoff). After apply, also the start vs filtered bar and box plots.
 - **What-if explorers:** one curve per filter (minimum measured, X% per group, misaligned with an intensity-cutoff list, CV with a group
   list, SPQC ratio with an intensity list). Each shows the precursors that filter would remove **on its own** at any setting; the current
   setting is the orange dashed line. Precursor quality has no explorer.
 - **After apply:** counts before → after, a removed-per-stage bar chart, missing % per sample, any `noise_keep` values put back, warnings.
 
-Then ask with **AskUserQuestion** (header "Filter"): "Apply these filter settings to <prefix>?". Options:
-- "Apply as shown"
-- "Change settings": ask which filter and value, re-run preview with `--name=value`, show the page again, ask again.
-Don't mark an option as recommended. Ask for an optional one-line reason for `--note`.
+Page decisions (choice in the waiting JSON):
+- `preview` -> `05_filter.R --action=preview --from_page`, then tell the analyst the page has been rebuilt, and wait again.
+- `apply` -> `05_filter.R --action=apply --from_page --decided_by=user`.
+- `other` -> read `fields.request` and discuss it in the chat.
+In the chat instead: run a preview with the analyst's changes as `--name=value`, show the page, and apply when they say so
+(no option arguments needed). Don't mark an option as recommended.
 
 ## Show the user
 From `steps/05_filter/summary.json`, and **open every file in `plots`**:
