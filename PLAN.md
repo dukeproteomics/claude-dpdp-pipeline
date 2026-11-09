@@ -119,6 +119,18 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   `tools/renv/README.md` (restore steps, Ubuntu system libraries). Copied into the plugin as `renv/`. Partial restore tested.
   Not locked: rmotifx, PTMphinder (Phos only, not installed).
 
+## Editable options panel on review pages (decided 2026-11-09, not built yet)
+- The step's options panel becomes the form, like the Shiny app: **every option** shown and editable (no "Advanced" split; options
+  get retired over time instead). Fields that don't apply are greyed with the reason; changed-from-default fields are marked;
+  Reset to defaults. The top box keeps status, next step and a note; a free-text box stays for anything the form can't say.
+- **Apply only after Preview:** editing a field disables Apply until "Preview with these settings" has rebuilt the page, so the
+  graphs always match what is applied.
+- One option list per step (name, type, allowed values, default, meaning, when it applies), used by both the step script's
+  validation and the page form; Claude runs the step with the sent settings (no choice->command table). One decision per answer
+  stays. Finished steps show their settings read-only.
+- Order: Filter first (settles the layout), then Noise, Impute, Rollup, Normalize (method + subset rule), Stats (needs a
+  comparison builder). Load and Parameters stay accept/fix.
+
 ## Web app for other users (decided 2026-11-06)
 - Users won't SSH; they have the Shiny/RStudio bookmark. The user wants an app-like page, not RStudio.
 - No central API key (Duke has no contact for it), and Remote Control is off by Duke's policy (tested: "disabled by your
