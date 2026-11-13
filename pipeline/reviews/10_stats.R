@@ -60,6 +60,8 @@ review_stats <- function(db_path) {
                                     effect = if (applied) "(sets up the comparisons again; the results below are replaced when you apply)" else "(checks the comparisons and their samples)"))
   comp_df <- if (!is.null(sc) && nrow(sc)) data.frame(Comparison = esc(sc$Name), Numerator = esc(sc$FactorsN), Denominator = esc(sc$FactorsD),
     Samples = sprintf("%s vs %s (+%s pool)", sc$N, sc$D, sc$SPQC), stringsAsFactors = FALSE) else NULL
+  if (!is.null(comp_df) && as_flag(g("pair_comp") %||% FALSE))   # paired: show which samples are paired
+    comp_df$Pairs <- vapply(seq_len(nrow(sc)), function(i) esc(comps_pairs(list(N = trimws(strsplit(sc$FactorsN[i], ",")[[1]]), D = trimws(strsplit(sc$FactorsD[i], ",")[[1]])), design)), "")
   peptides_note <- if (is_peptide_output(p)) sprintf('<p class="note">%s tested: %s</p>', Uc,
     if (ptm_report(p)) sprintf("<b>%s only</b> (Sequence matches <code>%s</code>); adjusted p covers those only.", esc(g("peptide_report_grep")), esc(g("peptide_report_grep"))) else "all peptides") else ""
   decision_html <- paste0(form, '<section><h2>', if (applied) "Comparisons calculated" else "Comparisons at the last preview", '</h2>',

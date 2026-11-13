@@ -165,6 +165,14 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Stats extra columns checked (2026-11-13, throwaway 11531 run, perseus + iq_maxlfq)
+- Cohen's d: matches effsize::cohen.d (unpooled, Hedges) exactly; Hedges shrinks |d| x0.80 at 3 v 3, x0.89 at 6 v 3; sign = FC sign.
+  On raw intensities (app), not log2 like the t-test: rank cor 0.94 with log2 d. Unpaired even with pair_comp.
+- limma p: identical to an independent limma fit on log2 (unpaired).
+- pair_comp: paired t-test on log2 and mean of per-pair ratios, pairs by sheet order (152798~152545, ...); calls 52/9 -> 115/12 on
+  3 v 3. The app crashed with unequal sides (6 v 3: "undefined columns selected"): now refused at preview (step and page), and the
+  page lists the pairs. All four columns reach the Excel sheets.
+
 ## Fixes from note.md (test_project web session, 2026-11-13)
 1. Group names starting with a digit (51C, 55Ex): the app's stats tables get R-style names (`X55Ex_v_51C_FC`, also sample and CV
    columns), the pipeline looked up `55Ex_v_51C_FC` and Stats failed. `comp_col()` / `comp_get()` (common.R) apply make.names when

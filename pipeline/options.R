@@ -262,7 +262,11 @@ OPTIONS_JS <- '
     x.invalid = () => { const v = dec(x.inp.value); if (!v.length) return "Add at least one comparison.";
       if (v.some(c => !c.N.length || !c.D.length)) return "Each comparison needs a group on each side.";
       const n = v.map(c => name(c.N, c.D));
-      if (new Set(n).size < n.length) return "The same comparison is in the list twice."; return ""; };
+      if (new Set(n).size < n.length) return "The same comparison is in the list twice.";
+      const pc = X.pair_comp, cnt = g => g.reduce((t, v) => t + (Number(counts[v]) || 0), 0);
+      if (pc && pc.inp.checked && !pc.inp.disabled) { const bad = v.filter(c => cnt(c.N) !== cnt(c.D));
+        if (bad.length) return "Pairwise comparisons need the same number of samples on both sides: " + bad.map(c => name(c.N, c.D) + " (" + cnt(c.N) + " v " + cnt(c.D) + ")").join(", ") + "."; }
+      return ""; };
     x.render();
   }
   const W = O.words || { preview: "Preview", apply: "Apply", previewing: "the preview" };

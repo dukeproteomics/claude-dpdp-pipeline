@@ -88,6 +88,7 @@ settings$peptide_refilter <- FALSE
 opts_validate(opts, settings)
 comps <- comps_decode(settings$comparisons)
 comps_check(comps, stat_groups)
+if (as_flag(settings$pair_comp)) comps_pair_check(comps, design)
 settings$comparisons <- comps_encode(comps)
 if (is_limpa && as_flag(settings$pair_comp)) stop("limpa run: paired comparisons (--pair_comp) are not built for dpcDE yet.")
 stat_norm <- settings$stats_norm_type

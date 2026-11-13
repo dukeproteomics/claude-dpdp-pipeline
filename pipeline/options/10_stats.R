@@ -62,7 +62,9 @@ stats_options <- function(p = NULL, design = NULL, norms = NULL, limpa = FALSE) 
       opt("stats_peptide_minimum", "Require minimum # of peptides per protein", "checkbox", FALSE, "Removes proteins with fewer peptides."),
       opt("stats_peptide_minimum_factor", "Peptide Minimum", "number", 1, "", depends = "stats_peptide_minimum", min = 1, step = 1))),
     opt_section("Extra columns", list(
-      opt("pair_comp", "Pairwise Comparisons", "checkbox", FALSE, "Paired test (samples matched by order).",
+      opt("pair_comp", "Pairwise Comparisons", "checkbox", FALSE,
+          paste("Paired t-test: the samples of the two sides are paired by their order in the sample sheet (1st with 1st, ...), so both",
+                "sides need the same number of samples; fold change = mean of the per-pair ratios. Cohen&apos;s d and the limma p stay unpaired (as in the app)."),
           disabled = if (isTRUE(limpa)) "Not built for limpa (dpcDE) yet."),
       opt("checkbox_cohensd", "Include Cohen's D?", "checkbox", FALSE, "Effect size (R package effsize)."),
       opt("checkbox_cohensd_hedges", "Use Hedge's Correction (low N)?", "checkbox", FALSE, "Correction for small sample size.", depends = "checkbox_cohensd"),
@@ -79,6 +81,19 @@ stats_options <- function(p = NULL, design = NULL, norms = NULL, limpa = FALSE) 
 
 # Check comparisons against the groups: each side at least one group, no group on both sides, no duplicates. (Long names are fine:
 # the app's Excel writer cuts sheet names to 31 characters, and each starts with "Table<n> ", so they stay unique.)
+# pair_comp: each comparison needs the same number of samples on both sides (the app pairs them by order and fails otherwise).
+comps_pair_check <- function(comps, design) {
+  n <- function(g) sum(design$Group %in% g)
+  bad <- Filter(function(c) n(c$N) != n(c$D), comps)
+  if (length(bad)) stop("Pairwise comparisons need the same number of samples on both sides: ",
+    paste(vapply(bad, function(c) sprintf("%s (%d v %d)", comp_name(c$N, c$D), n(c$N), n(c$D)), ""), collapse = ", "),
+    ". Turn Pairwise Comparisons off, or change these comparisons.", call. = FALSE)
+  invisible(TRUE)
+}
+# The sample pairs of a paired comparison, in the app's order (design order within each side).
+comps_pairs <- function(c, design) { a <- design$ID[design$Group %in% c$N]; b <- design$ID[design$Group %in% c$D]
+  if (length(a) != length(b)) return("") ; paste(a, b, sep = " ~ ", collapse = ", ") }
+
 comps_check <- function(comps, groups) {
   if (!length(comps)) stop("No comparison: add at least one (numerator v denominator).", call. = FALSE)
   for (c in comps) {
