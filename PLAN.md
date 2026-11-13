@@ -165,6 +165,18 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Step 11 Pathway: STRING over-representation and network (user, 2026-11-13; STRING website OK; ORA + network first)
+- `pipeline/string_api.R` (STRING API at the version's stable address, chunked id mapping, enrichment with a custom background,
+  network, link; organism from "org=" / "OS="), `pipeline/options/11_pathway.R`, `pipeline/steps/11_pathway.R`, `pipeline/reviews/11_pathway.R`,
+  skill `dpdp-pathway`. Up and Down separately against the proteins tested in the comparison; other species / flagged left out;
+  Peptide output collapsed to proteins. Network of the hits (max 300 by p), Louvain clusters, each 5+ cluster enriched; layout of
+  the connected proteins, the others in a grid (hidden by default); names from the data when STRING has only a UniProt code.
+  Excel Pathway/Pathway_STRING_<norm>.xlsx; Run / Accept (accept = the last run's settings). In STEP_ORDER (out of date after Stats).
+- Tested: 10658 triple-spike (human constant: nothing enriched, as it should be), 11517 phospho Cryptococcus (3,546 proteins mapped,
+  4-60 terms per direction, 7-9 clusters), page clicks (comparison, Up/Down, term -> highlight + members, cluster), accept refused
+  with a changed setting. ~1-1.5 min per run (mapping cached).
+- Next: ranked analysis (GSEA), grouping of redundant terms, term drill-down (volcano, heatmap).
+
 ## Sample and column names as written (user, 2026-11-13)
 - RSQLite::dbReadTable() cleans names on every read (make.names: "55Ex 152025 Normalized" -> "X55Ex.152025.Normalized"; also spaces
   -> dots for every run); the app depends on it internally. `display_names()` (common.R) maps names made from the design (headers,

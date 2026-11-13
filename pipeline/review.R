@@ -124,10 +124,10 @@ impute_choices_ordered <- function(background, choices) {
 # A step works on the result of the step before it, so changing a step makes every later step out of date ("stale").
 # Rule: a step is out of date when an earlier step was decided or re-run after it (times from decisions.jsonl and summary.json).
 # Revisits (pipeline/revisit.R): <run>/revisit.json {step, time, backup, mode = auto|step, status = open|done|cancelled, reached}.
-STEP_ORDER <- c("01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "07_impute", "08_rollup", "09_qc", "10_stats")
+STEP_ORDER <- c("01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "07_impute", "08_rollup", "09_qc", "10_stats", "11_pathway")
 STEP_TITLE <- c("01_load" = "Step 1 - Load", "03_parameters" = "Step 3 - Parameters", "04_noise" = "Step 4 - Noise",
                 "05_filter" = "Step 5 - Filter", "06_normalize" = "Step 6 - Normalize", "07_impute" = "Step 7 - Impute",
-                "08_rollup" = "Step 8 - Rollup", "09_qc" = "Step 9 - QC", "10_stats" = "Step 10 - Stats")
+                "08_rollup" = "Step 8 - Rollup", "09_qc" = "Step 9 - QC", "10_stats" = "Step 10 - Stats", "11_pathway" = "Step 11 - Pathway")
 # Comparison pages belong to their step: out of date with it.
 SUB_PAGES <- c("06b_normalize_compare" = "06_normalize", "07b_impute_compare" = "07_impute", "10e_explore" = "10_stats")
 
@@ -229,6 +229,9 @@ decision_spec <- function(step, variant, p, run_dir = NULL) {
       ch("accept", "Accept"), ch("stop", "Stop here"))),
     "10_stats" = list(q = "set the Stats options below, Preview, then Apply", nxt = "Stats results",
       help = "Use the <b>Stats options</b> panel below: pick the comparisons (numerator v denominator; <b>Swap</b>, <b>+ Add comparison</b>) and the cutoffs, <b>Preview with these settings</b>, then <b>Apply</b> (runs the stats). For anything else, write it here and press <b>Send to Claude</b>.",
+      choices = list(ch("other", "Something else (a question, or a change the options can't express)", list(fld("request", "What?"))))),
+    "11_pathway" = list(q = "set the Pathway options below, Run, then Accept", nxt = "Report (not built yet)",
+      help = "Use the <b>Pathway options</b> panel below: organism, which proteins are hits, the databases and the network, <b>Run with these settings</b> (asks string-db.org), then <b>Accept these settings</b> when the results are what you want. For anything else, write it here.",
       choices = list(ch("other", "Something else (a question, or a change the options can't express)", list(fld("request", "What?"))))),
     "10_stats:results" = list(q = "Accept the stats results?", help = "To change comparisons or cutoffs, use the <b>Stats options</b> panel below (Preview, then Apply).", nxt = "Finished (Pathway and Report are not built yet)", choices = list(
       ch("accept", "Accept"),
