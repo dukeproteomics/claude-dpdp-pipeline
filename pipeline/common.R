@@ -49,6 +49,24 @@ step_dir <- function(run_dir, step) {
 # "55Ex_v_51C" (group names starting with a digit) has columns "X55Ex_v_51C_FC", "_pval", ... Read and write them with the same
 # rule; normal names are unchanged. comp_get() also finds columns written without the rule (runs before 2026-11-13).
 comp_col <- function(nm, suffix) make.names(paste0(nm, suffix))
+
+# Column names as people wrote them. RSQLite::dbReadTable() cleans names on every read (make.names: "55Ex 152025 Normalized" ->
+# "X55Ex.152025.Normalized", "55Ex_v_51C_FC" -> "X55Ex_v_51C_FC"), and the app depends on that internally, so the pipeline only
+# changes what people see (the Excel workbook, the Explore table): every name made from the design (headers, labels, IDs, groups) or
+# a comparison goes back to its original form; anything else only loses an "X" added before a leading digit.
+display_names <- function(nms, design, stats_comp = NULL) {
+  orig <- unique(c(design$Header1, design$Header2, design$Header3, design$Label, design$ID, design$Group, paste0(unique(design$Group), "_CV")))
+  if (!is.null(stats_comp) && nrow(stats_comp)) {
+    sides <- unique(c(stats_comp$FactorsN, stats_comp$FactorsD))
+    orig <- c(orig, paste0(sides, "_CV"),
+              as.vector(outer(stats_comp$Name, c("_FC", "_FC2", "_pval", "_adjpval", "_mf", "_cohensd", "_limma", "_refilter_precursors", "_refilter_flag"), paste0)))
+  }
+  orig <- orig[!is.na(orig) & nzchar(orig)]
+  dict <- setNames(orig, make.names(orig)); dict <- dict[!duplicated(names(dict))]
+  out <- ifelse(nms %in% names(dict) & !nms %in% orig, dict[nms], nms)
+  out <- ifelse(out == nms & grepl("^X[0-9]", nms) & !nms %in% orig, sub("^X", "", nms), out)
+  unname(out)
+}
 comp_get <- function(d, nm, suffix) { k <- comp_col(nm, suffix); if (!k %in% names(d) && paste0(nm, suffix) %in% names(d)) k <- paste0(nm, suffix); d[[k]] }
 
 write_summary <- function(summary, dir) {

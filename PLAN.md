@@ -165,6 +165,12 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Sample and column names as written (user, 2026-11-13)
+- RSQLite::dbReadTable() cleans names on every read (make.names: "55Ex 152025 Normalized" -> "X55Ex.152025.Normalized"; also spaces
+  -> dots for every run); the app depends on it internally. `display_names()` (common.R) maps names made from the design (headers,
+  labels, IDs, groups, group CVs) or a comparison back to the original; other names only lose an "X" before a leading digit.
+  Used for the Excel workbook (10c rewrites the header rows of every sheet: test_project 46 names, 10658 81) and the Explore table.
+
 ## Protein plots and the Explore tab (user, 2026-11-13)
 - The Stats page's top-hit protein plots never drew for Protein output: the script read the (missing) peptide sequence of a protein
   row and stopped. Fixed; runs whose 10c output predates the sample list skip the section (re-run 10c).

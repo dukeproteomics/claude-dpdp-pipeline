@@ -43,7 +43,8 @@ if (is.null(args$excel) || as_flag(args$excel)) {
   if (!dir.exists(file_dir)) dir.create(file_dir, recursive = TRUE)
   run_bg(stats_Final_Excel_bg, list(file_dir, filename, filename_params, p), "finalexcel", db_path)
   fn <- gsub("/+", "/", c(filename, filename_params))
-  # Pipeline addition: a "Flagged proteins" sheet (contaminants / spike-ins, flagged not removed). The app's sheets are unchanged.
+  # Pipeline additions: a "Flagged proteins" sheet (contaminants / spike-ins, flagged not removed), and the header names as written
+# in the design. The app's sheets are otherwise unchanged.
   sp <- qc_spike_settings(run_dir)
   flag_rows <- do.call(rbind, lapply(seq_len(nrow(stats_comp)), function(i) {
     nm <- stats_comp$Name[i]; d <- read_table(final_table(stats_comp, i, p), db_path)
@@ -53,15 +54,24 @@ if (is.null(args$excel) || as_flag(args$excel)) {
                FC = comp_get(d, nm, "_FC")[k], pval = comp_get(d, nm, "_pval")[k], adjpval = comp_get(d, nm, "_adjpval")[k] %||% NA,
                Stats = d$Stats[k], stringsAsFactors = FALSE)
   }))
+  wb <- openxlsx::loadWorkbook(fn[1])
+  # Pipeline: header names as written in the design (the app's sheets have the R-cleaned names, "X55Ex.152025.Normalized")
+  renamed <- 0
+  for (sh in names(wb)) {
+    h <- tryCatch(suppressWarnings(unlist(openxlsx::read.xlsx(fn[1], sheet = sh, rows = 1, colNames = FALSE, skipEmptyCols = FALSE)[1, ])), error = function(e) NULL)
+    if (!length(h)) next
+    h <- as.character(h); h2 <- display_names(h, design, stats_comp)
+    if (!identical(h, h2)) { openxlsx::writeData(wb, sh, as.data.frame(t(h2)), startRow = 1, colNames = FALSE); renamed <- renamed + sum(h != h2, na.rm = TRUE) }
+  }
   if (!is.null(flag_rows) && nrow(flag_rows)) {
-    wb <- openxlsx::loadWorkbook(fn[1])
     if ("Flagged proteins" %in% names(wb)) openxlsx::removeWorksheet(wb, "Flagged proteins")
     openxlsx::addWorksheet(wb, "Flagged proteins")
     openxlsx::writeData(wb, "Flagged proteins", data.frame(Note = "Flagged, not removed: digestion trypsin, human keratins (non-human samples), QC spike-ins. Their rows stay in every sheet."), startRow = 1)
     openxlsx::writeDataTable(wb, "Flagged proteins", flag_rows[order(flag_rows$Stats == "", flag_rows$pval), ], startRow = 3, tableStyle = "TableStyleLight9")
     openxlsx::setColWidths(wb, "Flagged proteins", cols = 1:9, widths = c(12, 12, 50, 12, 24, 10, 12, 12, 8))
-    openxlsx::saveWorkbook(wb, fn[1], overwrite = TRUE)
   }
+  openxlsx::saveWorkbook(wb, fn[1], overwrite = TRUE)
+  if (renamed) cat(sprintf("Excel: %d header names put back as written in the design\n", renamed))
   sheets <- openxlsx::getSheetNames(fn[1])
   sheet_rows <- setNames(lapply(sheets, function(s) { d <- openxlsx::read.xlsx(fn[1], sheet = s, rows = 1:2); if (is.null(d)) 0 else ncol(d) }), sheets)
   out$excel <- list(files = fn, sheets = sheets, sheet_columns = sheet_rows, flagged_rows = if (is.null(flag_rows)) 0 else nrow(flag_rows),

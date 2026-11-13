@@ -69,11 +69,12 @@ tables <- vapply(seq_len(nrow(sc)), function(i) {
   ft <- final_table(sc, i, p); if (!table_exists(ft, db_path)) return("")
   st <- read_table(ft, db_path); st <- st[, !grepl("_FC2", names(st)), drop = FALSE]
   if (trimws(p$stat_norm) == "impute") names(st) <- gsub("Normalized", "Imputed", names(st))
+  st_names <- display_names(names(st), design, sc)   # as written in the design (no "X55Ex.152025...")
   k <- match(if (pep_out) paste(st$Accession, st$Sequence, st$Protein_PTM_Loc %||% "") else st$Accession, key_main) - 1L
   cols <- lapply(st, function(v) if (is.numeric(v)) signif(v, 6) else as.character(v))
   fn <- sprintf("10e_explore_table_%d.json.gz", i)
   con <- gzfile(file.path(review_dir(run_dir), fn), "wb", compression = 6)
-  writeLines(toJSON(list(name = sc$Name[i], columns = names(st), numeric = unname(vapply(st, is.numeric, TRUE)), row = k, data = unname(cols)),
+  writeLines(toJSON(list(name = sc$Name[i], columns = st_names, numeric = unname(vapply(st, is.numeric, TRUE)), row = k, data = unname(cols)),
                     auto_unbox = TRUE, digits = NA, na = "null", null = "null"), con); close(con)
   fn }, "")
 for (i in seq_along(comps)) comps[[i]]$table <- tables[i]
