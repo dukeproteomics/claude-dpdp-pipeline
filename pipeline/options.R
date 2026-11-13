@@ -21,6 +21,14 @@ opt <- function(name, label, type = c("number", "checkbox", "select", "text"), d
 }
 opt_section <- function(title, options, note = NULL) list(title = title, note = note, options = options)
 
+# A step can name a setting that needs no preview (it changes nothing the page could show), e.g. Noise: noise_type = none.
+# attr(sections, "no_preview") <- list(noise_type = "none"). Apply with those values given explicitly (on the page or the
+# command line) goes ahead without a preview.
+no_preview_match <- function(sections, values) {
+  np <- attr(sections, "no_preview")
+  !is.null(np) && all(names(np) %in% names(values)) &&
+    all(vapply(names(np), function(k) identical(as.character(values[[k]]), as.character(np[[k]])), TRUE))
+}
 opts_flat <- function(sections) do.call(c, lapply(sections, `[[`, "options"))
 opts_spec <- function(sections) { o <- opts_flat(sections); setNames(lapply(o, `[[`, "default"), vapply(o, `[[`, "", "name")) }
 opts_byname <- function(sections) { o <- opts_flat(sections); setNames(o, vapply(o, `[[`, "", "name")) }
@@ -78,6 +86,7 @@ page_args <- function(args, run_dir, step, sections, action) {
 # a different value stops the step: preview first.
 # Options not in use (greyed: their depends is off) are not compared when sections is given.
 apply_settings <- function(run_dir, step, spec, args, settings, sections = NULL) {
+  if (!is.null(sections) && no_preview_match(sections, args)) return(settings)   # e.g. noise none: nothing to preview
   f <- file.path(run_dir, "steps", step, "summary.json")
   prev <- if (file.exists(f)) fromJSON(f, simplifyVector = FALSE) else NULL
   if (is.null(prev) || !identical(prev$action, "preview"))
@@ -107,6 +116,7 @@ options_form <- function(step, sections, values, previewed = NULL, applied = FAL
   shown <- unlist(lapply(secs, function(s) vapply(s$options, `[[`, "", "name")))
   hidden <- Filter(function(o) !is.null(o$hide), opts_flat(sections))
   d <- list(step = step, run = if (!is.null(run_dir)) basename(run_dir) else "", applied = applied, words = words,
+            no_preview = attr(sections, "no_preview"),
             previewed = if (is.null(previewed)) NULL else previewed[intersect(names(previewed), shown)],
             sections = secs)
   sprintf('<section id="options"><h2>%s</h2>%s<div id="optform"></div>%s</section><style>%s</style><script>window.DPDP_OPTIONS = %s;</script>',
@@ -204,9 +214,11 @@ OPTIONS_JS <- '
     if (O.applied) return;
     const busy = pending || sent || !served;
     prev.disabled = busy; reset.disabled = busy;
-    apply.disabled = busy || !O.previewed || dirty.length > 0;
+    const free = O.no_preview && Object.entries(O.no_preview).every(([k, v]) => X[k] && String(val(X[k])) === String(v));
+    apply.disabled = busy || (!free && (!O.previewed || dirty.length > 0));
     if (!served) msg.textContent = "Buttons need the review server (or the DPDP web app). You can also tell Claude in the chat.";
     else if (sent || pending) msg.textContent = "Sent to Claude. This page reloads when Claude has run it.";
+    else if (free) msg.textContent = "Nothing to preview with these settings: " + W.apply + " them directly.";
     else if (!O.previewed) msg.textContent = W.preview + " these settings first; " + W.apply + " turns on when the page shows them.";
     else if (dirty.length) msg.textContent = "Changed since " + W.previewing + ": " + dirty.join(", ") + ". " + W.preview + " with these settings to see the effect first.";
     else msg.textContent = "The page shows these settings. " + W.apply + " them, or change options and " + W.preview.toLowerCase() + " again.";

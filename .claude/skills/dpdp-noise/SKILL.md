@@ -57,7 +57,8 @@ Use the **AskUserQuestion** tool so the analyst picks from buttons (they can alw
 ## 2. Apply the analyst's choice
 **Apply only after preview** (user, 2026-11-09): apply uses the settings of the last preview, so preview the analyst's choice
 first (with every option it sets), then apply. Option arguments that differ from the preview are refused; apply right after an
-apply is refused too.
+apply is refused too. **Exception: `noise_type=none`** removes nothing, so it needs no preview (user, 2026-11-13): apply with
+`--noise_type=none` given (or none sent from the page) goes straight ahead. A bare `--action=apply` still means "the last preview".
 ```bash
 Rscript pipeline/steps/04_noise.R --db=<db> --action=apply [--from_page] --decided_by=user --analyst=<name> [--note="<reason>"]
 ```

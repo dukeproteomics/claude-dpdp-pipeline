@@ -159,6 +159,11 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   longer compared at apply or counted as changes since the preview. Tested on a throwaway 11504 run (deleted): page clicks
   (dynamic -> Use as fixed baseline 32 -> noise_keep -> Preview), preview/apply from the page, a changed baseline refused, apply
   twice refused, none with a greyed noise_keep accepted, Filter's noise_keep restore after it (41,582 values put back).
+  - **No preview needed for none** (user, 2026-11-13): an option list can name settings with nothing to preview
+    (`attr(sections, "no_preview")`; Noise: noise_type = none). Apply is on for them on the page and the script applies them
+    without a preview when they are given explicitly; a bare apply still uses the last preview. Tested (zz_np, deleted): apply
+    none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
+    after a dynamic preview applied dynamic.
 
 ## Web app for other users (decided 2026-11-06)
 - Users won't SSH; they have the Shiny/RStudio bookmark. The user wants an app-like page, not RStudio.

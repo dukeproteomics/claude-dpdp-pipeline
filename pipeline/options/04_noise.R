@@ -6,7 +6,7 @@ noise_options <- function(p = NULL, summ = NULL) {
   cnt <- function(x) if (is.null(x$count)) "?" else sprintf("%s values (%s%%)", format(as.numeric(x$count), big.mark = ","), x$percent)
   type_info <- if (!is.null(summ)) sprintf("At the last preview: dynamic removes %s below the inflection %s (log2 %s); fixed at %s removes %s.",
     cnt(summ$dynamic), format(summ$noise_inflection %||% "?"), summ$noise_inflection_log2 %||% "?", summ$noise_baseline_value %||% "?", cnt(summ$fixed))
-  list(
+  sections <- list(
     opt_section("Noise reduction", list(
       opt("noise_type", "Select noise reduction strategy", "select", "none",
           paste("none: keep every value. fixed: remove values below the baseline you enter. dynamic: remove values below the inflection",
@@ -23,4 +23,6 @@ noise_options <- function(p = NULL, summ = NULL) {
           depends = "noise_keep", min = 0, step = 1,
           disabled = "Not used: the pipeline puts back every measured value of a precursor that passes the filter (rule 2026-11-04; the app's version cleans the wrong rows).")))
   )
+  attr(sections, "no_preview") <- list(noise_type = "none")   # none removes nothing: apply without a preview (user, 2026-11-13)
+  sections
 }
