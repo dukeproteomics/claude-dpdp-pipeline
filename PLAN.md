@@ -165,6 +165,15 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Protein plots and the Explore tab (user, 2026-11-13)
+- The Stats page's top-hit protein plots never drew for Protein output: the script read the (missing) peptide sequence of a protein
+  row and stopped. Fixed; runs whose 10c output predates the sample list skip the section (re-run 10c).
+- New Step 10e (`steps/10e_explore.R`, page `reviews/10e_explore.R`): search any protein / peptide and plot it (value per sample;
+  its peptides mean +- SD per group, log2 or z-score = the app's Peptide Plot), for a comparison (+ pool) or all samples, with the
+  calls in every comparison. Data in `review/10e_explore_data.json.gz` (served with Content-Encoding gzip by both servers; 10658:
+  15,114 proteins / 231,445 peptides = 9.4 MB, 11517: 6.3 MB, test_project: 3.8 MB), built in ~4 s. In the replay (redo) after
+  10b/10c. Tested in headless Chrome on 10658 (ADH1), 11517 (phospho sites) and test_project (Actb).
+
 ## Chart downloads (user, 2026-11-13)
 - Every Plotly chart on every page (COMMON_JS in review.R wraps Plotly.newPlot / react): "PNG (email/slides)" at 3x (~300 dpi at a
   normal width) and "SVG (report)" instead of the camera; the toolbar shows on hover on every chart (also those that had it off).

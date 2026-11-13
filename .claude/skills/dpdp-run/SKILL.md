@@ -47,7 +47,7 @@ one in its left panel by itself; say "the <step> page is ready on the left". Run
 | 07_impute | `duke` / `bottomx` / `perseus` / `minprob` / `qrilc` / `limpa` -> `07_impute.R --action=apply --impute_type=<choice>` plus that choice's fields (`--missing_cutoff --bottom_x`, `--perseus_shift --perseus_width`, `--minprob_q`); re-preview first if they changed |
 | 08_rollup | `iq_maxlfq_scaled` -> `--rollup_method=iq_maxlfq --maxlfq_scale=TRUE`; `iq_maxlfq` -> `... --maxlfq_scale=FALSE`; `sum` -> `--rollup_method=sum`; `limpa` -> `--rollup_method=limpa --limpa_background=<field>` (the only choice after limpa in Impute) |
 | 09_qc | `accept_flag` -> `09_qc.R --action=accept --flag_samples=<fields.flag_samples>`; `accept` -> `--action=accept`; `stop` -> stop |
-| 10_stats | Options panel (also on the results page): `preview` -> `10_stats.R --action=preview --from_page` (then wait again); `apply` -> `10_stats.R --action=apply --from_page --decided_by=user`, then 10b and 10c; `other` -> discuss `fields.request` |
+| 10_stats | Options panel (also on the results page): `preview` -> `10_stats.R --action=preview --from_page` (then wait again); `apply` -> `10_stats.R --action=apply --from_page --decided_by=user`, then 10b, 10c and 10e (Explore tab); `other` -> discuss `fields.request` |
 | 10_stats (results) | `accept` -> `10_stats.R --action=accept`; `plots` -> `10c --proteins=<fields.proteins>`, then ask again |
 
 ## Logs

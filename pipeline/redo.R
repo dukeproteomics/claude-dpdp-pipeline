@@ -30,7 +30,8 @@ redo_cmds <- function(step, db, b_db, b_dec, b_dir, applied = TRUE) {
     },
     "10_stats" = c(list(pre("10_stats.R"), app("10_stats.R")),
                    if (file.exists(file.path(b_dir, "steps", "10_stats", "graphs.json"))) list(list(script = st("10b_stats_graphs.R"), args = paste0("--db=", db), apply = FALSE)),
-                   if (file.exists(file.path(b_dir, "steps", "10_stats", "output.json"))) list(list(script = st("10c_stats_output.R"), args = paste0("--db=", db), apply = FALSE))),
+                   if (file.exists(file.path(b_dir, "steps", "10_stats", "output.json"))) list(list(script = st("10c_stats_output.R"), args = paste0("--db=", db), apply = FALSE)),
+                   if (file.exists(file.path(b_dir, "steps", "10_stats", "explore.json"))) list(list(script = st("10e_explore.R"), args = paste0("--db=", db), apply = FALSE))),
     stop("No redo commands for ", step))
   if (!applied) cmds <- cmds[1]   # the step the analyst was on: preview only
   cmds

@@ -129,7 +129,7 @@ STEP_TITLE <- c("01_load" = "Step 1 - Load", "03_parameters" = "Step 3 - Paramet
                 "05_filter" = "Step 5 - Filter", "06_normalize" = "Step 6 - Normalize", "07_impute" = "Step 7 - Impute",
                 "08_rollup" = "Step 8 - Rollup", "09_qc" = "Step 9 - QC", "10_stats" = "Step 10 - Stats")
 # Comparison pages belong to their step: out of date with it.
-SUB_PAGES <- c("06b_normalize_compare" = "06_normalize", "07b_impute_compare" = "07_impute")
+SUB_PAGES <- c("06b_normalize_compare" = "06_normalize", "07b_impute_compare" = "07_impute", "10e_explore" = "10_stats")
 
 # Latest time a step was decided or (re)run; "" if never.
 step_time <- function(run_dir, step, decisions = read_decisions(run_dir)) {

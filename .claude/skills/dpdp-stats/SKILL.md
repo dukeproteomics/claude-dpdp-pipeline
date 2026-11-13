@@ -58,6 +58,7 @@ cd /home/user/Claude_Shiny
 Rscript pipeline/steps/10_stats.R --db=<db> --action=preview [--from_page] [--settings_from=<db>] [--comparisons="B|A"] [--name=value ...]
 Rscript pipeline/steps/10_stats.R --db=<db> --action=apply [--from_page] --decided_by=user --analyst=<name> [--note="<reason>"]
 Rscript pipeline/steps/10b_stats_graphs.R --db=<db> [--comps=B_v_A] [--include_spqc=TRUE] [--heatmap_rows=1000] [--png=FALSE]
+Rscript pipeline/steps/10e_explore.R --db=<db>    # the Explore tab: search any protein; run after 10b and 10c
 ```
 10b writes **chart data** (`steps/10_stats/graphs.json`); the Stats page draws everything interactively (user request 2026-11-05):
 totals and log2 distribution per sample, PCA (PC1 vs PC2 / PC3), sample distance, and a heatmap of the **1,000 most variable rows**
@@ -137,3 +138,13 @@ Rscript pipeline/compare.R --run=<db> --ref=<shiny>.db \
 
 ## Next
 Stats Data / Protein Plots / Excel output. Pathway (11) and Report (13) are skipped for now, so the first pass ends here.
+
+## Explore tab (10e, user 2026-11-13)
+`review/10e_explore.html` (a tab of its own in the web app): search any protein (gene, accession, description; Peptide output also
+sequence or site) and plot it for a comparison's samples (with the pool) or all samples: its value per sample (intensity or log2),
+and the peptides of its protein, mean +- SD per group, as log2 intensity or **z-score** (the app's Peptide Plot: each peptide centred
+on its mean over the shown samples, in SDs; here on log2), ordered by position or intensity, plus FC / p / call in every comparison.
+The data (`review/10e_explore_data.json.gz`, 4-10 MB) loads when the page opens, so the page needs the review server or the web app.
+Run 10e after Stats apply (with 10b and 10c), and again after a re-run. Link to a protein: `10e_explore.html#<accession>`.
+The Stats page keeps the top hits' protein plots (10c).
+

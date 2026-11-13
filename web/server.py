@@ -20,9 +20,10 @@ from aiohttp import web, WSMsgType
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.geteuid() == 0
 STEPS = {"01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "06b_normalize_compare", "07_impute", "07b_impute_compare", "08_rollup",
-         "09_qc", "10_stats"}
+         "09_qc", "10_stats", "10e_explore"}
 RUN_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 FILE_RE = re.compile(r"^[A-Za-z0-9_.-]+\.html$")
+DATA_RE = re.compile(r"^[A-Za-z0-9_.-]+\.json\.gz$")   # page data loaded on demand (e.g. the Explore tab)
 USER_RE = re.compile(r"^[a-z_][a-z0-9_.-]{0,31}$")
 SESSION_HOURS = 12
 SCROLLBACK = 400_000
@@ -363,6 +364,9 @@ def make_app(cfg):
     async def review_page(request):
         s = need(request)
         d, f = run_dir(request.match_info["run"]), request.match_info["f"]
+        if d and DATA_RE.match(f) and os.path.isfile(os.path.join(d, "review", f)):
+            return web.Response(body=open(os.path.join(d, "review", f), "rb").read(), content_type="application/json",
+                                headers={"Content-Encoding": "gzip", "Cache-Control": "no-store"})
         if not d or not FILE_RE.match(f) or not os.path.isfile(os.path.join(d, "review", f)):
             raise web.HTTPNotFound(text="Page not found")
         html = open(os.path.join(d, "review", f), "rb").read().replace(b"__DPDP_TOKEN__", s["csrf"].encode())

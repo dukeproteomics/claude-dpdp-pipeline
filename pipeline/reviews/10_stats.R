@@ -123,12 +123,13 @@ review_stats <- function(db_path) {
 
   # --- protein / peptide plots (10c data) ---
   pp <- outp$protein_plots
-  pinfo <- if (!is.null(pp$proteins)) Filter(function(x) !is.null(x$values), pp$proteins) else list()
+  pinfo <- if (!is.null(pp$proteins) && length(pp$samples)) Filter(function(x) !is.null(x$values), pp$proteins) else list()   # older 10c output had no sample list: re-run 10c
   pep_lvl <- identical(pp$level, "peptide")
   prot_html <- if (length(pinfo)) paste0('<section><h2>', if (pep_lvl) "Peptide plots" else "Protein plots", ' (', esc(pp$comp), ')</h2>',
     '<p class="note">The top significant ', if (pep_lvl) "peptides" else "proteins", ' by p-value (add more with the &quot;', if (pep_lvl) "Add peptide plots" else "Add protein plots", '&quot; choice). ',
     'Left: the value in each sample. Right: every ', if (pep_lvl) "PTM peptide" else "peptide", ' of the same protein, mean &plusmn; SD per group (log2)',
-    if (pep_lvl) '; the selected peptide is marked &#9654; (with many peptides, the 25 nearest to it in the sequence)' else '', '.</p>',
+    if (pep_lvl) '; the selected peptide is marked &#9654; (with many peptides, the 25 nearest to it in the sequence)' else '', '. ',
+    if (file.exists(file.path(run_dir, "review", "10e_explore.html"))) '<b><a href="10e_explore.html">Explore</a></b>: search any protein, with the peptide plot as intensity or z-score.' else '', '</p>',
     '<div class="control"><label for="ppsel">Show</label><select id="ppsel">', paste0('<option value="', seq_along(pinfo) - 1, '">',
       vapply(pinfo, function(x) esc(trimws(paste(x$genes %||% "", x$accession, x$site %||% "", sprintf("FC %.2f", as.numeric(x$FC))))), ""), '</option>', collapse = ""),
     '</select></div><p class="note" id="ppnote"></p><div class="grid2"><div id="ppbar" style="height:340px" role="img" aria-label="Value per sample"></div>',
@@ -267,7 +268,7 @@ if (D.pp) {
   const sel = document.getElementById("ppsel");
   function ppdraw() {
     const it = D.pp.items[+sel.value], smp = D.pp.samples, grs = D.pp.groups, vals = smp.map(x => it.values[x]);
-    document.getElementById("ppnote").textContent = `${it.genes || ""} ${it.accession}${it.site ? " " + it.site : ""}${it.sequence ? " (" + it.sequence.replace(/_/g, "") + ")" : ""}: FC ${(+it.FC).toFixed(2)}, p ${(+it.pval).toPrecision(3)}, adj p ${it.adjpval === null ? "-" : (+it.adjpval).toPrecision(3)}, ${it.stats || "not significant"}; measured precursors per sample ${it.detected_imputed}.`;
+    document.getElementById("ppnote").textContent = `${it.genes || ""} ${it.accession}${it.site ? " " + it.site : ""}${typeof it.sequence === "string" ? " (" + it.sequence.replace(/_/g, "") + ")" : ""}: FC ${(+it.FC).toFixed(2)}, p ${(+it.pval).toPrecision(3)}, adj p ${it.adjpval === null ? "-" : (+it.adjpval).toPrecision(3)}, ${it.stats || "not significant"}; measured precursors per sample ${it.detected_imputed}.`;
     Plotly.react("ppbar", byGroup(grs, (g, ix) => ({ type: "bar", name: g, x: ix.map(i => smp[i]), y: ix.map(i => vals[i]), marker: { color: GC(g) },
       hovertemplate: "%{x}<br>%{y:.4s}<extra>" + g + "</extra>" })),
       Object.assign(base(), { margin: { l: 60, r: 10, t: 10, b: 70 }, legend: { orientation: "h", y: 1.14 }, bargap: 0.25,
