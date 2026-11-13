@@ -44,26 +44,30 @@ review_stats <- function(db_path) {
   if (!is.null(last_acc)) { status <- "Results accepted"; status_class <- "done" }
 
   U <- feat(p); Uc <- feat(p, cap = TRUE)   # proteins, or peptides for Peptide output (phospho)
-  set_df <- data.frame(Setting = c("Normalization tested", "Pooled QC carried along", "p-value cutoff", "Fold change cutoff",
-                                   "Up/Down calls use", "Adjusted p column", "Missing factor", "Peptide refilter"),
-    Value = c(esc(summ$stat_norm %||% p$stat_norm), esc(summ$comp_spqc %||% p$comp_spqc), esc(pc), esc(fcc),
-              if (use_adj) sprintf("<b>adjusted p</b> (%s)", esc(g("padjust_options"))) else "<b>raw p</b> (checkbox_filter_adjpval off)",
-              if (as_flag(g("checkbox_adjpval"))) esc(g("padjust_options")) else "off", esc(g("missing_factor")), "replaced by flags (no re-rollup per comparison)"),
-    Meaning = c("Which normalized data the tests use.", "Pool shown in tables and plots; not part of the test.", "",
-                "Absolute fold change needed for Up/Down.", "Raw p gives more calls but no false-discovery control; adjusted p controls FDR.",
-                "Added to the tables either way.", paste(Uc, "with a smaller share of measured (not imputed) values in the comparison are removed."),
-                "Re-filters precursors for the comparison's samples and rolls up again."), stringsAsFactors = FALSE)
-  if (is_peptide_output(p)) set_df <- rbind(set_df, data.frame(Setting = "Peptides tested",
-    Value = if (ptm_report(p)) sprintf("<b>%s only</b> (Sequence matches <code>%s</code>)", esc(g("peptide_report_grep")), esc(g("peptide_report_grep"))) else "all peptides",
-    Meaning = "PTM-enriched samples: the other peptides are not supposed to be there. They are left out before testing, so adjusted p covers the PTM peptides only (the app adjusts over all, then hides the rest).",
-    stringsAsFactors = FALSE))
+  # The Options panel (pipeline/options/10_stats.R): editable until the results are accepted. Before the calculation it shows the
+  # previewed settings (Apply turns on); after it, changing anything needs a new preview (which replaces the results).
+  norms <- trimws(strsplit(p$norm_type %||% "", ",")[[1]])
+  is_lp <- identical(applied_impute_type(db_path), "limpa") && identical(p$rollup_method, "limpa")
+  opts <- stats_options(p, design, norms, is_lp)
+  vals <- s
+  if (is.null(vals$comparisons) && !is.null(sc) && nrow(sc))   # older summaries: comparisons from stats_comp
+    vals$comparisons <- comps_encode(lapply(seq_len(nrow(sc)), function(i) list(N = trimws(strsplit(sc$FactorsN[i], ",")[[1]]), D = trimws(strsplit(sc$FactorsD[i], ",")[[1]]))))
+  vals$stats_norm_type <- vals$stats_norm_type %||% summ$stat_norm %||% p$stat_norm
+  vals$comp_spqc <- vals$comp_spqc %||% summ$comp_spqc %||% p$comp_spqc
+  form <- options_form("10_stats", opts, vals, previewed = if (!applied && !is.null(summ)) vals else NULL, applied = !is.null(last_acc),
+                       run_dir = run_dir, title = "Stats options",
+                       words = list(preview = "Preview", apply = "Apply", previewing = "the preview", applied = "used for the accepted results",
+                                    effect = if (applied) "(sets up the comparisons again; the results below are replaced when you apply)" else "(checks the comparisons and their samples)"))
   comp_df <- if (!is.null(sc) && nrow(sc)) data.frame(Comparison = esc(sc$Name), Numerator = esc(sc$FactorsN), Denominator = esc(sc$FactorsD),
     Samples = sprintf("%s vs %s (+%s pool)", sc$N, sc$D, sc$SPQC), stringsAsFactors = FALSE) else NULL
-
-  decision_html <- paste0('<section><h2>', if (applied) "Settings used" else "Decision needed: approve the settings and comparisons", '</h2>',
-    html_table(set_df), if (!is.null(comp_df)) paste0('<h3>Comparisons</h3>', html_table(comp_df)) else "",
+  peptides_note <- if (is_peptide_output(p)) sprintf('<p class="note">%s tested: %s</p>', Uc,
+    if (ptm_report(p)) sprintf("<b>%s only</b> (Sequence matches <code>%s</code>); adjusted p covers those only.", esc(g("peptide_report_grep")), esc(g("peptide_report_grep"))) else "all peptides") else ""
+  decision_html <- paste0(form, '<section><h2>', if (applied) "Comparisons calculated" else "Comparisons at the last preview", '</h2>',
+    if (!is.null(comp_df)) html_table(comp_df) else "<p>None yet.</p>",
+    sprintf('<p class="note">Calls: p %s %s (%s), fold change %s %s.</p>', "&le;", esc(pc), if (use_adj) paste("adjusted,", esc(g("padjust_options"))) else "raw", "&ge;", esc(fcc)),
+    peptides_note,
     if (!is.null(last_acc)) sprintf('<p class="note">Results accepted %s%s. %s</p>', esc(last_acc$time), if (!is.null(last_acc$analyst)) paste0(" by ", esc(last_acc$analyst)) else "", esc(last_acc$note %||% "")) else "",
-    if (applied && is.null(last_acc)) '<p class="note">Review the results below, then accept them in the Claude session or change cutoffs or comparisons and re-run.</p>' else "",
+    if (applied && is.null(last_acc)) '<p class="note">Review the results below, then accept them (top), or change the Stats options and preview again.</p>' else "",
     '</section>')
 
   res_html <- ""

@@ -13,11 +13,13 @@
 #   option has / hasn't that value),
 #   and only if the option it depends on is in use too. Greyed on the page while not in use.
 
-opt <- function(name, label, type = c("number", "checkbox", "select", "text"), default, meaning = "", choices = NULL,
-                depends = NULL, min = NULL, max = NULL, step = NULL, app = TRUE, disabled = NULL, info = NULL, hide = NULL) {
+# type "comparisons" (Stats): value "<N groups>|<D groups>;..." (groups comma separated); choices = the groups; data$counts = samples
+# per group. The panel draws a comparison builder (pick groups per side, Swap, Remove, Add, Every pair).
+opt <- function(name, label, type = c("number", "checkbox", "select", "text", "comparisons"), default, meaning = "", choices = NULL,
+                depends = NULL, min = NULL, max = NULL, step = NULL, app = TRUE, disabled = NULL, info = NULL, hide = NULL, data = NULL) {
   type <- match.arg(type)
   list(name = name, label = label, type = type, default = default, meaning = meaning, choices = choices, depends = depends,
-       min = min, max = max, step = step, app = app, disabled = disabled, info = info, hide = hide)
+       min = min, max = max, step = step, app = app, disabled = disabled, info = info, hide = hide, data = data)
 }
 opt_section <- function(title, options, note = NULL) list(title = title, note = note, options = options)
 
@@ -139,6 +141,13 @@ OPTIONS_CSS <- "
 #options tr.off td { opacity:0.45; } #options .odef { display:block; font-size:12px; color:var(--warn-ink); margin-top:2px; }
 #options .pipe { font-size:11px; padding:0 5px; border:1px solid var(--rule); border-radius:8px; color:var(--text-secondary); margin-left:4px; }
 #options h3 { margin:14px 0 2px; }
+#options td.ocomp { white-space:normal; } .cbuild .crow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 0; border-bottom:1px dashed var(--grid); }
+.cbuild .cside { display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; } .cbuild .clab { font-size:11px; color:var(--text-secondary); margin-right:2px; }
+.cbuild .cg { font:inherit; font-size:13px; padding:2px 9px; border:1px solid var(--rule); border-radius:12px; background:transparent; color:var(--text-primary); cursor:pointer; }
+.cbuild .cg.on { background:var(--accent); border-color:var(--accent); color:#fff; } .cbuild .cg:disabled { opacity:0.35; cursor:default; }
+.cbuild .cv { margin:0 4px; } .cbuild .cname { font-family:monospace; font-size:13px; margin:0 6px; } .cbuild .cname.bad { color:#b42318; }
+.cbuild .cbtn { font:inherit; font-size:13px; padding:2px 10px; border:1px solid var(--accent); border-radius:6px; background:transparent; color:var(--accent); cursor:pointer; }
+.cbuild .cbtn:disabled { opacity:0.4; cursor:default; } .cbuild .cbar { display:flex; gap:8px; padding:8px 0 2px; }
 #optbar { position:sticky; bottom:0; background:var(--surface-1); border-top:2px solid var(--accent); padding:10px 4px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; z-index:5; }
 #optbar button { font:inherit; font-weight:600; padding:6px 14px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
 #optbar button.quiet { background:transparent; color:var(--accent); } #optbar button:disabled { opacity:0.45; cursor:default; }
@@ -158,7 +167,7 @@ OPTIONS_JS <- '
     if (o.type === "checkbox") return isTrue(a) === isTrue(b);
     if (o.type === "number") return Number(a) === Number(b);
     return String(a) === String(b); };
-  const show = (o, v) => o.type === "checkbox" ? (isTrue(v) ? "on" : "off") : String(v);
+  const show = (o, v) => o.type === "checkbox" ? (isTrue(v) ? "on" : "off") : o.type === "comparisons" ? String(v).split("|").join(" v ").split(";").join("; ").split(",").join(" + ") : String(v);
   const X = {};
   O.sections.forEach(sec => {
     root.appendChild(el("h3", {}, sec.title));
@@ -168,6 +177,14 @@ OPTIONS_JS <- '
       const tr = el("tr"), td = el("td", { class: "oval" });
       tr.appendChild(el("td", { class: "olab" }, o.label + (o.app === false ? \'<span class="pipe">pipeline</span>\' : "")));
       let inp;
+      if (o.type === "comparisons") {
+        inp = el("input", { type: "hidden" }); inp.value = o.value || ""; inp.dataset.name = o.name;
+        const cell = el("td", { class: "ocomp", colspan: "2" }), ui = el("div", { class: "cbuild" }), def = el("span", { class: "odef" });
+        cell.appendChild(inp); cell.appendChild(ui); cell.appendChild(def); cell.appendChild(el("p", { class: "note" }, o.meaning || ""));
+        tr.appendChild(cell); tb.appendChild(tr);
+        const x = { o: o, inp: inp, tr: tr, def: def }; X[o.name] = x; compBuilder(x, ui);
+        return;
+      }
       if (o.type === "checkbox") { inp = el("input", { type: "checkbox" }); inp.checked = isTrue(o.value); }
       else if (o.type === "select") { inp = el("select"); (o.choices || []).forEach(c => inp.appendChild(el("option", { value: c }, c))); inp.value = String(o.value); }
       else { inp = el("input", { type: o.type === "number" ? "number" : "text", step: o.step || "any" });
@@ -181,6 +198,51 @@ OPTIONS_JS <- '
     root.appendChild(tb);
   });
   const val = x => x.inp.type === "checkbox" ? x.inp.checked : x.inp.value;
+  // Stats comparison builder: x.inp (hidden) holds "N1,N2|D1;N|D"; x.render() redraws from it; x.invalid() says what is missing.
+  function compBuilder(x, ui) {
+    const groups = x.o.choices || [], counts = (x.o.data && x.o.data.counts) || {};
+    const dec = v => String(v || "").split(";").filter(Boolean).map(c => { const p = c.split("|"); return { N: (p[0] || "").split(",").filter(Boolean), D: (p[1] || "").split(",").filter(Boolean) }; });
+    const enc = cs => cs.map(c => c.N.join(",") + "|" + c.D.join(",")).join(";");
+    const name = (N, D) => { const f = g => [...new Set(g.flatMap(v => v.split("_")))].join("_"); return f(N) + "_v_" + f(D); };
+    let cs = [];
+    const set = () => { x.inp.value = enc(cs); draw(); update(); };
+    function draw() {
+      ui.innerHTML = ""; const off = x.inp.disabled;
+      cs.forEach((c, i) => {
+        const row = el("div", { class: "crow" });
+        const side = k => { const w = el("span", { class: "cside" }); w.appendChild(el("span", { class: "clab" }, k === "N" ? "numerator" : "denominator"));
+          groups.forEach(g => { const b = el("button", { type: "button", class: "cg" + (c[k].includes(g) ? " on" : "") }, g + (counts[g] ? " <small>(" + counts[g] + ")</small>" : ""));
+            b.disabled = off || c[k === "N" ? "D" : "N"].includes(g);
+            b.onclick = () => { c[k] = c[k].includes(g) ? c[k].filter(v => v !== g) : groups.filter(v => v === g || c[k].includes(v)); set(); };
+            w.appendChild(b); }); return w; };
+        row.appendChild(side("N")); row.appendChild(el("b", { class: "cv" }, "v")); row.appendChild(side("D"));
+        const nm = c.N.length && c.D.length ? name(c.N, c.D) : "(pick a group on each side)";
+        row.appendChild(el("span", { class: "cname" + (!(c.N.length && c.D.length) ? " bad" : "") }, nm + (nm.length > 23 ? " <small>(Excel sheet name shortened)</small>" : "")));
+        const sw = el("button", { type: "button", class: "cbtn" }, "Swap"); sw.disabled = off; sw.onclick = () => { cs[i] = { N: c.D, D: c.N }; set(); };
+        const rm = el("button", { type: "button", class: "cbtn" }, "Remove"); rm.disabled = off || cs.length < 2; rm.onclick = () => { cs.splice(i, 1); set(); };
+        row.appendChild(sw); row.appendChild(rm); ui.appendChild(row);
+      });
+      if (off) return;
+      const bar = el("div", { class: "cbar" });
+      const add = el("button", { type: "button", class: "cbtn" }, "+ Add comparison"); add.onclick = () => { cs.push({ N: [], D: [] }); set(); };
+      bar.appendChild(add);
+      const pool = X.comp_spqc ? String(val(X.comp_spqc)) : "SPQC", gs = groups.filter(g => g !== pool);
+      if (gs.length > 2) {
+        const all = el("button", { type: "button", class: "cbtn" }, "+ Every pair of groups (" + gs.length * (gs.length - 1) / 2 + ")");
+        all.onclick = () => { const have = new Set(cs.map(c => [c.N.join(","), c.D.join(",")].sort().join("|")));
+          for (let a = 0; a < gs.length; a++) for (let b = a + 1; b < gs.length; b++) if (!have.has([gs[a], gs[b]].sort().join("|"))) cs.push({ N: [gs[b]], D: [gs[a]] });
+          set(); };
+        bar.appendChild(all);
+      }
+      ui.appendChild(bar);
+    }
+    x.render = () => { cs = dec(x.inp.value); draw(); };
+    x.invalid = () => { const v = dec(x.inp.value); if (!v.length) return "Add at least one comparison.";
+      if (v.some(c => !c.N.length || !c.D.length)) return "Each comparison needs a group on each side.";
+      const n = v.map(c => name(c.N, c.D));
+      if (new Set(n).size < n.length) return "The same comparison is in the list twice."; return ""; };
+    x.render();
+  }
   const W = O.words || { preview: "Preview", apply: "Apply", previewing: "the preview" };
   // depends: "<checkbox>" or "<option>=<value>"; the option it depends on must be in use too.
   const inUse = o => { if (!o.depends) return true; const neg = o.depends.includes("!="), [n, v] = o.depends.split(/!?=/), d = X[n]; if (!d) return true;
@@ -188,7 +250,7 @@ OPTIONS_JS <- '
     const on = v === undefined ? d.inp.checked : (String(val(d)) === v) !== neg; return on && inUse(d.o); };
   // other parts of the page can set an option (e.g. Noise: "Use as fixed baseline")
   window.dpdpSetOption = (name, value) => { const x = X[name]; if (!x || O.applied) return false;
-    if (x.inp.type === "checkbox") x.inp.checked = isTrue(value); else x.inp.value = String(value); update(); return true; };
+    if (x.inp.type === "checkbox") x.inp.checked = isTrue(value); else x.inp.value = String(value); if (x.render) x.render(); update(); return true; };
   const bar = el("div", { id: "optbar" });
   const reset = el("button", { type: "button", class: "quiet" }, "Reset to defaults");
   const prev = el("button", { type: "button" }, W.preview + " with these settings");
@@ -205,7 +267,8 @@ OPTIONS_JS <- '
     const dirty = [];
     Object.values(X).forEach(x => {
       const o = x.o, on = inUse(o);
-      x.inp.disabled = O.applied || !!o.disabled || !on;
+      const off0 = x.inp.disabled; x.inp.disabled = O.applied || !!o.disabled || !on;
+      if (x.render && off0 !== x.inp.disabled) x.render();
       x.tr.classList.toggle("off", !on || !!o.disabled);
       const ch = !eq(o, val(x), o.default);
       x.tr.classList.toggle("changed", ch); x.def.textContent = ch ? "default: " + show(o, o.default) : "";
@@ -213,9 +276,11 @@ OPTIONS_JS <- '
     });
     if (O.applied) return;
     const busy = pending || sent || !served;
-    prev.disabled = busy; reset.disabled = busy;
+    const bad = Object.values(X).map(x => x.invalid ? x.invalid() : "").find(Boolean);
+    prev.disabled = busy || !!bad; reset.disabled = busy;
     const free = O.no_preview && Object.entries(O.no_preview).every(([k, v]) => X[k] && String(val(X[k])) === String(v));
-    apply.disabled = busy || (!free && (!O.previewed || dirty.length > 0));
+    apply.disabled = busy || !!bad || (!free && (!O.previewed || dirty.length > 0));
+    if (bad && served && !sent && !pending) { msg.textContent = bad; return; }
     if (!served) msg.textContent = "Buttons need the review server (or the DPDP web app). You can also tell Claude in the chat.";
     else if (sent || pending) msg.textContent = "Sent to Claude. This page reloads when Claude has run it.";
     else if (free) msg.textContent = "Nothing to preview with these settings: " + W.apply + " them directly.";
@@ -224,7 +289,7 @@ OPTIONS_JS <- '
     else msg.textContent = "The page shows these settings. " + W.apply + " them, or change options and " + W.preview.toLowerCase() + " again.";
   }
   reset.onclick = () => { Object.values(X).forEach(x => { const d = x.o.default;
-    if (x.inp.type === "checkbox") x.inp.checked = isTrue(d); else x.inp.value = String(d); }); update(); };
+    if (x.inp.type === "checkbox") x.inp.checked = isTrue(d); else x.inp.value = String(d); if (x.render) x.render(); }); update(); };
   const send = choice => {
     const fields = {}; Object.values(X).forEach(x => { fields[x.o.name] = String(val(x)); });
     localStorage.setItem("dpdp_analyst", who.value); sent = true; update(); msg.textContent = "Sending...";

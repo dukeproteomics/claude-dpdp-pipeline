@@ -18,6 +18,7 @@ here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value 
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
 source(file.path(here, "..", "contaminants.R"))
+source(file.path(here, "..", "options.R")); source(file.path(here, "..", "options", "10_stats.R"))
 source(file.path(here, "..", "reviews", "10_stats.R"))
 
 args <- parse_args()

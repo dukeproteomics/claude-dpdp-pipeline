@@ -8,7 +8,10 @@
 #   Rscript pipeline/steps/10_stats.R --db=<db> --action=preview|apply|accept [--settings_from=<db>]
 #       apply/accept need --decided_by=user; optional --analyst=<name> --note="<why>"
 #       [--stats_norm_type=sltmm] [--comp_spqc=SPQC]
-#       [--comp1_N=B --comp1_D=A [--comp2_N=... --comp2_D=...]]     (groups; several groups: comma separated)
+#       [--comparisons="B|A;C|A"] or [--comp1_N=B --comp1_D=A [--comp2_N=... --comp2_D=...]]   (several groups on a side: comma separated)
+#       [--from_page]: the values the analyst sent from the page's Stats options (review/pending_decision.json)
+#   Every option, its default and checks: pipeline/options/10_stats.R. Apply uses the last preview's settings (differences refused).
+#   Default comparison: the second group v the first (sheet order, pool left out).
 #       [--pvalue_cutoff=0.05 --foldchange_cutoff=1.5 --checkbox_adjpval=TRUE --padjust_options=fdr ...]
 # With --settings_from and no --compN_* args, the comparisons are copied from that run's stats_comp table.
 #
@@ -23,6 +26,8 @@ source(file.path(here, "..", "contaminants.R"))
 source(file.path(here, "..", "background.R"))
 source(file.path(here, "..", "limpa.R"))
 source(file.path(here, "..", "refilter_flags.R"))
+source(file.path(here, "..", "options.R"))
+source(file.path(here, "..", "options", "10_stats.R"))
 source(file.path(here, "..", "reviews", "10_stats.R"))
 
 args <- parse_args()
@@ -44,61 +49,51 @@ if (args$action == "apply" && !identical(args$decided_by, "user"))
 # cover the PTM peptides only.
 p0 <- get_params(db_path)
 ptm_default <- is_ptm_run(p0) && is_peptide_output(p0)
-# Stats Setup widgets (values = 11488 reference / app UI defaults)
-spec <- list(pvalue_cutoff = 0.05, pair_comp = FALSE, checkbox_adjpval = TRUE, padjust_options = "fdr",
-             foldchange_cutoff = 1.5, missing_factor = 0.6,
-             peptide_refilter = TRUE, peptide_missing_filter = FALSE, peptide_missing_factor = 0.1,
-             peptide_cv_filter = FALSE, peptide_cv_factor = 0.5,
-             stats_spqc_cv_filter = FALSE, stats_spqc_cv_filter_factor = 50,
-             stats_comp_cv_filter = FALSE, stats_comp_cv_filter_factor = 50,
-             stats_peptide_minimum = FALSE, stats_peptide_minimum_factor = 1,
-             checkbox_filter_adjpval = FALSE, checkbox_cohensd = FALSE, checkbox_cohensd_hedges = FALSE,
-             checkbox_limmapvalue = FALSE,
-             checkbox_report_ptm = ptm_default, peptide_report_grep = if (ptm_default) p0$ptm_grep else "Enter value here",
-             checkbox_report_accession = FALSE, report_accession = "Enter value")
 is_limpa <- identical(applied_impute_type(db_path), "limpa") && identical(get_param("rollup_method", db_path), "limpa")
+# Every option (the app's Stats Setup + Comparisons tabs): pipeline/options/10_stats.R, also the page's Options panel.
+# Comparisons use the design's full group names, as the app does (unique_groups = design$Group). With primary_group=Primary the
+# sample_groups table holds the pooled names (part before the first "_"), which only Filter and Impute use.
+design <- read_table("design", db_path)
+stat_groups <- stats_groups(design)
+norms <- trimws(strsplit(p0$norm_type, ",")[[1]])
+opts <- stats_options(p0, design, norms, is_limpa)
+spec <- opts_spec(opts)
 # Peptide refilter is replaced by flags (user decision 2026-11-04): Stats never re-rolls the comparison's samples; the proteins the
 # refilter would have removed are flagged (pipeline/refilter_flags.R). peptide_missing_filter / peptide_cv_filter now set flag rules.
 if (!is.null(args$peptide_refilter) && as_flag(args$peptide_refilter))
   stop("--peptide_refilter=TRUE is no longer used: Stats doesn't re-roll per comparison; proteins the refilter would remove are flagged.")
-args$peptide_refilter <- "FALSE"
+args$peptide_refilter <- NULL
+args <- page_args(args, run_dir, "10_stats", opts, args$action)
+# Comparisons: --comparisons="N|D;..." (the page), or --comp1_N=B --comp1_D=A ... (several groups: comma separated)
+comp_args <- grep("^comp[0-9]+_[ND]$", names(args), value = TRUE)
+if (length(comp_args) && is.null(args$comparisons)) {
+  ids <- sort(unique(as.integer(sub("^comp([0-9]+)_.*", "\\1", comp_args))))
+  args$comparisons <- comps_encode(lapply(ids, function(i) list(N = trimws(strsplit(args[[str_c("comp", i, "_N")]], ",")[[1]]),
+                                                                 D = trimws(strsplit(args[[str_c("comp", i, "_D")]], ",")[[1]]))))
+}
 settings <- resolve_settings(spec, args)
-settings$peptide_refilter <- FALSE
-if (is_limpa && as_flag(settings$pair_comp)) stop("limpa run: paired comparisons (--pair_comp) are not built for dpcDE yet.")
-padj <- c("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr")
-if (!settings$padjust_options %in% padj) stop("--padjust_options must be one of: ", paste(padj, collapse = ", "))
-
-p <- get_params(db_path)
-groups <- read_table("sample_groups", db_path)
-# Comparisons use the design's full group names, as the app does (unique_groups = design$Group). With primary_group=Primary the
-# sample_groups table holds the pooled names (part before the first "_"), which only Filter and Impute use.
-stat_groups <- unique(read_table("design", db_path)$Group)
-norms <- trimws(strsplit(p$norm_type, ",")[[1]])
-
-# Comparison setup: stats_norm_type, comp_spqc, comparisons
-ref_comp <- NULL
+# --settings_from: also the comparisons (its stats_comp table) and the tested normalization (its stat_norm), unless given
 if (!is.null(args$settings_from)) {
   con <- RSQLite::dbConnect(RSQLite::SQLite(), abs_path(args$settings_from))
   rp <- RSQLite::dbReadTable(con, "params")
-  if (RSQLite::dbExistsTable(con, "stats_comp")) ref_comp <- RSQLite::dbReadTable(con, "stats_comp")
+  ref_comp <- if (RSQLite::dbExistsTable(con, "stats_comp")) RSQLite::dbReadTable(con, "stats_comp") else NULL
   RSQLite::dbDisconnect(con)
+  if (is.null(args$comparisons) && !is.null(ref_comp) && nrow(ref_comp))
+    settings$comparisons <- comps_encode(lapply(seq_len(nrow(ref_comp)), function(i) list(N = trimws(strsplit(ref_comp$FactorsN[i], ",")[[1]]),
+                                                                                           D = trimws(strsplit(ref_comp$FactorsD[i], ",")[[1]]))))
+  if (is.null(args$stats_norm_type) && !is.null(rp$stat_norm)) settings$stats_norm_type <- rp$stat_norm
 }
-stat_norm <- args$stats_norm_type %||% (if (!is.null(args$settings_from)) rp$stat_norm else norms[1])
-# Pooled QC group: SPQC when the design has one; otherwise none ("0"). The pipeline works without a pool.
-comp_spqc <- args$comp_spqc %||% (if (!is.null(args$settings_from)) rp$comp_spqc else if ("SPQC" %in% stat_groups) "SPQC" else "0")
-comp_args <- grep("^comp[0-9]+_[ND]$", names(args), value = TRUE)
-if (length(comp_args)) {
-  ids <- sort(unique(as.integer(sub("^comp([0-9]+)_.*", "\\1", comp_args))))
-  comps <- lapply(ids, function(i) list(N = trimws(strsplit(args[[str_c("comp", i, "_N")]], ",")[[1]]),
-                                        D = trimws(strsplit(args[[str_c("comp", i, "_D")]], ",")[[1]])))
-} else if (!is.null(ref_comp)) {
-  comps <- lapply(seq_len(nrow(ref_comp)), function(i) list(N = trimws(strsplit(ref_comp$FactorsN[i], ",")[[1]]),
-                                                            D = trimws(strsplit(ref_comp$FactorsD[i], ",")[[1]])))
-} else stop("Give comparisons with --comp1_N=<group> --comp1_D=<group> (or --settings_from=<db>).")
-
-if (!stat_norm %in% norms) stop("--stats_norm_type must be one of: ", paste(norms, collapse = ", "))
-if (comp_spqc != "0" && !comp_spqc %in% stat_groups) stop("--comp_spqc must be one of: ", paste(stat_groups, collapse = ", "), " (or 0)")
-for (cp in comps) { bad <- setdiff(c(cp$N, cp$D), stat_groups); if (length(bad)) stop("Unknown group(s): ", paste(bad, collapse = ", ")) }
+if (args$action == "apply") settings <- apply_settings(run_dir, "10_stats", spec, args, settings, opts)
+settings$peptide_refilter <- FALSE
+opts_validate(opts, settings)
+comps <- comps_decode(settings$comparisons)
+comps_check(comps, stat_groups)
+settings$comparisons <- comps_encode(comps)
+if (is_limpa && as_flag(settings$pair_comp)) stop("limpa run: paired comparisons (--pair_comp) are not built for dpcDE yet.")
+stat_norm <- settings$stats_norm_type
+comp_spqc <- settings$comp_spqc
+p <- get_params(db_path)
+groups <- read_table("sample_groups", db_path)
 
 # --- Setup + widget save (save_stat_options + stat_widget_save) ---
 for (k in names(settings)) p[[k]] <- settings[[k]]
@@ -115,8 +110,6 @@ for (i in seq_along(comps))
   run_bg(check_comp_names_bg, list(p, db_path, table_name, table_name_peptide, i, comps[[i]]$N, comps[[i]]$D),
          str_c("stat_groups_", i), db_path)
 stats_comp <- read_table("stats_comp", db_path)
-long <- stats_comp$Name[nchar(stats_comp$Name) > 31]
-if (length(long)) stop("Comparison name(s) longer than 31 characters (Excel sheet limit): ", paste(long, collapse = ", "))
 if (args$action == "preview") {
   sd <- step_dir(run_dir, "10_stats")
   write_summary(list(step = "10_stats", action = "preview", db_path = db_path, settings = settings, stat_norm = stat_norm,

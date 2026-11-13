@@ -165,6 +165,17 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Stats options panel with a comparison builder (user, 2026-11-13)
+- `pipeline/options/10_stats.R`: every Stats option (Comparisons, SPQC group, normalization, significance, refilter flags, filters,
+  extra columns, report; peptide_refilter hidden: retired). Option type `comparisons` ("N1,N2|D;..."): the panel draws rows of
+  numerator v denominator group buttons (pooling = several on a side), Swap, Remove, + Add comparison, + Every pair (> 2 groups).
+  Default: second group v first. Apply only after preview; the panel stays editable on the results page until they are accepted.
+- Dropped the pipeline's 31-character stop on comparison names: the app's Excel writer already cuts sheet names to 31 and each
+  starts with "Table<n> ", so they stay unique (11531's CrePos_NoBiotin_v_CreNeg_NoBiotin is 33).
+- Tested on a throwaway 11531 run (zz_st, deleted): page clicks (Swap, Every pair = 6, a pooled row 9 v 6 samples, Remove, incomplete
+  row blocks Preview), preview/apply from the page, a different comparison at apply refused, swapped comparison mirrors the calls
+  (14 up / 539 down -> 539 / 14), Excel with shortened sheet names; finished runs' pages show their comparisons read-only.
+
 ## Go straight to the next step (user, 2026-11-13)
 - Once a step's decision is applied, Claude runs the next step's preview right away (dpdp-run, CLAUDE.md, web-mode CLAUDE.md);
   it stops only for a stop condition or warning, or when the analyst asked to pause. The analyst goes back by clicking a step.

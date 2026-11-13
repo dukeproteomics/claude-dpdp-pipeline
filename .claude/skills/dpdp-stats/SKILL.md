@@ -12,7 +12,7 @@ description: Step 10 of the DPDP proteomics pipeline (same as the Shiny app's St
 |---|---|---|
 | `stats_norm_type` | sltmm | which normalization to test |
 | `comp_spqc` | SPQC if the design has one, else `0` | pooled QC group carried into the tables and plots (`0` = none; no SPQC is fine) |
-| comparisons | `--comp1_N=B --comp1_D=A` → `B_v_A` | several groups per side: comma separated. Names must be ≤ 31 characters (Excel) |
+| `comparisons` | second group v first (sheet order, pool left out) | `--comparisons="B|A;C|A"` or `--comp1_N=B --comp1_D=A ...` → `B_v_A`. Several groups on one side (pooled): comma separated. Full group names, also with Primary. Long names are fine (the Excel sheet names are shortened, as in the app) |
 | `pvalue_cutoff` / `foldchange_cutoff` | 0.05 / 1.5 | |
 | `checkbox_adjpval` / `padjust_options` | TRUE / fdr | **only adds an `_adjpval` column** |
 | `checkbox_filter_adjpval` | FALSE | **decides whether Up/Down calls use the adjusted p.** FALSE = raw p |
@@ -20,7 +20,7 @@ description: Step 10 of the DPDP proteomics pipeline (same as the Shiny app's St
 | `peptide_refilter` | **always FALSE** | replaced by flags (user decision 2026-11-04); `--peptide_refilter=TRUE` is refused |
 | `peptide_missing_filter`, `peptide_cv_filter` | FALSE | now extra **flag** rules (precursors they would remove count toward the refilter flag) |
 | `checkbox_report_ptm` / `peptide_report_grep` | FALSE; **PTM peptide runs: TRUE / `ptm_grep`** | user rule 2026-11-05: only PTM peptides are tested and reported. Unlike the app (adjusts p over all peptides, then hides the rest), the pipeline drops them **before** testing, so adj p and limma's prior cover the PTM peptides only |
-| others (`peptide_*`, `stats_*_cv_filter*`, `checkbox_cohensd*`, `checkbox_limmapvalue`) | off | see `10_stats.R` spec |
+| others (`peptide_*`, `stats_*_cv_filter*`, `checkbox_cohensd*`, `checkbox_limmapvalue`) | off | every option is in `pipeline/options/10_stats.R` |
 
 `--settings_from=<db>` copies the settings **and** the comparisons from a previous run.
 
@@ -52,8 +52,8 @@ Contaminant flags come from the peptide's protein. "Add peptide plots" takes pro
 ## Run
 ```bash
 cd /home/user/Claude_Shiny
-Rscript pipeline/steps/10_stats.R --db=<db> --action=preview [--settings_from=<db>] [--comp1_N=B --comp1_D=A] [--name=value ...]
-Rscript pipeline/steps/10_stats.R --db=<db> --action=apply   [...same...] --decided_by=user --analyst=<name> [--note="<reason>"]
+Rscript pipeline/steps/10_stats.R --db=<db> --action=preview [--from_page] [--settings_from=<db>] [--comparisons="B|A"] [--name=value ...]
+Rscript pipeline/steps/10_stats.R --db=<db> --action=apply [--from_page] --decided_by=user --analyst=<name> [--note="<reason>"]
 Rscript pipeline/steps/10b_stats_graphs.R --db=<db> [--comps=B_v_A] [--include_spqc=TRUE] [--heatmap_rows=1000] [--png=FALSE]
 ```
 10b writes **chart data** (`steps/10_stats/graphs.json`); the Stats page draws everything interactively (user request 2026-11-05):
@@ -75,9 +75,15 @@ from the stats tables. `--png=TRUE` also writes app-style static PNGs (shown in 
 - **Raw p histogram** with a flat level estimated from p > 0.5 and a rough count of real differences (11488: about 387 above chance at p < 0.05).
 - **PCA** (sample sets, nearest sample), the static graphs from 10b, the protein plots from 10c, and the Excel paths.
 
-Decisions with **AskUserQuestion**, no option marked as recommended:
+**Stats options panel (user, 2026-11-13):** every Stats option, and a **comparison builder**: each row is numerator group(s) **v**
+denominator group(s) (click groups to pick them; several on one side are pooled), **Swap** turns it around, **Remove**, **+ Add
+comparison**, and with more than 2 groups **+ Every pair of groups**. Preview, then Apply (apply only after preview: it uses the
+preview's settings; differences are refused). After the results, the panel stays editable: a new preview replaces the results.
+Page choices: `preview` -> `10_stats.R --action=preview --from_page`; `apply` -> `10_stats.R --action=apply --from_page --decided_by=user`,
+then 10b and 10c; results page: `accept`, `plots`, `other`.
+Decisions in the chat with **AskUserQuestion**, no option marked as recommended:
 1. Before apply (header "Stats"): "Run stats for <comparisons> with these settings?" Options: "Run as shown" / "Change settings"
-   (p type for calls, cutoffs, missing factor) / "Change comparisons".
+   (p type for calls, cutoffs, missing factor) / "Change comparisons". Preview any change first.
 2. After apply and the graphs (header "Results"): "Accept the stats results for <prefix>?" Options: "Accept" / "Change cutoffs and re-run" /
    "Change comparisons". Then record it:
    `Rscript pipeline/steps/10_stats.R --db=<db> --action=accept --decided_by=user --analyst=<name> [--note="<reason>"]`
