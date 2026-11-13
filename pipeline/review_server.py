@@ -16,7 +16,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, unquote
 
 STEPS = {"01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "06b_normalize_compare", "07_impute",
-         "07b_impute_compare", "08_rollup", "09_qc", "10_stats", "10e_explore", "11_pathway"}
+         "07b_impute_compare", "08_rollup", "09_qc", "10_stats", "10e_explore", "11_pathway", "12_phospho"}
 RUN_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 FILE_RE = re.compile(r"^[A-Za-z0-9_.-]+\.html$")
 DATA_RE = re.compile(r"^[A-Za-z0-9_.-]+\.json\.gz$")   # page data loaded on demand (e.g. the Explore tab)

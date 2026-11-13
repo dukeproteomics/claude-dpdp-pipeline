@@ -49,6 +49,7 @@ one in its left panel by itself; say "the <step> page is ready on the left". Run
 | 09_qc | `accept_flag` -> `09_qc.R --action=accept --flag_samples=<fields.flag_samples>`; `accept` -> `--action=accept`; `stop` -> stop |
 | 10_stats | Options panel (also on the results page): `preview` -> `10_stats.R --action=preview --from_page` (then wait again); `apply` -> `10_stats.R --action=apply --from_page --decided_by=user`, then 10b, 10c and 10e (Explore tab); `other` -> discuss `fields.request` |
 | 11_pathway | Options panel: `preview` -> `11_pathway.R --action=preview --from_page` (then wait again); `apply` -> `11_pathway.R --action=apply --from_page --decided_by=user`; `other` -> discuss |
+| 12_phospho | Options panel: `preview` -> `12_phospho.R --action=preview --from_page` (then wait again); `apply` -> `12_phospho.R --action=apply --from_page --decided_by=user`; `other` -> discuss |
 | 10_stats (results) | `accept` -> `10_stats.R --action=accept`; `plots` -> `10c --proteins=<fields.proteins>`, then ask again |
 
 ## Logs
@@ -83,7 +84,8 @@ Ask for anything missing. Ask which spike-ins the project uses if they aren't th
 | 9 | QC | dpdp-qc | accept, flag samples |
 | 10 | Stats | dpdp-stats | settings + comparisons, then accept results |
 | 11 | Pathway | dpdp-pathway | organism, hits, databases, network (Run, then Accept); STRING over-representation + network |
-| 12-13 | Phos, Report | - | not built yet |
+| 12 | Phospho | dpdp-phospho | phospho runs: Kinase Library kinases, logos, motif-x (Run, then Accept) |
+| 13 | Report | - | not built yet |
 
 **Phospho / PTM runs (Peptide output):** the result is per peptide. Precursors roll up to peptides (charge states), Stats tests
 peptides, and the protein level isn't used except to name a peptide's protein and for the QC spike checks. Say "peptide" to the analyst.

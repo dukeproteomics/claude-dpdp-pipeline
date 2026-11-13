@@ -165,6 +165,16 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Step 12 Phospho: Kinase Library, logos, motif-x (user, 2026-11-13; UniProt sequences, kinase-library installed)
+- `pipeline/phospho_motifs.R` (UniProt FASTA by accession, cached; site table from Protein_PTM_Loc + Local2; 15-mer windows checked
+  against the residue; pLogo-style logo; motif-x re-implemented), `pipeline/kinase_library_run.py` (kinase-library 1.8: percentile rank
+  top 15, DiffPhosData Up / Down v unchanged sites, Fisher BH; per-site top 3), options / step / page / skill `dpdp-phospho`.
+  Python: DPDP_KL_PYTHON, /srv/dpdp/venv (install.sh now installs kinase-library), or the dev `.venv-kl/` (gitignored).
+  Site tables in review/12_phospho_sites_<n>.json.gz (page 4 MB instead of 31 MB).
+- Tested on 11517 (Cryptococcus phospho, ~35k sites per comparison, 99.9% windows matched, ~1.5 min): 37 C Up = p38 / JNK / ERK
+  (adj p ~1e-22; logo P at +1; motif-x sP, tP), Down = CK2 / GRK (s..E, sD); page clicks; accept.
+- Next: per-site windows and kinases in the Explore tab; KSEA / PTM-SEA for human and mouse (PhosphoSitePlus) later.
+
 ## Step 11 Pathway: STRING over-representation and network (user, 2026-11-13; STRING website OK; ORA + network first)
 - `pipeline/string_api.R` (STRING API at the version's stable address, chunked id mapping, enrichment with a custom background,
   network, link; organism from "org=" / "OS="), `pipeline/options/11_pathway.R`, `pipeline/steps/11_pathway.R`, `pipeline/reviews/11_pathway.R`,

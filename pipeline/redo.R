@@ -33,6 +33,7 @@ redo_cmds <- function(step, db, b_db, b_dec, b_dir, applied = TRUE) {
                    if (file.exists(file.path(b_dir, "steps", "10_stats", "output.json"))) list(list(script = st("10c_stats_output.R"), args = paste0("--db=", db), apply = FALSE)),
                    if (file.exists(file.path(b_dir, "steps", "10_stats", "explore.json"))) list(list(script = st("10e_explore.R"), args = paste0("--db=", db), apply = FALSE))),
     "11_pathway" = list(pre("11_pathway.R"), app("11_pathway.R")),
+    "12_phospho" = list(pre("12_phospho.R"), app("12_phospho.R")),
     stop("No redo commands for ", step))
   if (!applied) cmds <- cmds[1]   # the step the analyst was on: preview only
   cmds
@@ -40,7 +41,7 @@ redo_cmds <- function(step, db, b_db, b_dec, b_dir, applied = TRUE) {
 
 # Did the analyst apply (or accept) this step? decisions: from read_decisions.
 step_was_applied <- function(decisions, step) {
-  if (step == "11_pathway") return(length(Filter(function(r) identical(r$step, step) && isTRUE(r$settings$accepted), decisions)) > 0)
+  if (step %in% c("11_pathway", "12_phospho")) return(length(Filter(function(r) identical(r$step, step) && isTRUE(r$settings$accepted), decisions)) > 0)
   if (step %in% c("03_parameters", "09_qc", "10_stats") &&
       length(Filter(function(r) identical(r$step, step) && isTRUE(r$settings$accepted), decisions))) return(TRUE)
   step != "03_parameters" && step != "09_qc" && !is.null(applied_settings(decisions, step))

@@ -21,6 +21,7 @@ if [ ! -x "$SRV/venv/bin/python" ]; then
   python3 -m venv "$SRV/venv" 2>/dev/null || { apt-get install -y python3-venv; rm -rf "$SRV/venv"; python3 -m venv "$SRV/venv"; }
 fi
 "$SRV/venv/bin/pip" install -q --upgrade aiohttp python-pam six
+"$SRV/venv/bin/pip" install -q --upgrade kinase-library   # Step 12 Phospho: Kinase Library (Cantley lab), runs locally
 
 # 2. Code: web app, plugin (rebuilt from this repo), app at the pinned submodule commit
 mkdir -p "$SRV/web" "$SRV/shiny_DPDP" "$SRV/data/input"
