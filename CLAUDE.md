@@ -15,8 +15,8 @@ Read `PLAN.md` first: it has the plan, the status of each step, and the test dat
   background) returns the choice. Or ask in the chat. Then apply with `--decided_by=user`. One decision per answer. See skill `dpdp-run`.
 - `tools/build_plugin.sh` builds the shareable plugin in `dist/dpdp-marketplace/`. Edit sources here, not in `dist/`.
 - Run R with plain `Rscript`, never `--vanilla` (packages are in `/home/R_Packages`).
-- Work one step at a time. Show results, recommend options, and let the user decide before
-  running the next step.
+- Work one step at a time. Show results, recommend options, and let the user decide each step. Once the user's decision is
+  applied, go straight on to the next step's preview (user, 2026-11-13); don't ask whether to continue.
 - Data stays under `data/`. Never commit it or push it to GitHub.
 - Logs go in the run's own `Error/` folder, never loose in `data/`. The app's logs already do (`run_bg` -> `Error/error_<name>.txt`).
   To keep a step's stderr, run it through `pipeline/run_step.sh <step.R> <args>` (shows stderr and appends it to

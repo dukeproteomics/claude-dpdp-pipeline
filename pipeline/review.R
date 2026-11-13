@@ -174,7 +174,7 @@ next_step_box <- function(run_dir, step, status_class, variant = "") {
   spec <- decision_spec(step, variant, p, run_dir)
   if (is.null(spec)) return("")
   if (!identical(status_class, "waiting"))
-    return(sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude continues in the session.</p></section>', esc(spec$nxt)))
+    return(sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude goes straight on to it; in the web app the left panel moves there when its page is ready. Click a step above to come back here.</p></section>', esc(spec$nxt)))
   sprintf('<section class="nextbox" id="decision"><h2>Your decision: %s</h2><div id="dform"></div>
 <p class="note" id="dhelp">%s</p></section>
 <script>window.DPDP_DECISION = %s;</script>', esc(spec$q),

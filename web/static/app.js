@@ -1,7 +1,7 @@
 (function () {
   "use strict";
   const meta = n => document.querySelector("meta[name=" + n + "]").content;
-  const BASE = meta("dpdp-base"), CSRF = meta("dpdp-csrf");
+  const BASE = meta("dpdp-base"), CSRF = meta("dpdp-csrf"), ME = meta("dpdp-user");   // Follow Claude: only my own runs
   const $ = id => document.getElementById(id);
 
   // ------------------------------------------------------------ terminal (official Claude Code, as this user)
@@ -54,7 +54,7 @@
       const a = document.createElement("a");
       a.href = "#"; a.textContent = p.step.split("_")[0] + " " + p.label.replace(/\bQc\b/, "QC");
       if (p.file === curFile) a.className = "on";
-      a.onclick = e => { e.preventDefault(); $("follow").checked = false; showPage(cur, p.file); };
+      a.onclick = e => { e.preventDefault(); showPage(cur, p.file); };   // going back doesn't stop Follow Claude
       nav.appendChild(a);
     });
     $("pending").hidden = !r.pending;
@@ -72,12 +72,15 @@
       }
       if (!runs.length) { showPage("", ""); return; }
       if (!runs.find(r => r.run === cur)) cur = runs[0].run;
-      // follow: a run that changed since the last poll (Claude is working on it) and its newest page
+      // follow: move when Claude starts another page (a run's newest page is a different step than at the last poll), so
+      // the panel goes on to the next step by itself; rebuilding the same page, or the analyst looking back at a finished
+      // step, doesn't move it.
       if ($("follow").checked && !firstLoad) {
-        const moved = runs.filter(r => before[r.run] !== undefined ? r.mtime > before[r.run] : true);
-        if (moved.length) { const r = moved[0], p = newest(r); if (p) { showPage(r.run, p.file); } }
+        const moved = runs.filter(r => { const p = newest(r); return r.owner === ME && p && (before[r.run] === undefined || p.file !== before[r.run]); });
+        const mine = moved.find(r => r.run === cur) || moved[0];
+        if (mine) { const p = newest(mine); if (!(mine.run === cur && p.file === curFile)) showPage(mine.run, p.file); }
       }
-      runs.forEach(r => { seen[r.run] = r.mtime; });
+      runs.forEach(r => { const p = newest(r); seen[r.run] = p ? p.file : ""; });
       sel.value = cur;
       const r = runs.find(x => x.run === cur);
       if (firstLoad || !curFile) { const p = r && newest(r); showPage(cur, p ? p.file : ""); }

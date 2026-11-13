@@ -165,6 +165,14 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Go straight to the next step (user, 2026-11-13)
+- Once a step's decision is applied, Claude runs the next step's preview right away (dpdp-run, CLAUDE.md, web-mode CLAUDE.md);
+  it stops only for a stop condition or warning, or when the analyst asked to pause. The analyst goes back by clicking a step.
+- Web app Follow Claude: moves the panel when the newest page of one of *my* runs is a different step than at the last poll
+  (the next step's page appeared). Clicking a step no longer turns Follow off, and rebuilding the same page doesn't move it.
+  Tested on a dev copy with a stub terminal: new page -> moves; click back -> stays; same page rebuilt -> stays; next new page -> moves.
+- Done pages say "Claude goes straight on to it ... click a step above to come back here".
+
 ## Web app for other users (decided 2026-11-06)
 - Users won't SSH; they have the Shiny/RStudio bookmark. The user wants an app-like page, not RStudio.
 - No central API key (Duke has no contact for it), and Remote Control is off by Duke's policy (tested: "disabled by your

@@ -10,6 +10,12 @@ summarize what it shows in neutral terms, let the analyst decide on the page (be
 (no option marked as recommended unless they ask for an opinion), then apply with `--decided_by=user --analyst=<name>` and the reason in `--note`. **One decision per answer.** The plugin's hook blocks a
 second `--decided_by=user` command if the analyst has not answered in between.
 
+**Go straight on (user, 2026-11-13):** once a step's decision is applied, start the next step right away: run its preview (or
+calculation) and build its page, without asking whether to continue. Tell the analyst in one or two lines what was applied and
+that the next page is ready. The analyst goes back to a finished step by clicking it (web app step bar or `review/index.html`).
+Stop instead, and say why, only when the applied step reports a stop condition or warning the analyst must see first (e.g.
+`sample_id_alert`, every precursor removed, a failed command), or when the analyst asked to pause.
+
 ## In-page decisions (default)
 The analyst can decide **on the review page** (radio buttons, fields, a note, and **Send to Claude**) or in the chat. Both work.
 **Web app sessions (`DPDP_WEB=1` in the environment):** skip steps 1 and 2. The DPDP web app serves the pages and opens each new
@@ -78,7 +84,8 @@ peptides, and the protein level isn't used except to name a peptide's protein an
 To reuse a finished run's settings: most steps take `--settings_from=<that run's .db>`. The analyst still approves each step.
 
 ## Resuming
-Read `<run>/decisions.jsonl` and `<run>/review/index.html`. Continue from the first step without a recorded decision.
+Read `<run>/decisions.jsonl` and `<run>/review/index.html`. Continue from the first step without a recorded decision (run its
+preview if its page is missing or out of date, then wait for the analyst).
 The status badge on each page says whether it is waiting or done.
 
 ## Lab rules (from the lab lead)

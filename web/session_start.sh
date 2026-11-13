@@ -44,7 +44,8 @@ This Claude Code session runs inside the DPDP web app (DPDP_WEB=1). The analyst 
 - Run folders: \$DPDP_DATA ($DPDP_DATA), shared by the team. Uploaded inputs: \$DPDP_DATA/input/<name>/.
 - Don't start review_server.py and don't xdg-open pages: the web app serves them. Tell the analyst the page is ready in the
   left panel (it opens there by itself) and run wait_decision.py in the background as usual.
-- Use the dpdp-run skill for a project from start to end.
+- Use the dpdp-run skill for a project from start to end. Once a step's decision is applied, go straight on to the next
+  step's preview; the left panel moves to its page by itself.
 MD
 
 echo "${g}DPDP: starting Claude Code as $USER in $W  (data: $DPDP_DATA)${n}"
