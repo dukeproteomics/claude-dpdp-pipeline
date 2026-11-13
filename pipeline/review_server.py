@@ -15,7 +15,8 @@ import argparse, json, os, re, secrets, sys, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, unquote
 
-STEPS = {"01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "07_impute", "08_rollup", "09_qc", "10_stats"}
+STEPS = {"01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "06b_normalize_compare", "07_impute",
+         "07b_impute_compare", "08_rollup", "09_qc", "10_stats"}
 RUN_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 FILE_RE = re.compile(r"^[A-Za-z0-9_.-]+\.html$")
 MAX_BODY = 20000
@@ -59,7 +60,11 @@ def make_handler(data_root, token):
                     except Exception:
                         pending = "?"
                 page = os.path.join(d, "review", step + ".html")
-                return self.send(200, json.dumps({"pending_step": pending,
+                try:   # out-of-date steps and an open revisit (written by pipeline/review.R write_run_state)
+                    state = json.load(open(os.path.join(d, "review", "state.json")))
+                except Exception:
+                    state = None
+                return self.send(200, json.dumps({"pending_step": pending, "state": state,
                                                   "page_mtime": os.path.getmtime(page) if os.path.exists(page) else 0}))
             if not parts:   # index of runs
                 runs = sorted(r for r in os.listdir(data_root) if os.path.isfile(os.path.join(data_root, r, "review", "index.html")))

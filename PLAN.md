@@ -173,6 +173,17 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   Tested on a dev copy with a stub terminal: new page -> moves; click back -> stays; same page rebuilt -> stays; next new page -> moves.
 - Done pages say "Claude goes straight on to it ... click a step above to come back here".
 
+## Going back to an earlier step (user, 2026-11-13: in place with a backup; default: redo the rest automatically)
+- `pipeline/revisit.R` (Change this step / Keep what I had), `pipeline/replay.R` (redo the later steps with the earlier settings),
+  `pipeline/redo.R` (the commands per step: preview + apply with `--settings_from=<backup .db>`; QC with the earlier accessions and
+  flags; Stats + 10b/10c, never accepted automatically). `review.R`: STEP_ORDER, `stale_steps()` (a step is out of date when an earlier
+  step was decided or re-run after it), `review/state.json` (servers: banner, step bar), page choices `revisit`, `cancel_revisit`,
+  `accept_rest`. Hook: `replay.R` allowed when `revisit.json` is open with mode auto. One backup per run (dropped at the next change).
+- Tested on a throwaway 11531 run Load to Stats (zz_rv, deleted): Filter x% 50 -> 75, auto redo of 06-10 with identical settings (Stats
+  down calls 539 -> 301, shown before/after); Noise in step mode from the page (Change this step, out-of-date banner, Accept the rest
+  from the Filter page, redo incl. 10b); Keep what I had while open and after an auto redo from the Stats page (db byte-identical);
+  Parameters -> Primary, auto redo 04-10; Impute -> perseus: redo stopped at Rollup (limpa no longer fits), change kept open.
+
 ## Web app for other users (decided 2026-11-06)
 - Users won't SSH; they have the Shiny/RStudio bookmark. The user wants an app-like page, not RStudio.
 - No central API key (Duke has no contact for it), and Remote Control is off by Duke's policy (tested: "disabled by your

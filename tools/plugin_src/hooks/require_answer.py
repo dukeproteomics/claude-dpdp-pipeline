@@ -24,6 +24,20 @@ def page_decision_for(cmd):
     # A "preview" request from a step's Options panel asks for a preview, not an apply.
     return bool(s) and str(rec.get("step", "")).startswith(s.group(1) + "_") and rec.get("choice") != "preview"
 
+def auto_replay_ok(cmd):
+    """pipeline/replay.R after a changed step was applied: the analyst approved it once, when they chose "Change this step" with
+    "redo them with my earlier settings" (<run>/revisit.json, mode auto, status open). replay.R checks the rest itself."""
+    if "pipeline/replay.R" not in cmd:
+        return False
+    m = re.search(r"--db=(\S+)", cmd)
+    if not m:
+        return False
+    try:
+        rv = json.load(open(os.path.join(os.path.dirname(os.path.abspath(m.group(1).strip("'\""))), "revisit.json")))
+    except Exception:
+        return False
+    return rv.get("status") == "open" and rv.get("mode") == "auto"
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -34,7 +48,7 @@ def main():
     cmd = (data.get("tool_input") or {}).get("command", "")
     if "--decided_by=user" not in cmd or "pipeline/" not in cmd:
         return 0
-    if page_decision_for(cmd):
+    if page_decision_for(cmd) or auto_replay_ok(cmd):
         return 0
     path = data.get("transcript_path")
     if not path:

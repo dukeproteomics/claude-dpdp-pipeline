@@ -324,6 +324,13 @@ def make_app(cfg):
         return web.FileResponse(p, headers={"Cache-Control": "max-age=3600"})
 
     # -- runs and review pages
+    def run_state(d):
+        """review/state.json: out-of-date steps and an open revisit (written by pipeline/review.R write_run_state)."""
+        try:
+            return json.load(open(os.path.join(d, "review", "state.json")))
+        except Exception:
+            return None
+
     @routes.get(B + "/api/runs")
     async def runs(request):
         need(request)
@@ -345,7 +352,9 @@ def make_app(cfg):
                 owner = pwd.getpwuid(os.stat(os.path.join(cfg["data"], r)).st_uid).pw_name
             except KeyError:
                 owner = "?"
+            st = run_state(os.path.join(cfg["data"], r)) or {}
             out.append({"run": r, "owner": owner, "pages": pages, "pending": os.path.exists(pend),
+                        "stale": sorted((st.get("stale") or {}).keys()), "revisit": st.get("revisit"),
                         "mtime": max([p["mtime"] for p in pages] or [os.path.getmtime(rv)])})
         out.sort(key=lambda x: -x["mtime"])
         return web.json_response({"runs": out, "data": cfg["data"]})
@@ -379,7 +388,8 @@ def make_app(cfg):
             except Exception:
                 pending = "?"
         pg = os.path.join(d, "review", step + ".html")
-        return web.json_response({"pending_step": pending, "page_mtime": os.path.getmtime(pg) if os.path.exists(pg) else 0})
+        return web.json_response({"pending_step": pending, "state": run_state(d),
+                                  "page_mtime": os.path.getmtime(pg) if os.path.exists(pg) else 0})
 
     @routes.post(B + "/runs/api/decision")
     async def decision(request):

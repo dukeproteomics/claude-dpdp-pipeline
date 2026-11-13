@@ -54,6 +54,7 @@
       const a = document.createElement("a");
       a.href = "#"; a.textContent = p.step.split("_")[0] + " " + p.label.replace(/\bQc\b/, "QC");
       if (p.file === curFile) a.className = "on";
+      if ((r.stale || []).includes(p.step)) { a.classList.add("stale"); a.title = "Out of date: an earlier step was changed after it"; }
       a.onclick = e => { e.preventDefault(); showPage(cur, p.file); };   // going back doesn't stop Follow Claude
       nav.appendChild(a);
     });

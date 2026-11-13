@@ -25,6 +25,9 @@ main { flex: 1; display: flex; min-height: 0; }
 #steps a { padding: 3px 10px; border-radius: 12px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 13px; }
 #steps a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 #steps a.new::after { content: " \2022"; color: var(--warn); }
+#steps a.stale { border-style: dashed; border-color: #b42318; color: #b42318; }
+#steps a.stale::after { content: " (out of date)"; font-size: 11px; }
+#steps a.stale.on { background: #b42318; color: #fff; text-decoration: none; }
 #pending { padding: 6px 12px; background: #fff4e5; color: var(--warn); border-bottom: 1px solid #f5d0a9; }
 #page { flex: 1; border: 0; width: 100%; }
 #empty { position: absolute; inset: 60px 30px auto 30px; color: var(--muted); }

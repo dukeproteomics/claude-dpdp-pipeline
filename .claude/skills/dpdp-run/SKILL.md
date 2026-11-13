@@ -35,6 +35,7 @@ one in its left panel by itself; say "the <step> page is ready on the left". Run
 | Step | choice -> command |
 |---|---|
 | 01_load | `accept` -> `accept.R --step=01_load`; `fix` -> stop, discuss `fields.problem` |
+| any done step | `revisit` -> `revisit.R --step=<step> --from_page`; `cancel_revisit` -> `revisit.R --cancel --from_page`; `accept_rest` -> `replay.R --decided_by=user --step=<step> --from_page` (see Going back) |
 | 03_parameters | Options panel: `preview` ("Run with these settings") -> `03_parameters.R --from_page` (re-runs the step; then wait again); `apply` ("Accept these settings") -> `accept.R --step=03_parameters --from_page --decided_by=user`; `other` -> discuss `fields.request` |
 | 04_noise | Options panel: `preview` -> `04_noise.R --action=preview --from_page` (then wait again); `apply` -> `04_noise.R --action=apply --from_page --decided_by=user`; `other` -> discuss `fields.request` |
 | 05_filter | Options panel: `preview` -> `05_filter.R --action=preview --from_page` (then wait again); `apply` -> `05_filter.R --action=apply --from_page --decided_by=user`; `other` -> discuss `fields.request` |
@@ -82,6 +83,29 @@ Ask for anything missing. Ask which spike-ins the project uses if they aren't th
 peptides, and the protein level isn't used except to name a peptide's protein and for the QC spike checks. Say "peptide" to the analyst.
 
 To reuse a finished run's settings: most steps take `--settings_from=<that run's .db>`. The analyst still approves each step.
+
+## Going back to an earlier step (user, 2026-11-13)
+Each step works on the result of the one before, so changing a step makes every later step out of date. The run is changed in
+place, with a backup. Pages of out-of-date steps show a red **Out of date** banner and the web app's step bar marks them.
+1. **Change this step** (done page, choice `revisit`, field `mode`): `Rscript pipeline/revisit.R --db=<db> --step=<step> --from_page`.
+   It backs up the run (`<run>/Backup/revisit_<time>_<step>/`), writes `<run>/revisit.json` (mode `auto` = "redo them with my earlier
+   settings", the default; `step` = "let me go through them again") and previews the step with the settings applied before. Then
+   wait on that page as usual. From the chat: `--mode=auto|step` (ask which). Load can't be changed (new run). One change at a time.
+2. The analyst changes and applies the step as usual.
+3. Then, without asking again:
+   - mode `auto`: `Rscript pipeline/replay.R --db=<db> --decided_by=user` (the hook allows it: the analyst chose this with Change
+     this step). It previews and applies each later step with the earlier settings (`--settings_from=<backup .db>`), previews the step
+     the analyst had been on, and redoes the Stats graphs/output, then stops for the analyst to accept the (changed) Stats results.
+     Tell the analyst what was redone and give the Stats calls before -> after it prints (also on the Stats page).
+   - mode `step`: go on as usual, but preview each next step with `--settings_from=<backup .db>` (`revisit.json` `backup`), so its
+     page starts from the earlier settings; the analyst applies each one.
+4. **Accept the rest** (choice `accept_rest` on a later step's page, step mode): `Rscript pipeline/replay.R --db=<db> --decided_by=user --step=<that step> --from_page`.
+5. **Keep what I had** (choice `cancel_revisit`, on the changed step and later pages, and on the Stats results page after an
+   automatic redo): `Rscript pipeline/revisit.R --db=<db> --cancel --from_page`. Restores the run exactly as it was and drops the backup.
+6. **If the redo stops** ("STOPPED at <step>"): an earlier setting no longer fits (e.g. Rollup limpa after Impute was changed to
+   perseus). Run that step's preview without `--settings_from`, explain what didn't fit, and wait for the analyst. After they apply
+   it, run `replay.R --db=<db> --decided_by=user` again: it continues with the steps not yet redone.
+The backup is kept until the next change (one per run), so the before/after and Keep what I had stay available.
 
 ## Resuming
 Read `<run>/decisions.jsonl` and `<run>/review/index.html`. Continue from the first step without a recorded decision (run its

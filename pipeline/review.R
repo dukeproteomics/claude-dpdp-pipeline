@@ -102,6 +102,8 @@ pre { background:var(--grid); padding:10px; border-radius:6px; overflow-x:auto; 
 .dbar { margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; } .dsend { font:inherit; font-weight:600; padding:6px 16px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; } .dsend:disabled { opacity:0.5; cursor:default; }
 .dmsg { font-weight:600; color:var(--text-primary); }
 .nextbox.done { border-color:var(--ok-ink); background:var(--ok-bg); } .nextbox.done h2 { color:var(--ok-ink); }
+.nextbox.stale { border-color:var(--bad-ink, #b42318); background:var(--bad-bg, #fdecea); } .nextbox.stale h2 { color:var(--bad-ink, #b42318); }
+details.revisit { margin-top:8px; } details.revisit summary { cursor:pointer; font-weight:600; }
 .control button { font:inherit; font-size:13px; padding:3px 10px; border:1px solid var(--rule); border-radius:6px; background:var(--surface-1); color:var(--text-primary); cursor:pointer; }
 "
 
@@ -116,6 +118,75 @@ impute_choices_ordered <- function(background, choices) {
   k <- which(vapply(choices, `[[`, "", "value") == def)
   choices[[k]]$label <- paste0(choices[[k]]$label, " - default for ", if (background) "background" else "raw", " exports")
   c(choices[k], choices[-k])
+}
+
+# --- Going back to an earlier step (user, 2026-11-13) ------------------------------------------------------------------------
+# A step works on the result of the step before it, so changing a step makes every later step out of date ("stale").
+# Rule: a step is out of date when an earlier step was decided or re-run after it (times from decisions.jsonl and summary.json).
+# Revisits (pipeline/revisit.R): <run>/revisit.json {step, time, backup, mode = auto|step, status = open|done|cancelled, reached}.
+STEP_ORDER <- c("01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "07_impute", "08_rollup", "09_qc", "10_stats")
+STEP_TITLE <- c("01_load" = "Step 1 - Load", "03_parameters" = "Step 3 - Parameters", "04_noise" = "Step 4 - Noise",
+                "05_filter" = "Step 5 - Filter", "06_normalize" = "Step 6 - Normalize", "07_impute" = "Step 7 - Impute",
+                "08_rollup" = "Step 8 - Rollup", "09_qc" = "Step 9 - QC", "10_stats" = "Step 10 - Stats")
+# Comparison pages belong to their step: out of date with it.
+SUB_PAGES <- c("06b_normalize_compare" = "06_normalize", "07b_impute_compare" = "07_impute")
+
+# Latest time a step was decided or (re)run; "" if never.
+step_time <- function(run_dir, step, decisions = read_decisions(run_dir)) {
+  t <- vapply(Filter(function(r) identical(r$step, step), decisions), function(r) r$time %||% "", "")
+  f <- file.path(run_dir, "steps", step, "summary.json")
+  g <- if (file.exists(f)) tryCatch(fromJSON(f, simplifyVector = FALSE)$generated %||% "", error = function(e) "") else ""
+  max(c(t, g, ""))
+}
+
+# Named list: out-of-date step -> the earlier step that was changed after it.
+stale_steps <- function(run_dir) {
+  dec <- read_decisions(run_dir)
+  tm <- vapply(STEP_ORDER, function(s) step_time(run_dir, s, dec), "")
+  out <- list()
+  for (i in seq_along(STEP_ORDER)[-1]) {
+    if (!nzchar(tm[i])) next
+    later <- which(tm[seq_len(i - 1)] > tm[i])
+    if (length(later)) out[[STEP_ORDER[i]]] <- STEP_ORDER[max(later)]
+  }
+  for (sp in names(SUB_PAGES)) {
+    pg <- file.path(run_dir, "review", paste0(sp, ".html"))
+    if (!file.exists(pg)) next
+    par <- SUB_PAGES[[sp]]
+    if (!is.null(out[[par]])) { out[[sp]] <- out[[par]]; next }
+    pt <- format(file.mtime(pg), "%Y-%m-%d %H:%M:%S"); i <- match(par, STEP_ORDER)
+    later <- which(tm[seq_len(i - 1)] > pt)
+    if (length(later)) out[[sp]] <- STEP_ORDER[max(later)]
+  }
+  out
+}
+
+revisit_info <- function(run_dir) {
+  f <- file.path(run_dir, "revisit.json")
+  if (file.exists(f)) tryCatch(fromJSON(f, simplifyVector = FALSE), error = function(e) NULL) else NULL
+}
+
+# review/state.json for the servers (out-of-date banners, the web app's step bar).
+write_run_state <- function(run_dir) {
+  rv <- revisit_info(run_dir)
+  # Step mode: the revisit is finished once the changed step was applied again and no later step is out of date.
+  if (!is.null(rv) && identical(rv$status, "open")) {
+    d <- Filter(function(r) identical(r$step, rv$step) && (r$time %||% "") >= rv$time, read_decisions(run_dir))
+    acc <- Filter(function(r) isTRUE(r$settings$accepted) || (is.null(r$settings$accepted) && !rv$step %in% c("03_parameters", "09_qc")), d)
+    if (length(acc) && !length(stale_steps(run_dir))) {
+      rv$status <- "done"; rv$finished <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+      write_json(rv, file.path(run_dir, "revisit.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
+    }
+  }
+  st <- list(stale = stale_steps(run_dir), titles = as.list(STEP_TITLE), revisit = if (!is.null(rv) && identical(rv$status, "open")) rv[c("step", "mode", "time")] else NULL)
+  write_json(st, file.path(review_dir(run_dir), "state.json"), auto_unbox = TRUE, null = "null")
+}
+
+# The analyst's last applied settings for a step (not accept / revisit records). decisions: a list from read_decisions.
+applied_settings <- function(decisions, step) {
+  r <- Filter(function(x) identical(x$step, step) && is.null(x$settings$accepted) && is.null(x$settings$revisit) &&
+                is.null(x$settings$revisit_cancelled), decisions)
+  if (length(r)) r[[length(r)]]$settings else NULL
 }
 
 decision_spec <- function(step, variant, p, run_dir = NULL) {
@@ -173,8 +244,26 @@ next_step_box <- function(run_dir, step, status_class, variant = "") {
   p <- if (!is.na(db) && file.exists(db)) tryCatch(get_params(db), error = function(e) list()) else list()
   spec <- decision_spec(step, variant, p, run_dir)
   if (is.null(spec)) return("")
-  if (!identical(status_class, "waiting"))
-    return(sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude goes straight on to it; in the web app the left panel moves there when its page is ready. Click a step above to come back here.</p></section>', esc(spec$nxt)))
+  rv <- revisit_info(run_dir); rv_open <- !is.null(rv) && identical(rv$status, "open")
+  if (!identical(status_class, "waiting")) {
+    done <- sprintf('<section class="nextbox done"><h2>This step is done</h2><p>Next: <b>%s</b>. Claude goes straight on to it; in the web app the left panel moves there when its page is ready. Click a step above to come back here.</p>', esc(spec$nxt))
+    # Going back: Change this step (not Load: start a new run instead). One revisit at a time.
+    # (STALE_JS hides it while another step is being changed: revisit.R allows one at a time.)
+    if (!step %in% STEP_ORDER[-1]) return(paste0(done, '</section>'))
+    rspec <- list(q = "change", nxt = spec$nxt, choices = list(ch("revisit", "Change this step", list(
+      fld("mode", "then the later steps:", "select", "redo them with my earlier settings", c("redo them with my earlier settings", "let me go through them again"))))))
+    return(sprintf('%s<details class="revisit"><summary>Change this step</summary><p class="note">Opens this step&apos;s options again with what you applied. Before anything changes, the run is backed up (<b>Keep what I had</b> undoes the change). After you apply the change, the later steps are redone: by default automatically, with the settings you chose before (Claude stops at any step where they no longer fit); or you go through them again.</p><div id="dform"></div><p class="note" id="dhelp"></p></details></section><script>window.DPDP_DECISION = %s;</script>',
+      done, toJSON(list(run = basename(run_dir), step = step, spec = rspec), auto_unbox = TRUE, null = "null")))
+  }
+  after_rv <- !is.null(rv) && match(step, STEP_ORDER, nomatch = 0) > match(rv$step, STEP_ORDER, nomatch = 99)
+  if (rv_open && after_rv)
+    spec$choices <- c(spec$choices, list(ch("accept_rest", "Accept the rest: redo this and the remaining steps with my earlier settings")))
+  # Keep what I had: on the changed step and the later ones while the change is open; after the automatic redo, on the
+  # Stats results page (next to the before/after), as long as the backup is there.
+  undo_ok <- !is.null(rv) && !isTRUE(rv$backup_removed) && dir.exists(rv$backup %||% "") &&
+    ((rv_open && (identical(rv$step, step) || after_rv)) || (identical(rv$status, "done") && identical(step, "10_stats") && identical(variant, "results")))
+  if (undo_ok)
+    spec$choices <- c(spec$choices, list(ch("cancel_revisit", sprintf("Keep what I had: undo the change of %s and restore the run as it was before", STEP_TITLE[[rv$step]] %||% rv$step))))
   sprintf('<section class="nextbox" id="decision"><h2>Your decision: %s</h2><div id="dform"></div>
 <p class="note" id="dhelp">%s</p></section>
 <script>window.DPDP_DECISION = %s;</script>', esc(spec$q),
@@ -234,7 +323,8 @@ DECISION_JS <- '
 '
 
 write_review_page <- function(run_dir, step, title, status, status_class, body, extra_head = "", decision_variant = "") {
-  body <- paste0('<script>', COMMON_JS, '</script>', next_step_box(run_dir, step, status_class, decision_variant), body, '<script>', DECISION_JS, '</script>')
+  body <- paste0('<script>', COMMON_JS, '</script>', '<div id="stalebox"></div>', next_step_box(run_dir, step, status_class, decision_variant), body,
+                 '<script>', DECISION_JS, '</script><script>', STALE_JS, '</script>')
   need_plotly <- function() if (!grepl("Plotly.newPlot", body, fixed = TRUE) && !grepl("plotly", extra_head, fixed = TRUE)) body <<- paste0(body, '<script>', plotly_js(), '</script>')
   if (grepl("DPDP_CHARTS", body, fixed = TRUE)) { need_plotly(); body <- paste0(body, '<script>', SAMPLE_CHARTS_JS, '</script>') }
   if (grepl("DPDP_BARS", body, fixed = TRUE)) { need_plotly(); body <- paste0(body, '<script>', SAMPLE_BAR_JS, '</script>') }
@@ -253,6 +343,25 @@ write_review_page <- function(run_dir, step, title, status, status_class, body, 
   f
 }
 
+# Out-of-date banner. The page may be older than the change that made it stale, so it asks the server (review/state.json).
+STALE_JS <- '
+(function () {
+  const box = document.getElementById("stalebox"); if (!box) return;
+  const run = (document.querySelector("header .meta b") || {}).textContent, step = location.pathname.split("/").pop().replace(/\\.html$/, "");
+  const API = location.pathname.replace(/[^\\/]+\\/review\\/[^\\/]*$/, "") + "api/";
+  if (!location.protocol.startsWith("http")) return;
+  fetch(API + "status?run=" + encodeURIComponent(run) + "&step=" + step).then(r => r.json()).then(st => {
+    const rv = st.state && st.state.revisit, det = document.querySelector("details.revisit");
+    if (rv && rv.step !== step && det) det.outerHTML = \'<p class="note">\' + (st.state.titles[rv.step] || rv.step) + \' is being changed; finish it or undo it (Keep what I had) before changing another step.</p>\';
+    const s = st.state && st.state.stale && st.state.stale[step];
+    if (!s) return;
+    box.innerHTML = \'<section class="nextbox stale"><h2>Out of date</h2><p>\' + (st.state.titles && st.state.titles[s] || s) +
+      \' was changed after this page was made, so what it shows no longer matches the data. Claude redoes this step after the change is applied (or you go through it again).</p></section>\';
+  }).catch(() => {});
+})();
+'
+
+
 # index.html: every step page, plus every decision recorded in decisions.jsonl.
 write_review_index <- function(run_dir) {
   d <- review_dir(run_dir)
@@ -270,6 +379,7 @@ write_review_index <- function(run_dir) {
 <header><h1>Run %s</h1><span class="meta">updated %s</span></header><main>%s</main></div></body></html>',
     esc(basename(run_dir)), REVIEW_CSS, esc(basename(run_dir)), format(Sys.time(), "%Y-%m-%d %H:%M"), body)
   writeLines(html, file.path(d, "index.html"), useBytes = TRUE)
+  tryCatch(write_run_state(run_dir), error = function(e) message("state.json: ", conditionMessage(e)))
 }
 
 # --- Shared interactive sample charts (replace the app's static bar / box / histogram PNGs) ---------------------------------

@@ -141,7 +141,19 @@ review_stats <- function(db_path) {
   js <- paste0('<script>', plotly_js(), '</script><script>const D = ', toJSON(js_data, auto_unbox = TRUE, digits = NA, na = "null"), ';', STATS_JS, '</script>')
   extra_css <- '<style>.viz-root { --up:#e34948; --down:#2a78d6; } td.flag { color:var(--warn-ink); font-weight:600; } section h3 { font-size:15px; margin:14px 0 4px; }
 .control select { font:inherit; font-size:13px; } .control input[type=range] { width:160px; } .control .val { min-width:60px; }</style>'
-  body <- paste0(decision_html, res_html, volc_html, pca_html, prot_html, graphs_html, js)
+  # After going back to an earlier step and redoing the rest (pipeline/replay.R): the calls before and after the change.
+  rvi <- revisit_info(run_dir); ba <- rvi$replay$stats
+  ba_html <- if (length(ba$before) && length(ba$after)) {
+    rows <- lapply(ba$after, function(a) { b <- Filter(function(x) identical(x$comparison, a$comparison), ba$before)
+      b <- if (length(b)) b[[1]] else list(features = NA, up = NA, down = NA)
+      data.frame(Comparison = esc(a$comparison), Tested = sprintf("%s &rarr; %s", fmt_n(b$features), fmt_n(a$features)),
+                 Up = sprintf("%s &rarr; %s", fmt_n(b$up), fmt_n(a$up)), Down = sprintf("%s &rarr; %s", fmt_n(b$down), fmt_n(a$down))) })
+    paste0('<section><h2>Before and after the change of ', esc(STEP_TITLE[[rvi$step]] %||% rvi$step), '</h2>',
+           sprintf('<p class="note">%s was changed on %s and the later steps were redone with the earlier settings. Calls with the old result &rarr; now. The old run is kept in <code>%s</code> until the next change.</p>',
+                   esc(STEP_TITLE[[rvi$step]] %||% rvi$step), esc(rvi$time), esc(rvi$backup)),
+           html_table(do.call(rbind, rows)), '</section>')
+  } else ""
+  body <- paste0(decision_html, ba_html, res_html, volc_html, pca_html, prot_html, graphs_html, js)
   write_review_page(run_dir, "10_stats", "Step 10 - Stats", status, status_class, body, extra_head = extra_css,
                     decision_variant = if (applied) "results" else "")
 }
