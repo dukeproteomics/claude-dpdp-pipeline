@@ -73,3 +73,27 @@ organism_of <- function(desc) {
   o <- trimws(sub(" \\(.*$", "", o))   # "Escherichia coli (strain K12)" -> "Escherichia coli"
   vapply(strsplit(ifelse(is.na(o), "", o), " "), function(w) paste(head(w, 2), collapse = " "), "")
 }
+
+# STRING's annotation of every protein of a species (the terms the enrichment uses), for the ranked analysis (GSEA). Downloaded once
+# per species into cache_dir (shared by the runs of a data folder). Returns data.frame(id, category, term, description) with the
+# category as the enrichment API names it (Process, Function, ... ). KEGG is not in STRING's download files (license).
+STRING_FILE_CATEGORIES <- c("Biological Process (Gene Ontology)" = "Process", "Molecular Function (Gene Ontology)" = "Function",
+  "Cellular Component (Gene Ontology)" = "Component", "Reactome Pathways" = "RCTM", "WikiPathways" = "WikiPathways",
+  "Annotated Keywords (UniProt)" = "Keyword", "Local Network Cluster (STRING)" = "NetworkNeighborAL", "Protein Domains (Pfam)" = "Pfam",
+  "Protein Domains and Features (InterPro)" = "InterPro", "Protein Domains (SMART)" = "SMART", "Subcellular localization (COMPARTMENTS)" = "COMPARTMENTS",
+  "Tissue expression (TISSUES)" = "TISSUES", "Disease-gene associations (DISEASES)" = "DISEASES", "KEGG Pathways" = "KEGG")
+string_terms <- function(species, cache_dir, categories, version = "12.0") {
+  dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
+  f <- file.path(cache_dir, sprintf("%s.protein.enrichment.terms.v%s.txt.gz", species, version))
+  if (!file.exists(f) || file.size(f) < 1000) {
+    url <- sprintf("https://stringdb-downloads.org/download/protein.enrichment.terms.v%s/%s.protein.enrichment.terms.v%s.txt.gz", version, species, version)
+    cat("Downloading STRING annotation for species", species, "...\n")
+    tmp <- paste0(f, ".part"); r <- httr::GET(url, httr::write_disk(tmp, overwrite = TRUE), httr::timeout(900))
+    if (httr::status_code(r) != 200) { unlink(tmp); stop("STRING annotation download failed (HTTP ", httr::status_code(r), "): ", url, call. = FALSE) }
+    file.rename(tmp, f)
+  }
+  d <- data.table::fread(f, sep = "\t", header = TRUE, quote = "", showProgress = FALSE)
+  names(d) <- c("id", "category", "term", "description")
+  d$category <- unname(STRING_FILE_CATEGORIES[d$category])
+  as.data.frame(d[!is.na(d$category) & d$category %in% categories, ])
+}

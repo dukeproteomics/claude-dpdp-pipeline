@@ -32,6 +32,10 @@ pathway_options <- function(p = NULL, orgs = NULL) {
       opt("pathway_other", "Compartments, tissues, diseases, publications", "checkbox", FALSE, "", app = FALSE),
       opt("pathway_fdr", "FDR cutoff", "number", 0.05, "Terms with a higher FDR are not shown.", min = 0, max = 1, step = "any", app = FALSE),
       opt("pathway_min_genes", "Minimum hits in a term", "number", 3, "Terms with fewer hits are not shown.", min = 1, step = 1, app = FALSE))),
+    opt_section("Ranked analysis (GSEA)", note = "Every tested protein ranked by sign(FC) x -log10(p): no cutoff, finds pathways where many proteins shift a little. fgsea (Korotkevich et al.), the databases chosen above from STRING's annotation of the species (KEGG is not in STRING's downloads).", list(
+      opt("pathway_gsea", "Run GSEA", "checkbox", TRUE, "", app = FALSE),
+      opt("pathway_gsea_min", "Smallest gene set", "number", 10, "Gene sets with fewer tested proteins are skipped.", depends = "pathway_gsea", min = 3, step = 1, app = FALSE),
+      opt("pathway_gsea_max", "Largest gene set", "number", 500, "Very broad sets (e.g. 'Cytoplasm') are skipped.", depends = "pathway_gsea", min = 20, step = 10, app = FALSE))),
     opt_section("Network (STRING)", list(
       opt("pathway_score", "Interaction confidence", "select", "400",
           "STRING combined score: 150 low, 400 medium, 700 high, 900 highest.", choices = c("150", "400", "700", "900"), app = FALSE),

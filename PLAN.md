@@ -165,6 +165,14 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Pathway step 1 of the improvements: GSEA, publication charts, overview (user, 2026-11-13)
+- GSEA in 11_pathway.R: fgseaMultilevel on sign(FC) x -log10(p) of every tested protein; gene sets from STRING's per-species
+  annotation file (`string_terms()`, cached in <data>/.dpdp_cache; same categories as ORA, no KEGG), 10-500 tested proteins.
+  11517: 25-167 sets at FDR 0.05 per comparison, ~10 s each; Excel sheet C<n> GSEA.
+- Page: ORA top-terms chart (diverging bars Up / Down or dot plot), GSEA NES bars + table + running-score plot, overview dot plot
+  across comparisons (ORA or GSEA). Checked in headless Chrome (screens of every chart).
+- Next (steps 2-3): topGO weight01 GO with GOSemSim grouping; term drill-down (volcano, heatmap); GO slim profile.
+
 ## Step 12 Phospho: Kinase Library, logos, motif-x (user, 2026-11-13; UniProt sequences, kinase-library installed)
 - `pipeline/phospho_motifs.R` (UniProt FASTA by accession, cached; site table from Protein_PTM_Loc + Local2; 15-mer windows checked
   against the residue; pLogo-style logo; motif-x re-implemented), `pipeline/kinase_library_run.py` (kinase-library 1.8: percentile rank

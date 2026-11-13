@@ -156,6 +156,44 @@ results <- lapply(comp_sets, function(cs) {
                   call = if (h$acc[j] %in% cs$up && h$acc[j] %in% cs$down) "Up and Down (sites)" else h$call[j])), unname(sid[h$acc])) })
 })
 
+# --- Ranked analysis (GSEA, fgsea): every tested protein ranked by sign(FC) x -log10(p), no cutoff; STRING's annotation of the
+# species (same terms as the over-representation, except KEGG); gene sets restricted to the tested proteins, min/max size.
+gsea_note <- NULL
+if (as_flag(settings$pathway_gsea)) {
+  gcats <- setdiff(cats, "KEGG")
+  tt <- tryCatch(string_terms(taxon, file.path(dirname(run_dir), ".dpdp_cache"), gcats), error = function(e) { gsea_note <<- conditionMessage(e); NULL })
+  if (!is.null(tt)) {
+    tdesc <- tt[!duplicated(tt$term), c("term", "category", "description")]
+    sets_all <- split(tt$id, tt$term)
+    for (i in seq_along(results)) {
+      cs <- comp_sets[[i]]; d <- cs$prot[cs$prot$acc %in% names(sid) & !is.na(cs$prot$p) & !is.na(cs$prot$fc), ]
+      ids <- unname(sid[d$acc]); keep <- !duplicated(ids); d <- d[keep, ]; ids <- ids[keep]
+      l2 <- sign(d$fc) * log2(pmax(abs(d$fc), 1))
+      stat <- setNames(sign(d$fc) * -log10(pmax(d$p, 1e-300)) + l2 * 1e-6, ids)   # ties broken by the fold change
+      sets <- lapply(sets_all, function(x) intersect(x, ids))
+      sets <- sets[lengths(sets) >= settings$pathway_gsea_min & lengths(sets) <= settings$pathway_gsea_max]
+      set.seed(1)
+      g <- suppressWarnings(fgsea::fgseaMultilevel(sets, stat, minSize = settings$pathway_gsea_min, maxSize = settings$pathway_gsea_max, eps = 0, nproc = 1))
+      g <- g[!is.na(g$padj), ]; g <- g[order(g$padj, -abs(g$NES)), ]
+      m <- match(g$pathway, tdesc$term)
+      tab <- data.frame(category = tdesc$category[m], source = unname(PATHWAY_CATEGORY_NAMES[tdesc$category[m]]), term = g$pathway, description = tdesc$description[m],
+                        size = g$size, NES = round(g$NES, 3), p = signif(g$pval, 3), fdr = signif(g$padj, 3), stringsAsFactors = FALSE)
+      tab$leading <- lapply(g$leadingEdge, function(x) unname(x))
+      sig <- tab[tab$fdr <= settings$pathway_fdr, ]
+      # the ranked list and the members' ranks of the top terms, for the running-score plot on the page
+      ord <- order(stat, decreasing = TRUE); ranked <- names(stat)[ord]
+      top_terms <- head(tab$term, 80)
+      results[[i]]$gsea <- list(n = length(stat), sets_tested = nrow(tab), terms = sig, all_top = head(tab, 300),
+                                ranked_stat = round(unname(stat[ord]), 3),
+                                members = setNames(lapply(top_terms, function(t) match(sets[[t]], ranked) - 1L), top_terms),
+                                note = sprintf("%d of %d gene sets with FDR <= %s (%d up, %d down).", nrow(sig), nrow(tab), settings$pathway_fdr, sum(sig$NES > 0), sum(sig$NES < 0)))
+      for (x in unlist(tab$leading)) if (is.null(results[[i]]$names[[x]])) results[[i]]$names[[x]] <- unname(sname[x])
+      cat(sprintf("  GSEA %s: %s\n", cs$name, results[[i]]$gsea$note))
+    }
+  }
+  if (!is.null(gsea_note)) cat("GSEA not run:", gsea_note, "\n")
+}
+
 # Excel: the term tables (Up, Down) and the network proteins of each comparison
 xdir <- file.path(run_dir, "Pathway"); dir.create(xdir, showWarnings = FALSE)
 xf <- file.path(xdir, sprintf("Pathway_STRING_%s.xlsx", trimws(p$stat_norm)))
@@ -175,6 +213,9 @@ for (i in seq_along(results)) {
     if (NROW(t)) { t$proteins <- vapply(t$ids, function(x) paste(unname(sname[x]), collapse = ", "), ""); t$ids <- NULL
       openxlsx::writeDataTable(wb, sh, t, startRow = 3, tableStyle = "TableStyleLight9") }
   }
+  if (!is.null(r$gsea) && NROW(r$gsea$all_top)) { sh <- sprintf("C%d GSEA", i); openxlsx::addWorksheet(wb, sh); t <- r$gsea$all_top
+    t$leading_edge <- vapply(t$leading, function(x) paste(unname(sname[x]), collapse = ", "), ""); t$leading <- NULL
+    openxlsx::writeData(wb, sh, data.frame(Comparison = r$name, Note = r$gsea$note), startRow = 1); openxlsx::writeDataTable(wb, sh, t, startRow = 3, tableStyle = "TableStyleLight9") }
   if (!is.null(r$network)) { sh <- sprintf("C%d network", i); openxlsx::addWorksheet(wb, sh); openxlsx::writeDataTable(wb, sh, r$network$nodes[, c("name", "acc", "gene", "fc", "p", "call", "cluster", "degree")], tableStyle = "TableStyleLight9") }
 }
 openxlsx::saveWorkbook(wb, xf, overwrite = TRUE)
@@ -185,7 +226,9 @@ summary <- list(step = "11_pathway", action = "preview", db_path = db_path, sett
                   up = r$up$n, up_terms = NROW(r$up$terms), down = r$down$n, down_terms = NROW(r$down$terms),
                   top_up = if (NROW(r$up$terms)) head(paste0(r$up$terms$description, " (", r$up$terms$source, ", FDR ", r$up$terms$fdr, ")"), 5) else list(),
                   top_down = if (NROW(r$down$terms)) head(paste0(r$down$terms$description, " (", r$down$terms$source, ", FDR ", r$down$terms$fdr, ")"), 5) else list(),
-                  network_proteins = NROW(r$network$nodes), network_edges = NROW(r$network$edges))))
+                  network_proteins = NROW(r$network$nodes), network_edges = NROW(r$network$edges),
+                  gsea_terms = NROW(r$gsea$terms), top_gsea = if (NROW(r$gsea$terms)) head(paste0(r$gsea$terms$description, " (NES ", r$gsea$terms$NES, ", FDR ", r$gsea$terms$fdr, ")"), 5) else list())),
+                gsea_note = gsea_note)
 write_summary(summary, sd)
 write_json(results, file.path(sd, "results.json"), auto_unbox = TRUE, digits = NA, na = "null", null = "null")
 cat("\nExcel:", xf, "\nReview page:", review_pathway(db_path), "\n>>> Waiting for the analyst's review.\n")

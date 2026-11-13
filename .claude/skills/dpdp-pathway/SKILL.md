@@ -29,6 +29,19 @@ Rscript pipeline/steps/11_pathway.R --db=<db> --action=apply --from_page --decid
 Page choices: `preview` ("Run with these settings") -> `--action=preview --from_page`, then wait again; `apply` ("Accept these
 settings") -> `--action=apply --from_page --decided_by=user`; `other` -> discuss. Accept with different settings is refused.
 
+## Ranked analysis (GSEA, added 2026-11-13)
+Every tested protein ranked by sign(FC) x -log10(p) (no cutoff), fgsea (multilevel) on the chosen databases from STRING's
+annotation file of the species (`<data>/.dpdp_cache/<taxon>.protein.enrichment.terms.v12.0.txt.gz`, downloaded once; KEGG is not
+in STRING's downloads), gene sets of 10-500 tested proteins (options). Report NES (+ up, - down), FDR and the leading-edge
+proteins. GSEA finds pathways where many proteins shift a little; say so when it finds terms ORA misses (few hits) or vice versa.
+
+## Charts for publication (all with PNG / SVG download)
+- Over-representation: top terms as a diverging bar chart (Down left, Up right, -log10 FDR) or a dot plot (hit ratio, size =
+  hits, colour = FDR); follows the source filter.
+- GSEA: NES bar chart (top up / down), the table, and the classic running enrichment-score plot of a clicked gene set.
+- Overview across comparisons: dot plot of the top terms of every comparison (ORA: colour = direction x -log10 FDR, size = hits;
+  GSEA: colour = NES, size = -log10 FDR).
+
 ## Output
 - `review/11_pathway.html`: per comparison and direction the enriched terms (source, hits / term size, fold enrichment, FDR,
   proteins), filter by source or text; the network of the hits (Up red, Down blue, size = fold change; proteins without
@@ -46,5 +59,5 @@ triple-spike's human proteins don't change, so its few human hits enrich nothing
 expected with large hit lists; point to the specific ones.
 
 ## Next
-Report (not built yet). Planned for this step: ranked analysis (GSEA, no cutoff), grouping of redundant terms, term drill-down
-(volcano, heatmap).
+Report (not built yet). Planned for this step: hierarchy-aware GO (topGO weight01) with grouping of redundant terms (GOSemSim),
+term drill-down (volcano, heatmap), GO slim profile.

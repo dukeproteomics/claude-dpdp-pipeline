@@ -30,7 +30,22 @@ review_pathway <- function(db_path) {
     '<section><h2>Enriched terms</h2><div class="control"><label for="pwcomp">Comparison</label><select id="pwcomp"></select>',
     '<span class="pwdir"><button type="button" data-dir="up" class="on">Up</button><button type="button" data-dir="down">Down</button></span>',
     '<label for="pwsrc">Source</label><select id="pwsrc"></select><input type="search" id="pwq" placeholder="filter terms" style="font:inherit;font-size:14px;padding:3px 8px"/></div>',
-    '<p class="note" id="pwnote"></p><div id="pwterms" style="max-height:460px;overflow:auto"></div></section>',
+    '<p class="note" id="pwnote"></p>',
+    '<div class="control"><label for="pwchart">Chart</label><select id="pwchart"><option value="bar">top terms, Up and Down (bars)</option><option value="dot">top terms of this direction (dots)</option></select>',
+    '<label for="pwtopn">Terms</label><select id="pwtopn"><option>10</option><option selected>15</option><option>20</option><option>30</option></select></div>',
+    '<div id="pworachart" style="height:520px" role="img" aria-label="Top enriched terms"></div>',
+    '<div id="pwterms" style="max-height:460px;overflow:auto"></div></section>',
+    '<section><h2>Ranked analysis (GSEA)</h2><p class="note" id="pwgnote"></p>',
+    '<div class="control"><label for="pwgsrc">Source</label><select id="pwgsrc"></select><input type="search" id="pwgq" placeholder="filter gene sets" style="font:inherit;font-size:14px;padding:3px 8px"/>',
+    '<label for="pwgtopn">Bars</label><select id="pwgtopn"><option>10</option><option selected>15</option><option>20</option></select></div>',
+    '<div id="pwgchart" style="height:560px" role="img" aria-label="Top gene sets by NES"></div>',
+    '<div id="pwgterms" style="max-height:420px;overflow:auto"></div>',
+    '<h3 id="pwgest">Enrichment plot</h3><p class="note">Click a gene set in the table to draw its running enrichment score (the classic GSEA plot): the curve rises where the set&apos;s proteins sit among the highest-ranked (up) proteins, falls where they sit among the lowest.</p>',
+    '<div id="pwgrun" style="height:380px" role="img" aria-label="GSEA running enrichment score"></div></section>',
+    '<section><h2>Overview across comparisons</h2><p class="note">The top terms of every comparison side by side: what is shared and what is specific. Over-representation: colour = direction (Up red, Down blue) and -log10 FDR, size = hits. GSEA: colour = NES, size = -log10 FDR. Empty = not significant there.</p>',
+    '<div class="control"><label for="pwomethod">Method</label><select id="pwomethod"><option value="ora">over-representation</option><option value="gsea">GSEA</option></select>',
+    '<label for="pwosrc">Source</label><select id="pwosrc"></select><label for="pwotopn">Top per comparison</label><select id="pwotopn"><option>5</option><option selected>8</option><option>12</option><option>20</option></select></div>',
+    '<div id="pwoverview" style="height:640px" role="img" aria-label="Terms across comparisons"></div></section>',
     '<section><h2>Network of the hits</h2><p class="note">STRING interactions among the Up (red) and Down (blue) proteins; size = fold change. Clusters: Louvain on the confidence scores. ',
     'Click a term above to highlight its proteins, a cluster below to highlight it, or a protein to open it in the Explore tab.</p>',
     '<div class="control"><label for="pwcolor">Colour</label><select id="pwcolor"><option value="call">Up / Down</option><option value="cluster">cluster</option></select>',
@@ -129,6 +144,113 @@ PATHWAY_JS <- '
   ["pwsrc", "pwq"].forEach(id => $(id).addEventListener("input", drawTerms));
   ["pwcolor", "pwlabels", "pwiso"].forEach(id => $(id).addEventListener("change", drawNet));
   $("pwclear").onclick = () => { selTerm = null; selCluster = null; drawTerms(); drawNet(); members(); };
-  fillSources(); drawTerms(); drawNet(); members();
+  // --- publication charts: top over-represented terms ---
+  const short = (t, n) => (t.length > n ? t.slice(0, n - 3) + "..." : t);
+  const lfdr = v => -Math.log10(Math.max(+v, 1e-300));
+  const bp = () => ({ paper_bgcolor: C("--surface-1"), plot_bgcolor: C("--surface-1"), font: { color: C("--text-secondary"), size: 12 } }), cfg = { displaylogo: false, responsive: true };
+  function oraChart() {
+    const c = W.comps[ci], n = +$("pwtopn").value, src = $("pwsrc").value, pick = d => (c[d].terms || []).filter(t => !src || t.source === src).slice(0, n);
+    if ($("pwchart").value === "bar") {
+      const U = pick("up"), D = pick("down"), all = D.slice().reverse().map(t => ["Down", t]).concat(U.slice().reverse().map(t => ["Up", t]));
+      if (!all.length) { Plotly.purge("pworachart"); return; }
+      const y = all.map(([d, t], k) => short(t.description, 60) + "\\u200b".repeat(d === "Up" ? 1 : 2));
+      Plotly.react("pworachart", ["Down", "Up"].map(d => { const s = all.map((x, k) => [x, k]).filter(([x]) => x[0] === d);
+        return { type: "bar", orientation: "h", name: d, y: s.map(([x, k]) => y[k]), x: s.map(([x]) => (d === "Up" ? 1 : -1) * lfdr(x[1].fdr)),
+          marker: { color: d === "Up" ? UP : DOWN }, customdata: s.map(([x]) => [x[1].source, x[1].hits, x[1].term_size, x[1].fold, x[1].fdr]),
+          hovertemplate: "%{y}<br>%{customdata[0]}: %{customdata[1]} of %{customdata[2]}, fold %{customdata[3]}, FDR %{customdata[4]:.2g}<extra>" + d + "</extra>" }; }),
+        Object.assign(bp(), { barmode: "overlay", margin: { l: 360, r: 20, t: 10, b: 50 }, legend: { orientation: "h", y: 1.06 },
+          xaxis: { title: "-log10 FDR (Down left, Up right)", gridcolor: C("--grid"), zeroline: true, zerolinecolor: C("--text-muted") },
+          yaxis: { categoryorder: "array", categoryarray: y, automargin: true, tickfont: { size: 11 } } }), cfg);
+    } else {
+      const T = pick(dir).slice().reverse(); if (!T.length) { Plotly.purge("pworachart"); return; }
+      const nh = c[dir].mapped || 1;
+      Plotly.react("pworachart", [{ type: "scatter", mode: "markers", x: T.map(t => t.hits / nh), y: T.map(t => short(t.description, 60)),
+        marker: { size: T.map(t => 6 + 2.2 * Math.sqrt(t.hits)), color: T.map(t => lfdr(t.fdr)), colorscale: dir === "up" ? [[0, "#f6c9c2"], [1, UP]] : [[0, "#c8d9ef"], [1, DOWN]],
+                  colorbar: { title: { text: "-log10 FDR" } }, line: { width: 0.5, color: C("--text-primary") } },
+        customdata: T.map(t => [t.source, t.hits, t.term_size, t.fold, t.fdr]),
+        hovertemplate: "%{y}<br>%{customdata[0]}: %{customdata[1]} of %{customdata[2]}, fold %{customdata[3]}, FDR %{customdata[4]:.2g}<extra></extra>" }],
+        Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 50 }, xaxis: { title: "hit ratio (term hits / " + (dir === "up" ? "Up" : "Down") + " proteins)", gridcolor: C("--grid") },
+          yaxis: { automargin: true, tickfont: { size: 11 } } }), cfg);
+    }
+  }
+  // --- GSEA ---
+  let gsel = null;
+  const G = () => W.comps[ci].gsea;
+  function gseaSources() { const g = G(), s = $("pwgsrc"), have = g ? [...new Set((g.terms || []).map(t => t.source))] : [];
+    s.innerHTML = "<option value=\\"\\">all</option>" + have.map(x => "<option>" + esc(x) + "</option>").join(""); }
+  function gseaRows() { const g = G(); if (!g) return []; const q = $("pwgq").value.toLowerCase(), src = $("pwgsrc").value;
+    return (g.terms || []).filter(t => (!src || t.source === src) && (!q || (t.description + " " + t.term).toLowerCase().includes(q))); }
+  function gseaDraw() {
+    const g = G();
+    if (!g) { $("pwgnote").textContent = "GSEA was not run (switch it on in the options)."; ["pwgchart", "pwgrun"].forEach(id => Plotly.purge(id)); $("pwgterms").innerHTML = ""; return; }
+    $("pwgnote").textContent = W.comps[ci].name + ": " + g.n + " proteins ranked by sign(FC) x -log10(p). " + g.note;
+    const R = gseaRows(), n = +$("pwgtopn").value, P = R.filter(t => t.NES > 0).slice(0, n), N = R.filter(t => t.NES < 0).slice(0, n);
+    const bars = N.slice().reverse().concat(P.slice().reverse()).sort((a, b) => a.NES - b.NES);
+    if (bars.length) Plotly.react("pwgchart", [{ type: "bar", orientation: "h", y: bars.map(t => short(t.description, 60)), x: bars.map(t => t.NES),
+        marker: { color: bars.map(t => t.NES > 0 ? UP : DOWN), opacity: bars.map(t => 0.45 + 0.55 * Math.min(1, lfdr(t.fdr) / 6)) },
+        customdata: bars.map(t => [t.source, t.size, t.fdr]), hovertemplate: "%{y}<br>%{customdata[0]}, %{customdata[1]} proteins<br>NES %{x:.2f}, FDR %{customdata[2]:.2g}<extra></extra>" }],
+      Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 50 }, xaxis: { title: "normalized enrichment score (NES; up right, down left)", gridcolor: C("--grid"), zerolinecolor: C("--text-muted") },
+        yaxis: { automargin: true, tickfont: { size: 11 } } }), cfg);
+    else Plotly.purge("pwgchart");
+    $("pwgterms").innerHTML = R.length ? "<table><thead><tr><th>Source</th><th>Gene set</th><th class=num>Size</th><th class=num>NES</th><th class=num>FDR</th><th>Leading edge</th></tr></thead><tbody>" +
+      R.map(t => "<tr data-t=\\"" + esc(t.term) + "\\"" + (gsel === t.term ? " class=sel" : "") + "><td>" + esc(t.source) + "</td><td title=\\"" + esc(t.term) + "\\">" + esc(t.description) + "</td><td class=num>" + t.size +
+        "</td><td class=num style=\\"color:" + (t.NES > 0 ? UP : DOWN) + "\\">" + (+t.NES).toFixed(2) + "</td><td class=num>" + (+t.fdr).toExponential(1) + "</td><td>" +
+        esc((t.leading || []).slice(0, 10).map(nameOf).join(", ")) + ((t.leading || []).length > 10 ? ", ..." : "") + "</td></tr>").join("") + "</tbody></table>" : "<p class=note>No gene set passes the FDR cutoff.</p>";
+    runPlot();
+  }
+  function runPlot() {
+    const g = G(); if (!g || !gsel || !g.members || !g.members[gsel]) { Plotly.purge("pwgrun"); $("pwgest").textContent = "Enrichment plot"; return; }
+    const st = g.ranked_stat, mem = new Set(g.members[gsel]), N = st.length, Nh = mem.size;
+    let sumw = 0; mem.forEach(k => { sumw += Math.abs(st[k]); });
+    const ys = [0]; let run = 0, best = 0;
+    for (let k = 0; k < N; k++) { run += mem.has(k) ? Math.abs(st[k]) / sumw : -1 / (N - Nh); ys.push(run); if (Math.abs(run) > Math.abs(best)) best = run; }
+    const t = (g.terms || []).concat(g.all_top || []).find(x => x.term === gsel) || {};
+    $("pwgest").textContent = "Enrichment plot: " + (t.description || gsel) + " (NES " + (+t.NES).toFixed(2) + ", FDR " + (+t.fdr).toPrecision(2) + ")";
+    const step = Math.max(1, Math.floor(N / 1500)), xs = [], yv = []; for (let k = 0; k <= N; k += step) { xs.push(k); yv.push(ys[k]); }
+    const mk = [...mem].sort((a, b) => a - b);
+    Plotly.react("pwgrun", [{ type: "scatter", mode: "lines", x: xs, y: yv, line: { color: best > 0 ? UP : DOWN, width: 2 }, name: "running score", hovertemplate: "rank %{x}: %{y:.3f}<extra></extra>" },
+      { type: "scatter", mode: "markers", x: mk, y: mk.map(() => 0), yaxis: "y2", marker: { symbol: "line-ns-open", size: 14, color: C("--text-primary") }, name: "set members", hovertemplate: "rank %{x}<extra></extra>" },
+      { type: "bar", x: xs, y: xs.map(k => st[Math.min(k, N - 1)]), yaxis: "y3", marker: { color: xs.map(k => st[Math.min(k, N - 1)] > 0 ? UP : DOWN) }, name: "ranking score", hoverinfo: "skip" }],
+      Object.assign(bp(), { showlegend: false, margin: { l: 60, r: 20, t: 10, b: 50 },
+        xaxis: { title: "rank (up to down)", gridcolor: C("--grid"), range: [0, N] }, yaxis: { domain: [0.42, 1], title: "enrichment score", gridcolor: C("--grid"), zerolinecolor: C("--text-muted") },
+        yaxis2: { domain: [0.3, 0.4], visible: false, range: [-1, 1] }, yaxis3: { domain: [0, 0.26], title: "score", gridcolor: C("--grid") } }), cfg);
+  }
+  $("pwgterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; gsel = tr.dataset.t; gseaDraw(); $("pwgrun").scrollIntoView({ behavior: "smooth", block: "center" }); });
+  ["pwgsrc", "pwgq", "pwgtopn"].forEach(id => $(id).addEventListener("input", gseaDraw));
+  // --- overview across comparisons ---
+  function ovSources() { const s = $("pwosrc"), have = new Set(); W.comps.forEach(c => { ["up", "down"].forEach(d => (c[d].terms || []).forEach(t => have.add(t.source))); ((c.gsea || {}).terms || []).forEach(t => have.add(t.source)); });
+    s.innerHTML = "<option value=\\"\\">all</option>" + [...have].sort().map(x => "<option>" + esc(x) + "</option>").join(""); }
+  function overview() {
+    const m = $("pwomethod").value, src = $("pwosrc").value, n = +$("pwotopn").value, comps = W.comps.map(c => c.name);
+    const cell = {}, pick = new Map();
+    W.comps.forEach(c => {
+      if (m === "ora") ["up", "down"].forEach(d => (c[d].terms || []).filter(t => !src || t.source === src).forEach((t, k) => {
+          const key = t.term, v = cell[key + "|" + c.name]; const val = { s: (d === "up" ? 1 : -1) * lfdr(t.fdr), size: t.hits, t: t, d: d };
+          if (!v || Math.abs(val.s) > Math.abs(v.s)) cell[key + "|" + c.name] = val; if (k < n) pick.set(key, t.description); }));
+      else (((c.gsea || {}).terms) || []).filter(t => !src || t.source === src).forEach((t, k) => { cell[t.term + "|" + c.name] = { s: t.NES, size: lfdr(t.fdr), t: t };
+          if (k < n) pick.set(t.term, t.description); });
+    });
+    const terms = [...pick.keys()];
+    if (!terms.length) { Plotly.purge("pwoverview"); return; }
+    // order terms by the comparison where they are strongest
+    terms.sort((a, b) => { const fa = comps.findIndex(c => cell[a + "|" + c]), fb = comps.findIndex(c => cell[b + "|" + c]); return fb - fa || (pick.get(b) < pick.get(a) ? -1 : 1); });
+    const X = [], Y = [], Z = [], S = [], H = [];
+    terms.forEach(t => comps.forEach(c => { const v = cell[t + "|" + c]; if (!v) return; X.push(c); Y.push(short(pick.get(t), 60)); Z.push(v.s);
+      S.push(m === "ora" ? 6 + 2.2 * Math.sqrt(v.size) : 6 + 3 * Math.min(8, v.size));
+      H.push(m === "ora" ? (v.d === "up" ? "Up" : "Down") + ", " + v.t.hits + " of " + v.t.term_size + ", FDR " + (+v.t.fdr).toPrecision(2) : "NES " + (+v.t.NES).toFixed(2) + ", FDR " + (+v.t.fdr).toPrecision(2)); }));
+    const lim = Math.max(...Z.map(Math.abs), 1);
+    $("pwoverview").style.height = Math.max(360, 110 + 22 * terms.length) + "px";
+    Plotly.react("pwoverview", [{ type: "scatter", mode: "markers", x: X, y: Y, text: H, hovertemplate: "%{y}<br>%{x}: %{text}<extra></extra>",
+      marker: { size: S, color: Z, cmin: -lim, cmax: lim, colorscale: [[0, DOWN], [0.5, "#f2f2f2"], [1, UP]], line: { width: 0.5, color: C("--text-primary") },
+                colorbar: { title: { text: m === "ora" ? "-log10 FDR (Down -, Up +)" : "NES" } } } }],
+      Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 120 }, xaxis: { type: "category", categoryorder: "array", categoryarray: comps, tickangle: -30, gridcolor: C("--grid") },
+        yaxis: { type: "category", categoryorder: "array", categoryarray: terms.map(t => short(pick.get(t), 60)).reverse(), automargin: true, tickfont: { size: 11 }, gridcolor: C("--grid") } }), cfg);
+  }
+  ["pwomethod", "pwosrc", "pwotopn"].forEach(id => $(id).addEventListener("input", overview));
+  ["pwchart", "pwtopn"].forEach(id => $(id).addEventListener("input", oraChart));
+  $("pwsrc").addEventListener("input", oraChart); $("pwq").addEventListener("input", () => {});
+  $("pwcomp").addEventListener("change", () => { gsel = null; gseaSources(); gseaDraw(); oraChart(); });
+  document.querySelectorAll(".pwdir button").forEach(b => b.addEventListener("click", oraChart));
+  fillSources(); drawTerms(); drawNet(); members(); oraChart(); gseaSources(); gseaDraw(); ovSources(); overview();
 })();
 '
