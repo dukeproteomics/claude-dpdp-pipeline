@@ -47,7 +47,7 @@ opts <- filter_options(p, groups)
 spec <- opts_spec(opts)
 args <- page_args(args, run_dir, "05_filter", opts, args$action)
 settings <- resolve_settings(spec, args)
-if (args$action == "apply") settings <- apply_settings(run_dir, "05_filter", spec, args, settings)
+if (args$action == "apply") settings <- apply_settings(run_dir, "05_filter", spec, args, settings, opts)
 opts_validate(opts, settings)
 for (k in names(settings)) p[[k]] <- settings[[k]]
 invisible(write_params(p, db_path))

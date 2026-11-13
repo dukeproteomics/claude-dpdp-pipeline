@@ -9,7 +9,8 @@
 #   (page_args), so Claude doesn't retype them. Apply must match the last preview (apply_settings).
 # - hide = "<reason>": the option never applies to this run (e.g. a Proteome Discoverer option in a Spectronaut run). It keeps its
 #   default and is left off the page, like the app hides it. disabled = "<reason>": shown greyed with the reason.
-# - depends = "<checkbox>" or "<option>=<value>": the option is in use only when that checkbox is on (or that option has that value),
+# - depends = "<checkbox>", "<option>=<value>" or "<option>!=<value>": the option is in use only when that checkbox is on (or that
+#   option has / hasn't that value),
 #   and only if the option it depends on is in use too. Greyed on the page while not in use.
 
 opt <- function(name, label, type = c("number", "checkbox", "select", "text"), default, meaning = "", choices = NULL,
@@ -28,9 +29,10 @@ opts_byname <- function(sections) { o <- opts_flat(sections); setNames(o, vapply
 opt_in_use <- function(o, settings, all) {
   if (!is.null(o$hide) || !is.null(o$disabled)) return(FALSE)
   if (is.null(o$depends)) return(TRUE)
-  d <- strsplit(o$depends, "=", fixed = TRUE)[[1]]
+  neg <- grepl("!=", o$depends, fixed = TRUE)
+  d <- strsplit(o$depends, "!?=")[[1]]
   v <- settings[[d[1]]]
-  on <- if (length(d) == 1) as_flag(v %||% FALSE) else identical(as.character(v), d[2])
+  on <- if (length(d) == 1) as_flag(v %||% FALSE) else xor(neg, identical(as.character(v), d[2]))
   on && (is.null(all[[d[1]]]) || opt_in_use(all[[d[1]]], settings, all))
 }
 
@@ -74,7 +76,8 @@ page_args <- function(args, run_dir, step, sections, action) {
 
 # Apply = the settings of the last preview. Option arguments (from --from_page or the command line) must equal them;
 # a different value stops the step: preview first.
-apply_settings <- function(run_dir, step, spec, args, settings) {
+# Options not in use (greyed: their depends is off) are not compared when sections is given.
+apply_settings <- function(run_dir, step, spec, args, settings, sections = NULL) {
   f <- file.path(run_dir, "steps", step, "summary.json")
   prev <- if (file.exists(f)) fromJSON(f, simplifyVector = FALSE) else NULL
   if (is.null(prev) || !identical(prev$action, "preview"))
@@ -83,6 +86,7 @@ apply_settings <- function(run_dir, step, spec, args, settings) {
   out <- settings
   for (k in names(spec)) if (!is.null(prev$settings[[k]])) out[[k]] <- conv(k, prev$settings[[k]])
   given <- intersect(names(spec), names(args))
+  if (!is.null(sections)) { all <- opts_byname(sections); given <- Filter(function(k) opt_in_use(all[[k]], out, all), given) }
   diff <- Filter(function(k) !isTRUE(all.equal(conv(k, args[[k]]), out[[k]])), given)
   if (length(diff)) stop("These settings differ from the last preview: ", paste(sprintf("%s (preview %s, now %s)", diff,
     vapply(diff, function(k) as.character(out[[k]]), ""), vapply(diff, function(k) as.character(args[[k]]), "")), collapse = "; "),
@@ -93,7 +97,7 @@ apply_settings <- function(run_dir, step, spec, args, settings) {
 # The Options panel. values: what the form starts with; previewed: the settings the page shows (NULL if none); applied: read-only.
 # words: the button words. Filter: preview / apply. Parameters: run (re-run the step) / accept.
 options_form <- function(step, sections, values, previewed = NULL, applied = FALSE, run_dir = NULL, title = "Options",
-                         words = list(preview = "Preview", apply = "Apply", previewing = "a preview", applied = "applied",
+                         words = list(preview = "Preview", apply = "Apply", previewing = "the preview", applied = "applied",
                                       effect = "to see the effect on this page")) {
   secs <- lapply(sections, function(s) {
     s$options <- Filter(function(o) is.null(o$hide), s$options)
@@ -158,7 +162,7 @@ OPTIONS_JS <- '
       else if (o.type === "select") { inp = el("select"); (o.choices || []).forEach(c => inp.appendChild(el("option", { value: c }, c))); inp.value = String(o.value); }
       else { inp = el("input", { type: o.type === "number" ? "number" : "text", step: o.step || "any" });
         if (o.min !== null && o.min !== undefined) inp.min = o.min; if (o.max !== null && o.max !== undefined) inp.max = o.max; inp.value = o.value; }
-      inp.setAttribute("aria-label", o.label.replace(/<[^>]+>/g, ""));
+      inp.setAttribute("aria-label", o.label.replace(/<[^>]+>/g, "")); inp.dataset.name = o.name;
       td.appendChild(inp); const def = el("span", { class: "odef" }); td.appendChild(def); tr.appendChild(td);
       tr.appendChild(el("td", { class: "omean" }, (o.meaning || "") + (o.info ? " <b>" + o.info + "</b>" : "") + (o.disabled ? \' <span class="missing">\' + o.disabled + "</span>" : "")));
       tb.appendChild(tr); X[o.name] = { o: o, inp: inp, tr: tr, def: def };
@@ -167,11 +171,14 @@ OPTIONS_JS <- '
     root.appendChild(tb);
   });
   const val = x => x.inp.type === "checkbox" ? x.inp.checked : x.inp.value;
-  const W = O.words || { preview: "Preview", apply: "Apply", previewing: "a preview" };
+  const W = O.words || { preview: "Preview", apply: "Apply", previewing: "the preview" };
   // depends: "<checkbox>" or "<option>=<value>"; the option it depends on must be in use too.
-  const inUse = o => { if (!o.depends) return true; const [n, v] = o.depends.split("="), d = X[n]; if (!d) return true;
+  const inUse = o => { if (!o.depends) return true; const neg = o.depends.includes("!="), [n, v] = o.depends.split(/!?=/), d = X[n]; if (!d) return true;
     if (d.o.disabled) return false;
-    const on = v === undefined ? d.inp.checked : String(val(d)) === v; return on && inUse(d.o); };
+    const on = v === undefined ? d.inp.checked : (String(val(d)) === v) !== neg; return on && inUse(d.o); };
+  // other parts of the page can set an option (e.g. Noise: "Use as fixed baseline")
+  window.dpdpSetOption = (name, value) => { const x = X[name]; if (!x || O.applied) return false;
+    if (x.inp.type === "checkbox") x.inp.checked = isTrue(value); else x.inp.value = String(value); update(); return true; };
   const bar = el("div", { id: "optbar" });
   const reset = el("button", { type: "button", class: "quiet" }, "Reset to defaults");
   const prev = el("button", { type: "button" }, W.preview + " with these settings");
@@ -192,7 +199,7 @@ OPTIONS_JS <- '
       x.tr.classList.toggle("off", !on || !!o.disabled);
       const ch = !eq(o, val(x), o.default);
       x.tr.classList.toggle("changed", ch); x.def.textContent = ch ? "default: " + show(o, o.default) : "";
-      if (O.previewed && !eq(o, val(x), O.previewed[o.name])) dirty.push(o.label.replace(/<[^>]+>/g, ""));
+      if (O.previewed && on && !o.disabled && !eq(o, val(x), O.previewed[o.name])) dirty.push(o.label.replace(/<[^>]+>/g, ""));
     });
     if (O.applied) return;
     const busy = pending || sent || !served;

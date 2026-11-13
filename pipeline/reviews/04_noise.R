@@ -15,8 +15,14 @@ review_noise <- function(db_path) {
   groups_tbl <- read_table("sample_groups", db_path)
   gcols_n <- setNames(lapply(seq_len(nrow(groups_tbl)), function(i) as.integer(groups_tbl$start[i]):as.integer(groups_tbl$end[i])), groups_tbl$Group)
   sd_dir <- file.path(run_dir, "steps", "04_noise")
-  applied <- if (file.exists(file.path(sd_dir, "summary.json"))) fromJSON(file.path(sd_dir, "summary.json")) else NULL
-  if (!is.null(applied) && !identical(applied$action, "apply")) applied <- NULL
+  summ <- if (file.exists(file.path(sd_dir, "summary.json"))) fromJSON(file.path(sd_dir, "summary.json"), simplifyVector = FALSE) else NULL
+  applied <- if (!is.null(summ) && identical(summ$action, "apply")) fromJSON(file.path(sd_dir, "summary.json")) else NULL
+  # the Options panel: values from the last preview (or the applied settings); an old "inflection" summary has no settings
+  prev_settings <- if (!is.null(summ) && !is.null(summ$settings)) summ$settings else NULL
+  form <- options_form("04_noise", noise_options(p, if (identical(summ$action, "preview")) summ else NULL),
+                       prev_settings %||% list(noise_baseline_value = as.numeric(p$noise_baseline_value %||% 1)),
+                       previewed = if (identical(summ$action, "preview")) prev_settings else NULL,
+                       applied = !is.null(applied), run_dir = run_dir, title = "Noise options")
   decisions <- read_decisions(run_dir, "04_noise")
   last_dec <- if (length(decisions)) decisions[[length(decisions)]] else NULL
 
@@ -57,10 +63,8 @@ mostly noise then fail the filter. For every precursor that <i>passes</i> the fi
 Without noise_keep, removed values stay missing and are imputed later.</p>',
     esc(fixed), esc(fixed), fmt_n(fix_n), fmt_pct(fix_n / total * 100), fmt_n(total),
     esc(infl), if (have_infl) log2(infl) else NA, fmt_n(dyn_n), fmt_pct(dyn_n / total * 100))
-  decision_html <- if (is.null(applied)) paste0(
-    '<section><h2>Decision needed</h2>', options_html,
-    '<p class="note">Look at the graphs and the explorer below, then give your choice in the Claude session. ',
-    'Claude records it in <code>decisions.jsonl</code> and only then applies it.</p></section>')
+  decision_html <- if (is.null(applied)) paste0(form,
+    '<section><h2>What the options do</h2>', options_html, '</section>')
   else {
     s <- applied$settings
     rem <- applied$values_set_to_na_per_sample
@@ -74,7 +78,7 @@ Without noise_keep, removed values stay missing and are imputed later.</p>',
       if (!is.null(last_dec)) sprintf('<p class="note">Recorded %s%s: %s</p>', esc(last_dec$time),
                                       if (!is.null(last_dec$analyst)) paste0(" by ", esc(last_dec$analyst)) else "", esc(last_dec$note %||% "")) else "",
       if (applied$values_set_to_na > 0) paste0("<h2>Values removed per sample</h2>", html_table(rem_df, 2:3)) else "",
-      '<details><summary>Options that were available</summary>', options_html, '</details></section>')
+      '<details><summary>Options that were available</summary>', options_html, '</details></section>', form)
   }
 
   tiles <- paste0('<section><h2>Key numbers</h2><div class="tiles">',
@@ -128,7 +132,7 @@ Without noise_keep, removed values stay missing and are imputed later.</p>',
                 infl = if (have_infl) log2(infl) else NA)
   repro_html <- paste0('<section id="repro"><h2>Replicate reproducibility</h2>',
     sprintf('<p class="note">Noise is signal that does not repeat. Using %s: for each intensity, the share of values that are also measured in <b>all</b> the other replicates, and the replicate CV. ', esc(rep_src)),
-    'A noise floor shows as the point where re-detection falls and CV climbs. Move the slider to pick a cutoff; <b>Use as fixed baseline</b> puts it in the decision form above.</p>',
+    'A noise floor shows as the point where re-detection falls and CV climbs. Move the slider to pick a cutoff; <b>Use as fixed baseline</b> puts it in the Noise options above.</p>',
     '<div class="control"><label for="rcut">Cutoff (log2)</label><input id="rcut" type="range" min="0" max="', length(rb) * 4, '" step="1"/><span class="val" id="rcutv"></span>',
     '<button type="button" id="ruse">Use as fixed baseline</button><button type="button" data-rjump="cv50">CV 50% point</button><button type="button" data-rjump="redet70">re-detected 70% point</button><button type="button" data-rjump="infl">current inflection</button></div><p class="dmsg" id="rusemsg"></p>',
     '<div class="tiles" id="rtiles"></div><div class="grid2"><div><h3>Re-detected in all other replicates</h3><div id="rredet" style="height:300px" role="img" aria-label="Share of values re-detected by intensity"></div></div>',
@@ -253,15 +257,16 @@ REPRO_JS <- '
   }
   let syncing = false;
   sl.addEventListener("input", draw);
-  // typing a baseline in the decision form moves the slider (and the lines) to it
+  // typing a baseline in the Noise options moves the slider (and the lines) to it
   document.addEventListener("input", e => { if (e.target.dataset && e.target.dataset.name === "noise_baseline_value") { const v = parseFloat(e.target.value);
     if (v > 0) { sl.value = kOf(Math.log2(v)); draw(); } } });
   document.querySelectorAll("[data-rjump]").forEach(b => { const v = R[b.dataset.rjump]; if (v === null) { b.disabled = true; return; } b.addEventListener("click", () => { sl.value = kOf(v); draw(); }); });
   document.getElementById("ruse").addEventListener("click", () => {
     const raw = Math.round(Math.pow(2, xOf(+sl.value)) * 100) / 100;
-    if (window.dpdpChoose) window.dpdpChoose("fixed"); if (window.dpdpSetField) window.dpdpSetField("noise_baseline_value", String(raw), true);
-    document.getElementById("rusemsg").innerHTML = "Put in the decision form: <b>fixed</b>, baseline <b>" + raw + "</b>. Check noise_keep there if you want it, then press <b>Send to Claude</b>.";
-    const d = document.getElementById("decision"); if (d) d.scrollIntoView({ behavior: "smooth" }); });
+    if (!window.dpdpSetOption || !window.dpdpSetOption("noise_type", "fixed")) { document.getElementById("rusemsg").textContent = "The options are read-only (noise was applied)."; return; }
+    window.dpdpSetOption("noise_baseline_value", raw);
+    document.getElementById("rusemsg").innerHTML = "Put in the Noise options: <b>fixed</b>, baseline <b>" + raw + "</b>. Tick noise_keep there if you want it, then <b>Preview with these settings</b>.";
+    const d = document.getElementById("options"); if (d) d.scrollIntoView({ behavior: "smooth" }); });
   sl.value = kOf(R.cv50 !== null ? R.cv50 : (R.infl !== null ? R.infl : R.centers[0])); draw();
 })();
 '

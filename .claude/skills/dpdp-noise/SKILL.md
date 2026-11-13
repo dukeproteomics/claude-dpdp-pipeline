@@ -9,11 +9,21 @@ description: Step 4 of the DPDP proteomics pipeline (same as the Shiny app's Noi
 numbers, describes what is visible, and waits. Don't recommend a noise type unless the user asks
 for an opinion. Never run `--action=apply` until the user has stated their choice.
 
-## 1. Calculate inflection
+## Options (the app's Noise tab; all in `pipeline/options/04_noise.R`, also the page's Options panel)
+| Option | Default | Notes |
+|---|---|---|
+| `noise_type` | none | none / fixed / dynamic |
+| `noise_baseline_value` | 1 | raw intensity; only with fixed |
+| `noise_keep` | FALSE | only with fixed or dynamic (see below) |
+| `noise_keep_value` | 1 | shown greyed: not used by the pipeline |
+
+## 1. Preview (calculates the inflection)
 ```bash
 cd /home/user/Claude_Shiny
-Rscript pipeline/steps/04_noise.R --db=data/<prefix>/<prefix>.db --action=inflection [--noise_baseline_value=1]
+Rscript pipeline/steps/04_noise.R --db=data/<prefix>/<prefix>.db --action=preview [--from_page] [--noise_type=...] [--noise_baseline_value=1] [--noise_keep=...]
 ```
+(`--action=inflection` is the old name and still works.) The preview recalculates the inflection point and the counts at the
+baseline and saves the settings. `--from_page`: the values the analyst sent from the page's Noise options panel.
 Then read `steps/04_noise/summary.json` and **open `QC/Inflection_Point.png`**.
 
 ### What the plot is
@@ -39,16 +49,20 @@ Use the **AskUserQuestion** tool so the analyst picks from buttons (they can alw
    - `none`: keep every value (0 removed)
    - `dynamic`: below the inflection <value> (<count>, <pct>)
    - `fixed`: below a value the analyst gives (now <baseline>, <count>). If they pick this, ask for the value, re-run
-     `--action=inflection --noise_baseline_value=<n>`, show the new count and page, and confirm.
+     `--action=preview --noise_type=fixed --noise_baseline_value=<n>`, show the new count and page, and confirm.
 2. If fixed or dynamic: a second question "Use noise_keep?" (header "noise_keep"). Options: on (put measured values back for
    precursors that pass the filter) or off (removed values are imputed later).
 3. Ask for a one-line reason if they want one (it goes in `--note`).
 
 ## 2. Apply the analyst's choice
+**Apply only after preview** (user, 2026-11-09): apply uses the settings of the last preview, so preview the analyst's choice
+first (with every option it sets), then apply. Option arguments that differ from the preview are refused; apply right after an
+apply is refused too.
 ```bash
-Rscript pipeline/steps/04_noise.R --db=<db> --action=apply --noise_type=<none|fixed|dynamic> \
-  [--noise_baseline_value=<n>] [--noise_keep=TRUE|FALSE] --decided_by=user --analyst=<name> [--note="<reason>"]
+Rscript pipeline/steps/04_noise.R --db=<db> --action=apply [--from_page] --decided_by=user --analyst=<name> [--note="<reason>"]
 ```
+From the page: `preview` -> `04_noise.R --action=preview --from_page` (then wait again); `apply` -> `04_noise.R --action=apply
+--from_page --decided_by=user`; `other` -> discuss `fields.request`.
 This writes `precursor_noise` and `QC/Precursor_NoiseFiltered_Histogram.png`, and logs the choice to `decisions.jsonl` with the
 analyst's name (default `$USER`). It also rebuilds the review page, which now shows the decision and the values removed per sample.
 Show the analyst the page path again, plus the counts of values removed.
@@ -57,7 +71,7 @@ Show the analyst the page path again, plus the counts of values removed.
 The page also shows, for each intensity, the share of values re-detected in **all** other replicates and the median replicate CV.
 It uses the pool (SPQC) injections when the run has them, or replicates within each group otherwise. Reference lines mark where CV
 passes 50% and where re-detection drops below 70%, plus the current inflection. **Use as fixed baseline** puts the slider's intensity
-into the form's fixed option. Noise is signal that doesn't repeat, so this measures it directly.
+into the Noise options panel (fixed + baseline); the analyst then previews it. Noise is signal that doesn't repeat, so this measures it directly.
 
 Why it's there: the app's inflection rule finds a "knee" in any bell-shaped distribution. On simulated noise-free data with
 11488's size and spread it removed 0.81% (11488 itself: 0.90%), so the inflection alone doesn't show that noise exists. For 11488 the

@@ -119,7 +119,7 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   `tools/renv/README.md` (restore steps, Ubuntu system libraries). Copied into the plugin as `renv/`. Partial restore tested.
   Not locked: rmotifx, PTMphinder (Phos only, not installed).
 
-## Editable options panel on review pages (decided 2026-11-09; Filter and Parameters built 2026-11-09)
+## Editable options panel on review pages (decided 2026-11-09; Filter and Parameters built 2026-11-09, Noise 2026-11-13)
 - The step's options panel becomes the form, like the Shiny app: **every option** shown and editable (no "Advanced" split; options
   get retired over time instead). Fields that don't apply are greyed with the reason; changed-from-default fields are marked;
   Reset to defaults. The top box keeps status, next step and a note; a free-text box stays for anything the form can't say.
@@ -152,6 +152,13 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   - Tested on throwaway runs (deleted): 11531 secretome Primary + Peptide output without PTM, Load to Stats (CreNeg = CreNeg_Biotin
     + CreNeg_NoBiotin after the sort; CrePos_Biotin v CreNeg_Biotin used samples 7-12 v 1-3); 11517 phospho defaults (Peptide + PTM);
     headless-Chrome clicks on the page; accept refusals (different value, a `preview` request, chat accept with a different value).
+- **Noise built (2026-11-13):** `pipeline/options/04_noise.R` (noise_type, noise_baseline_value [fixed], noise_keep [fixed or
+  dynamic: `depends = "noise_type!=none"`], noise_keep_value greyed: not used). `--action=preview` (old name `inflection`)
+  recalculates the inflection and the counts at the baseline and saves the settings; apply takes the preview's settings. The
+  reproducibility panel's **Use as fixed baseline** fills the panel (`window.dpdpSetOption`). Options not in use (greyed) are no
+  longer compared at apply or counted as changes since the preview. Tested on a throwaway 11504 run (deleted): page clicks
+  (dynamic -> Use as fixed baseline 32 -> noise_keep -> Preview), preview/apply from the page, a changed baseline refused, apply
+  twice refused, none with a greyed noise_keep accepted, Filter's noise_keep restore after it (41,582 values put back).
 
 ## Web app for other users (decided 2026-11-06)
 - Users won't SSH; they have the Shiny/RStudio bookmark. The user wants an app-like page, not RStudio.

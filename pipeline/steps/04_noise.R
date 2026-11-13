@@ -1,17 +1,20 @@
 # Step 4 — Noise   (HUMAN DECISION STEP)
 # Same as the app's Noise tab. Two actions, run one after the other:
 #
-#   1) --action=inflection : "Calculate Noise Inflection Point" (noise_inflection_bg)
-#        Rscript pipeline/steps/04_noise.R --db=<db> --action=inflection [--noise_baseline_value=1]
-#      -> QC/Inflection_Point.png + noise data point counts. Show these to the user; the user decides.
+#   1) --action=preview (or inflection, the old name): "Calculate Noise Inflection Point" (noise_inflection_bg) with the settings
+#        Rscript pipeline/steps/04_noise.R --db=<db> --action=preview [--from_page] [--noise_type=none|fixed|dynamic]
+#            [--noise_baseline_value=1] [--noise_keep=FALSE]
+#      -> QC/Inflection_Point.png + the counts dynamic and fixed (at the baseline) would remove. Show these; the user decides.
 #
 #   2) --action=apply : "Apply Noise" (noise_widget_save + noise_remove_bg + filtered histogram)
-#        Rscript pipeline/steps/04_noise.R --db=<db> --action=apply --noise_type=none|fixed|dynamic
-#            [--noise_baseline_value=1] [--noise_keep=FALSE] --decided_by=user
+#        Rscript pipeline/steps/04_noise.R --db=<db> --action=apply [--from_page] --decided_by=user [--noise_type=...]
+#      Applies the settings of the last preview; option values that differ from it are refused (preview them first).
 #      --noise_keep=TRUE: noise values are removed here and put back in Step 5 for precursors that pass the filter.
 #      (noise_keep_value is saved for the app but not used.)
 #      -> table precursor_noise + QC/Precursor_NoiseFiltered_Histogram.png
 #
+# Every option, its default and checks: pipeline/options/04_noise.R (also the page's Options panel).
+# --from_page takes the values the analyst sent from that panel (review/pending_decision.json).
 # --decided_by=user is required for apply: this step must not run on Claude's choice alone.
 # --analyst=<name> and --note="<why>" are saved with the decision.
 # Both actions (re)build the review page <run_dir>/review/04_noise.html.
@@ -20,6 +23,8 @@ args0 <- commandArgs(trailingOnly = FALSE)
 here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", args0, value = TRUE))))
 source(file.path(here, "..", "common.R"))
 source(file.path(here, "..", "review.R"))
+source(file.path(here, "..", "options.R"))
+source(file.path(here, "..", "options", "04_noise.R"))
 source(file.path(here, "..", "reviews", "04_noise.R"))
 
 args <- parse_args()
@@ -31,16 +36,27 @@ if (get_param("raw_data_format", db_path) != "precursor") stop("Noise step only 
 sd <- step_dir(run_dir, "04_noise")
 
 pct <- function(a, b) round(as.numeric(a) / as.numeric(b) * 100, 2)
+if (args$action == "inflection") args$action <- "preview"
+if (!args$action %in% c("preview", "apply")) stop("--action must be preview (inflection) or apply")
+if (args$action == "apply" && !identical(args$decided_by, "user"))
+  stop("Noise is a human decision step: pass --decided_by=user after the user has chosen.")
+opts <- noise_options(get_params(db_path))
+spec <- opts_spec(opts)
+args <- page_args(args, run_dir, "04_noise", opts, args$action)
+settings <- resolve_settings(spec, args)
+if (args$action == "apply") settings <- apply_settings(run_dir, "04_noise", spec, args, settings, opts)
+opts_validate(opts, settings)
+if (settings$noise_type == "none") settings$noise_keep <- FALSE   # noise_keep only with fixed or dynamic
 
-if (args$action == "inflection") {
-  baseline <- as.numeric(args$noise_baseline_value %||% 1)
+if (args$action == "preview") {
+  baseline <- settings$noise_baseline_value
   param_update("noise_baseline_value", baseline, db_path)
   run_bg(noise_inflection_bg, list("precursor_start", db_path), "inflection", db_path)
 
   p <- get_params(db_path)
   plot <- gsub("/+", "/", file.path(p$qc_path, "Inflection_Point.png"))
   summary <- list(
-    step = "04_noise", action = "inflection", db_path = db_path,
+    step = "04_noise", action = "preview", db_path = db_path, settings = settings,
     noise_baseline_value = baseline,
     noise_inflection = p$noise_inflection,
     noise_inflection_log2 = round(log2(as.numeric(p$noise_inflection)), 2),
@@ -58,17 +74,9 @@ if (args$action == "inflection") {
   page <- review_noise(db_path)
   cat("Plot:", plot, "\nReview page:", page, "\n>>> Waiting for the user's decision.\n")
 
-} else if (args$action == "apply") {
-  if (!identical(args$decided_by, "user")) stop("Noise is a human decision step: pass --decided_by=user after the user has chosen.")
-  need(args, "noise_type")
-  if (!args$noise_type %in% c("none", "fixed", "dynamic")) stop("--noise_type must be none, fixed or dynamic")
-  if (args$noise_type == "dynamic" && as.numeric(get_param("noise_inflection", db_path)) == 0)
-    stop("Run --action=inflection first (dynamic uses the inflection point).")
-
-  settings <- list(noise_type = args$noise_type,
-                   noise_baseline_value = as.numeric(args$noise_baseline_value %||% get_param("noise_baseline_value", db_path)),
-                   noise_keep = if (!is.null(args$noise_keep)) as_flag(args$noise_keep) else FALSE,
-                   noise_keep_value = as.numeric(args$noise_keep_value %||% 1))
+} else {
+  if (settings$noise_type == "dynamic" && as.numeric(get_param("noise_inflection", db_path)) == 0)
+    stop("Run --action=preview first (dynamic uses the inflection point).")
   # noise_keep (user's rule, 2026-11-04): remove ALL noise values here so the filter treats them as missing; step 5 then
   # puts the measured values back for every precursor that survives the filter (pipeline/noise_keep.R).
   # The app's own noise_keep branch in noise_remove_bg() is not used (it cleans the wrong rows), so it runs with noise_keep off.
@@ -105,4 +113,4 @@ if (args$action == "inflection") {
   cat(sprintf("noise_type=%s  baseline used=%s  values set to NA: %d\n", settings$noise_type, summary$baseline_used, sum(removed)))
   page <- review_noise(db_path)
   cat("Plot:", plot, "\nReview page:", page, "\n")
-} else stop("--action must be inflection or apply")
+}
