@@ -133,13 +133,13 @@ p <- get_params(db_path)
 comp_results <- lapply(seq_len(nrow(stats_comp)), function(i) {
   nm <- stats_comp$Name[i]
   df <- read_table(final_table(stats_comp, i, p), db_path)
-  fc_col <- str_c(nm, "_FC"); p_col <- str_c(nm, "_pval"); adj_col <- str_c(nm, "_adjpval"); mf_col <- str_c(nm, "_mf")
+  fc_col <- comp_col(nm, "_FC"); p_col <- comp_col(nm, "_pval"); adj_col <- comp_col(nm, "_adjpval"); mf_col <- comp_col(nm, "_mf")
   fc <- df[[fc_col]]; pv <- df[[p_col]]; adj <- if (adj_col %in% names(df)) df[[adj_col]] else rep(NA_real_, nrow(df))
   fcc <- as.numeric(p$foldchange_cutoff); pc <- as.numeric(p$pvalue_cutoff)
   # The app's own call (Stats column): raw p unless checkbox_filter_adjpval is on.
   up <- df$Stats == "Up"; down <- df$Stats == "Down"; sig <- up | down
   adj_sig <- !is.na(adj) & adj <= pc & abs(fc) >= fcc
-  top <- df[sig, intersect(c("Accession", "Name", "Genes", fc_col, p_col, adj_col, mf_col, str_c(nm, "_refilter_flag"), "Stats"), names(df))]
+  top <- df[sig, intersect(c("Accession", "Name", "Genes", fc_col, p_col, adj_col, mf_col, comp_col(nm, "_refilter_flag"), "Stats"), names(df))]
   top <- head(top[order(top[[p_col]]), ], 15)
   pv_dist <- list(raw_p_lt_0.05 = sum(pv < 0.05, na.rm = TRUE), raw_p_lt_0.01 = sum(pv < 0.01, na.rm = TRUE),
                   raw_p_lt_0.001 = sum(pv < 0.001, na.rm = TRUE),

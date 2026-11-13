@@ -284,10 +284,13 @@ DECISION_JS <- '
     else if (f.type === "checkbox") { inp = el("input", { type: "checkbox" }); inp.checked = f.default === "true"; }
     else { inp = el("input", { type: f.type === "number" ? "number" : "text", step: "any", size: "40" }); inp.value = f.default || ""; }
     inp.dataset.name = f.name; inp.dataset.pre = pre; w.appendChild(inp); return w; };
+  // Only "other" (pages where the Options panel makes the decision): a plain "ask Claude" box, no radio button.
+  const onlyOther = S.spec.choices.length === 1 && S.spec.choices[0].value === "other";
   S.spec.choices.forEach((c, i) => {
     const row = el("div", { class: "dchoice" }), lab = el("label");
     const r = el("input", { type: "radio", name: "dchoice", value: c.value }); if (i === 0) r.checked = true;
-    lab.appendChild(r); lab.appendChild(document.createTextNode(" " + c.label)); row.appendChild(lab);
+    if (onlyOther) { r.hidden = true; c.label = "Ask Claude something (a question, or a change the options below can&apos;t make):"; if (c.fields && c.fields[0]) c.fields[0].label = ""; }
+    lab.appendChild(r); lab.appendChild(el("span", {}, " " + c.label)); row.appendChild(lab);
     (c.fields || []).forEach(f => row.appendChild(field(f, c.value))); box.appendChild(row); });
   (S.spec.global || []).forEach(f => box.appendChild(field(f, "")));
   const note = el("input", { type: "text", size: "60", placeholder: "optional: why (goes in the decision log)" });
@@ -295,6 +298,12 @@ DECISION_JS <- '
   const bar = el("div", { class: "dbar" }); bar.appendChild(el("span", {}, "Note ")); bar.appendChild(note); bar.appendChild(el("span", {}, " Analyst ")); bar.appendChild(who);
   const btn = el("button", { type: "button", class: "dsend" }, "Send to Claude"); bar.appendChild(btn); box.appendChild(bar);
   const msg = el("p", { class: "dmsg" }); box.appendChild(msg);
+  // "Something else" needs its text: Send stays off while it is empty.
+  let waitingOther = false, sentOnce = false, pendingHere = false;
+  const checkOther = () => { const ch = box.querySelector("input[name=dchoice]:checked"); if (!ch) return;
+    const empty = ch.value === "other" && !Array.from(box.querySelectorAll("[data-pre=other]")).some(i => i.value.trim());
+    if (empty !== waitingOther) { waitingOther = empty; if (!sentOnce && !pendingHere) { btn.disabled = empty; msg.textContent = empty ? "Type your question or request first." : ""; } } };
+  box.addEventListener("input", checkOther); box.addEventListener("change", checkOther);
   window.dpdpSetField = (name, value, force) => { box.querySelectorAll("[data-name=\\"" + name + "\\"]").forEach(i => { if (force || !i.dataset.edited) { i.value = value; if (force) i.dataset.edited = "1"; } }); };
   window.dpdpChoose = value => { const r = box.querySelector("input[name=dchoice][value=\\"" + value + "\\"]"); if (r) r.checked = true; };
   Object.entries(window.DPDP_PREFILL || {}).forEach(([k, v]) => window.dpdpSetField(k, v));
@@ -303,18 +312,18 @@ DECISION_JS <- '
   let mtime0 = null;
   const poll = () => fetch(API + "status?run=" + encodeURIComponent(S.run) + "&step=" + S.step).then(r => r.json()).then(st => {
     if (mtime0 === null) mtime0 = st.page_mtime; else if (st.page_mtime > mtime0) { location.reload(); return; }
-    if (st.pending_step === S.step && !btn.disabled) { btn.disabled = true; msg.textContent = "A decision for this step is waiting for Claude."; }
+    if (st.pending_step === S.step && !btn.disabled) { pendingHere = true; btn.disabled = true; msg.textContent = "A decision for this step is waiting for Claude."; }
   }).catch(() => {});
-  poll(); setInterval(poll, 2000);
+  poll(); setInterval(poll, 2000); checkOther();
   btn.addEventListener("click", () => {
     const choice = box.querySelector("input[name=dchoice]:checked").value, fields = {};
     box.querySelectorAll("[data-name]").forEach(i => { if (i.dataset.pre === "" || i.dataset.pre === choice) fields[i.dataset.name] = i.type === "checkbox" ? String(i.checked) : i.value; });
     localStorage.setItem("dpdp_analyst", who.value);
-    btn.disabled = true; msg.textContent = "Sending...";
+    sentOnce = true; btn.disabled = true; msg.textContent = "Sending...";
     fetch(API + "decision", { method: "POST", headers: { "Content-Type": "application/json", "X-DPDP-Token": token },
       body: JSON.stringify({ run: S.run, step: S.step, choice: choice, fields: fields, note: note.value, analyst: who.value }) })
       .then(r => r.json().then(j => ({ ok: r.ok, j }))).then(({ ok, j }) => {
-        if (!ok) { btn.disabled = false; msg.textContent = "Not sent: " + (j.error || "error"); return; }
+        if (!ok) { sentOnce = false; btn.disabled = false; msg.textContent = "Not sent: " + (j.error || "error"); return; }
         msg.textContent = "Sent to Claude at " + j.submitted.slice(11, 16) + ". This page reloads when Claude has applied it.";
         help.textContent = ""; })
       .catch(() => { btn.disabled = false; msg.textContent = "Not sent: is the review server running? (web app: reload the page)"; });

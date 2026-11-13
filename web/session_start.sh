@@ -44,12 +44,21 @@ This Claude Code session runs inside the DPDP web app (DPDP_WEB=1). The analyst 
 - Run folders: \$DPDP_DATA ($DPDP_DATA), shared by the team. Uploaded inputs: \$DPDP_DATA/input/<name>/.
 - Don't start review_server.py and don't xdg-open pages: the web app serves them. Tell the analyst the page is ready in the
   left panel (it opens there by itself) and run wait_decision.py in the background as usual.
+- At the start of a session, check your runs for a waiting page decision (\$DPDP_DATA/<run>/review/pending_decision.json) and
+  act on it before anything else.
 - Use the dpdp-run skill for a project from start to end. Once a step's decision is applied, go straight on to the next
   step's preview; the left panel moves to its page by itself.
 MD
 
 echo "${g}DPDP: starting Claude Code as $USER in $W  (data: $DPDP_DATA)${n}"
 proj="$HOME/.claude/projects/$(echo "$W" | sed 's#[/.]#-#g')"
-if ls "$proj"/*.jsonl >/dev/null 2>&1; then claude --continue || claude; else claude; fi
+# A decision sent from a review page while no Claude was waiting (e.g. during a restart) would reach nobody: tell Claude at start.
+pend="$(find "$DPDP_DATA" -mindepth 3 -maxdepth 3 -path '*/review/pending_decision.json' -user "$USER" 2>/dev/null | head -5 | tr '\n' ' ')"
+first=()
+if [ -n "$pend" ]; then
+  echo "${y}A decision from a review page is waiting: $pend${n}"
+  first=("A decision from the review page is waiting for you: ${pend}. Please read it and apply it (dpdp-run skill).")
+fi
+if ls "$proj"/*.jsonl >/dev/null 2>&1; then claude --continue "${first[@]}" || claude "${first[@]}"; else claude "${first[@]}"; fi
 echo; echo "${y}Claude exited. Type 'claude' to start it again, or click Restart Claude.${n}"
 exec bash -l

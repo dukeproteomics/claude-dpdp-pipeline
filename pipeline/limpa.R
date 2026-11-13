@@ -85,14 +85,14 @@ limpa_stats <- function(db_path, stats_comp, i, p) {
   tab <- final_table(stats_comp, i, p); df <- read_table(tab, db_path); m <- match(feature_key(df, p), rownames(tt))
   if (anyNA(m)) stop("limpa_stats: ", sum(is.na(m)), " proteins in ", tab, " are not in the DPC-Quant result.")
   ratio <- 2^tt$logFC[m]
-  df[[paste0(nm, "_FC")]] <- signif(ifelse(ratio >= 1, ratio, -1 / ratio), 7)
-  df[[paste0(nm, "_FC2")]] <- signif(ratio, 7)
-  df[[paste0(nm, "_pval")]] <- tt$P.Value[m]
-  if (as_flag(p$checkbox_adjpval)) df[[paste0(nm, "_adjpval")]] <- adj_all[m]
+  df[[comp_col(nm, "_FC")]] <- signif(ifelse(ratio >= 1, ratio, -1 / ratio), 7)
+  df[[comp_col(nm, "_FC2")]] <- signif(ratio, 7)
+  df[[comp_col(nm, "_pval")]] <- tt$P.Value[m]
+  if (as_flag(p$checkbox_adjpval)) df[[comp_col(nm, "_adjpval")]] <- adj_all[m]
   fcc <- as.numeric(p$foldchange_cutoff); pc <- as.numeric(p$pvalue_cutoff)
-  pv <- if (as_flag(p$checkbox_filter_adjpval)) df[[paste0(nm, "_adjpval")]] else df[[paste0(nm, "_pval")]]
-  df$Stats <- ""; df$Stats[df[[paste0(nm, "_FC")]] >= fcc & pv <= pc] <- "Up"; df$Stats[df[[paste0(nm, "_FC")]] <= -fcc & pv <= pc] <- "Down"
-  df <- df[order(df$Stats, -df[[paste0(nm, "_pval")]], decreasing = TRUE), ]
+  pv <- if (as_flag(p$checkbox_filter_adjpval)) df[[comp_col(nm, "_adjpval")]] else df[[comp_col(nm, "_pval")]]
+  df$Stats <- ""; df$Stats[df[[comp_col(nm, "_FC")]] >= fcc & pv <= pc] <- "Up"; df$Stats[df[[comp_col(nm, "_FC")]] <= -fcc & pv <= pc] <- "Down"
+  df <- df[order(df$Stats, -df[[comp_col(nm, "_pval")]], decreasing = TRUE), ]
   write_table_try(tab, df, db_path)
   list(test = "limpa dpcDE (limma with DPC-Quant precision weights)", samples = c(N = length(nl), D = length(dl)),
        proteins_tested = nrow(tt), df_prior = round(fit$df.prior[1], 2))

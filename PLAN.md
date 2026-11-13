@@ -165,6 +165,17 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Fixes from note.md (test_project web session, 2026-11-13)
+1. Group names starting with a digit (51C, 55Ex): the app's stats tables get R-style names (`X55Ex_v_51C_FC`, also sample and CV
+   columns), the pipeline looked up `55Ex_v_51C_FC` and Stats failed. `comp_col()` / `comp_get()` (common.R) apply make.names when
+   writing (refilter flags, limpa) and reading (10_stats summary, 10c, Stats page); unchanged for normal names. Tested 11504 to Stats
+   twice (perseus + iq_maxlfq as test_project; limpa): every comparison column X-prefixed, volcano data, Excel.
+2. "Something else" as the only choice: shown as "Ask Claude something", Send off until there is text (also when picked elsewhere).
+3. wait_decision.py sets aside requests no step command records (other, plots, fix, stop) once read (decisions.jsonl step
+   "request"), so the next wait doesn't return the same one.
+4. Web app session start: a waiting page decision of the user's runs is passed to Claude as its first message; web-mode CLAUDE.md
+   and dpdp-run say to check pending_decision.json after a restart.
+
 ## Stats options panel with a comparison builder (user, 2026-11-13)
 - `pipeline/options/10_stats.R`: every Stats option (Comparisons, SPQC group, normalization, significance, refilter flags, filters,
   extra columns, report; peptide_refilter hidden: retired). Option type `comparisons` ("N1,N2|D;..."): the panel draws rows of

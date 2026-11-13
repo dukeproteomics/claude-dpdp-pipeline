@@ -25,13 +25,13 @@ review_stats <- function(db_path) {
     nm <- sc$Name[i]; tb <- final_table(sc, i, p)
     if (!table_exists(tb, db_path)) next
     d <- read_table(tb, db_path)
-    fc <- d[[paste0(nm, "_FC")]]; pv <- d[[paste0(nm, "_pval")]]; ap <- d[[paste0(nm, "_adjpval")]] %||% rep(NA_real_, nrow(d))
+    fc <- comp_get(d, nm, "_FC"); pv <- comp_get(d, nm, "_pval"); ap <- comp_get(d, nm, "_adjpval") %||% rep(NA_real_, nrow(d))
     nN <- length(locs(sc$N_loc[i])); nD <- length(locs(sc$D_loc[i]))
     di <- strsplit(as.character(d$Detected_Imputed), ".", fixed = TRUE)
     onoff <- vapply(di, function(v) { if (length(v) < nN + nD) return(""); a <- all(v[1:nN] == "-"); b <- all(v[(nN + 1):(nN + nD)] == "-")
       if (b && !a) paste0("only in ", sc$FactorsN[i]) else if (a && !b) paste0("only in ", sc$FactorsD[i]) else "" }, "")
     comps[[nm]] <- list(name = nm, N = sc$FactorsN[i], D = sc$FactorsD[i], acc = d$Accession, gene = if (is_peptide_output(p) && !is.null(d$Protein_PTM_Loc)) trimws(paste(d$Genes, d$Protein_PTM_Loc)) else d$Genes, fc = signif(fc, 8),
-                        p = signif(pv, 8), adj = signif(ap, 8), mf = d[[paste0(nm, "_mf")]], onoff = onoff, stats = d$Stats,
+                        p = signif(pv, 8), adj = signif(ap, 8), mf = comp_get(d, nm, "_mf"), onoff = onoff, stats = d$Stats,
                         prec = d$Precursors, flag = flag_contaminants(d$Accession, d$Description, sp$spike, sp$constant))
   }
   cres <- if (!is.null(summ$comparisons)) setNames(summ$comparisons, vapply(summ$comparisons, function(x) x$comparison, "")) else list()

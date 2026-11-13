@@ -30,6 +30,10 @@ one in its left panel by itself; say "the <step> page is ready on the left". Run
    `--decided_by=user`. The analyst and note come from the page automatically. `log_decision()` archives the page decision to
    `review/decisions_done/` and logs `source: "review page"`; the page then reloads itself.
 5. If the analyst replies in the chat instead, stop the background wait and use their answer.
+   Requests that no step command records ("other", "plots", "fix", "stop") are set aside by `wait_decision.py` once read (noted in
+   `decisions.jsonl` as step `request`), so the next wait doesn't return the same request again.
+   **After a restart** (or when resuming), first look for a waiting page decision in the run (`review/pending_decision.json`): a
+   decision sent while no wait was running is still there; read it and act on it. (The web app also says so when Claude starts.)
 6. A choice that needs discussion ("change": free text) goes back to the chat. Show what you would run, and confirm first.
 
 | Step | choice -> command |

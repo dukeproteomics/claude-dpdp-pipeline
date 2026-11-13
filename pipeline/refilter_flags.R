@@ -45,8 +45,8 @@ refilter_flags <- function(db_path, stats_comp, i, p) {
   tab <- final_table(stats_comp, i, p); df <- read_table(tab, db_path); a <- feature_key(df, p)
   r <- as.integer(n_rm[a]); n <- as.integer(n_all[a])
   flag <- ifelse(r == n, "refilter: all precursors", ifelse(r >= n / 2, "refilter: half or more precursors", ""))
-  df[[paste0(nm, "_refilter_precursors")]] <- sprintf("%d of %d", r, n)
-  df[[paste0(nm, "_refilter_flag")]] <- flag
+  df[[comp_col(nm, "_refilter_precursors")]] <- sprintf("%d of %d", r, n)
+  df[[comp_col(nm, "_refilter_flag")]] <- flag
   # keep Stats last, as in the app's layout
   df <- df[, c(setdiff(names(df), "Stats"), "Stats")]
   write_table_try(tab, df, db_path)

@@ -50,7 +50,7 @@ if (is.null(args$excel) || as_flag(args$excel)) {
     fl <- flag_contaminants(d$Accession, d$Description, sp$spike, sp$constant); k <- fl != ""
     if (!any(k)) return(NULL)
     data.frame(Comparison = nm, Accession = d$Accession[k], Description = d$Description[k], Genes = d$Genes[k], Flag = fl[k],
-               FC = d[[paste0(nm, "_FC")]][k], pval = d[[paste0(nm, "_pval")]][k], adjpval = d[[paste0(nm, "_adjpval")]][k] %||% NA,
+               FC = comp_get(d, nm, "_FC")[k], pval = comp_get(d, nm, "_pval")[k], adjpval = comp_get(d, nm, "_adjpval")[k] %||% NA,
                Stats = d$Stats[k], stringsAsFactors = FALSE)
   }))
   if (!is.null(flag_rows) && nrow(flag_rows)) {
@@ -87,7 +87,7 @@ if (anyNA(pc) || anyNA(qc)) stop("Could not match sample columns by design ID.")
 # Rows to plot: the top significant rows (proteins, or peptides for Peptide output), or every row of the given accessions.
 pep_out <- is_peptide_output(p)
 rows <- if (!is.null(args$proteins)) which(prot$Accession %in% trimws(strsplit(args$proteins, ",")[[1]])) else {
-  s <- which(prot$Stats != ""); head(s[order(prot[[str_c(comp, "_pval")]][s])], as.integer(args$top %||% 6)) }
+  s <- which(prot$Stats != ""); head(s[order(comp_get(prot, comp, "_pval")[s])], as.integer(args$top %||% 6)) }
 if (!is.null(args$proteins) && !pep_out) rows <- rows[!duplicated(prot$Accession[rows])]
 labels <- design$Label[pos]; groups <- vapply(pos, grp_of, ""); cols <- design$colorlist[pos]
 group_cols <- setNames(cols[!duplicated(groups)], groups[!duplicated(groups)])
@@ -98,8 +98,8 @@ for (ri in rows) {
   tag <- if (pep_out) str_c(a, "_", ri) else a
   seq_lab <- if (pep_out) str_c(" ", gsub("_", "", r$Sequence), if (!is.null(r$Protein_PTM_Loc) && nzchar(r$Protein_PTM_Loc)) str_c(" ", r$Protein_PTM_Loc) else "") else ""
   d <- data.frame(Sample = factor(labels, levels = labels), Group = groups, Intensity = unlist(r[1, pc]))
-  ttl <- sprintf("%s %s%s\nFC %.2f  p %.2g  adj p %.2g  %s", a, r$Genes, seq_lab, r[[str_c(comp, "_FC")]], r[[str_c(comp, "_pval")]],
-                 r[[str_c(comp, "_adjpval")]] %||% NA, r$Stats)
+  ttl <- sprintf("%s %s%s\nFC %.2f  p %.2g  adj p %.2g  %s", a, r$Genes, seq_lab, comp_get(r, comp, "_FC"), comp_get(r, comp, "_pval"),
+                 comp_get(r, comp, "_adjpval") %||% NA, r$Stats)
   f1 <- gsub("/+", "/", file.path(p$qc_path, str_c(if (pep_out) "Peptide_" else "Protein_", comp, "_", tag, "_bar.png")))
   if (make_png) ggsave(f1, ggplot(d, aes(Sample, Intensity, fill = Group)) + geom_col() + scale_fill_manual(values = group_cols) +
            theme_classic() + ggtitle(ttl) + xlab(NULL) +
@@ -127,8 +127,8 @@ for (ri in rows) {
            width = max(7, 0.25 * nrow(pr) + 3), height = 5, dpi = 150, limitsize = FALSE)
   }
   if (make_png) plots <- c(plots, f1, f2)
-  prot_info[[tag]] <- list(accession = a, sequence = if (pep_out) r$Sequence else NULL, genes = r$Genes, name = r$Name, stats = r$Stats, FC = r[[str_c(comp, "_FC")]],
-                         pval = r[[str_c(comp, "_pval")]], adjpval = r[[str_c(comp, "_adjpval")]], mf = r[[str_c(comp, "_mf")]],
+  prot_info[[tag]] <- list(accession = a, sequence = if (pep_out) r$Sequence else NULL, genes = r$Genes, name = r$Name, stats = r$Stats, FC = comp_get(r, comp, "_FC"),
+                         pval = comp_get(r, comp, "_pval"), adjpval = comp_get(r, comp, "_adjpval"), mf = comp_get(r, comp, "_mf"),
                          detected_imputed = r$Detected_Imputed, precursors = r$Precursors, peptides = nrow(pr),
                          site = if (pep_out) r$Protein_PTM_Loc %||% "" else NULL,
                          values = setNames(as.list(round(unlist(r[1, pc]))), labels), peptide_data = pep_data)

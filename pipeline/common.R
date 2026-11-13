@@ -45,6 +45,12 @@ step_dir <- function(run_dir, step) {
 }
 
 # summary.json is the main thing Claude reads after a step.
+# A comparison's columns in the stats tables. The app's tables get R-style names (make.names), so a comparison named
+# "55Ex_v_51C" (group names starting with a digit) has columns "X55Ex_v_51C_FC", "_pval", ... Read and write them with the same
+# rule; normal names are unchanged. comp_get() also finds columns written without the rule (runs before 2026-11-13).
+comp_col <- function(nm, suffix) make.names(paste0(nm, suffix))
+comp_get <- function(d, nm, suffix) { k <- comp_col(nm, suffix); if (!k %in% names(d) && paste0(nm, suffix) %in% names(d)) k <- paste0(nm, suffix); d[[k]] }
+
 write_summary <- function(summary, dir) {
   summary$generated <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   summary$app_commit <- tryCatch(
