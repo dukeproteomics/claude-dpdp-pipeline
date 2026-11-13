@@ -168,7 +168,8 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
 ## Stats options panel with a comparison builder (user, 2026-11-13)
 - `pipeline/options/10_stats.R`: every Stats option (Comparisons, SPQC group, normalization, significance, refilter flags, filters,
   extra columns, report; peptide_refilter hidden: retired). Option type `comparisons` ("N1,N2|D;..."): the panel draws rows of
-  numerator v denominator group buttons (pooling = several on a side), Swap, Remove, + Add comparison, + Every pair (> 2 groups).
+  numerator v denominator dropdown checklists (user: buttons for every group clutter large sets; search when > 8 groups; pooling =
+  several on a side), Swap, Remove, + Add comparison, + Every pair (> 2 groups; asks first above 10). Tested on a 14-group mock.
   Default: second group v first. Apply only after preview; the panel stays editable on the results page until they are accepted.
 - Dropped the pipeline's 31-character stop on comparison names: the app's Excel writer already cuts sheet names to 31 and each
   starts with "Table<n> ", so they stay unique (11531's CrePos_NoBiotin_v_CreNeg_NoBiotin is 33).

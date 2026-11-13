@@ -142,9 +142,15 @@ OPTIONS_CSS <- "
 #options .pipe { font-size:11px; padding:0 5px; border:1px solid var(--rule); border-radius:8px; color:var(--text-secondary); margin-left:4px; }
 #options h3 { margin:14px 0 2px; }
 #options td.ocomp { white-space:normal; } .cbuild .crow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:6px 0; border-bottom:1px dashed var(--grid); }
-.cbuild .cside { display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; } .cbuild .clab { font-size:11px; color:var(--text-secondary); margin-right:2px; }
-.cbuild .cg { font:inherit; font-size:13px; padding:2px 9px; border:1px solid var(--rule); border-radius:12px; background:transparent; color:var(--text-primary); cursor:pointer; }
-.cbuild .cg.on { background:var(--accent); border-color:var(--accent); color:#fff; } .cbuild .cg:disabled { opacity:0.35; cursor:default; }
+.cbuild .clab { font-size:11px; color:var(--text-secondary); margin-right:2px; }
+.cbuild details.cdrop { position:relative; display:inline-block; }
+.cbuild details.cdrop > summary { list-style:none; cursor:pointer; font-size:13px; padding:3px 24px 3px 9px; border:1px solid var(--rule); border-radius:6px; min-width:12em; max-width:26em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; position:relative; }
+.cbuild details.cdrop > summary::-webkit-details-marker { display:none; } .cbuild details.cdrop > summary::after { content:'\\25BE'; position:absolute; right:8px; color:var(--text-secondary); }
+.cbuild details.cdrop.off > summary { opacity:0.6; cursor:default; }
+.cbuild .cmenu { position:absolute; z-index:20; top:100%; left:0; margin-top:2px; background:var(--surface-1); border:1px solid var(--rule); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.18); padding:6px; min-width:100%; }
+.cbuild .cmenu input[type=search] { font:inherit; font-size:13px; width:100%; box-sizing:border-box; margin-bottom:4px; padding:2px 6px; }
+.cbuild .clist { max-height:260px; overflow:auto; } .cbuild .copt { display:block; white-space:nowrap; font-size:13px; padding:2px 4px; cursor:pointer; }
+.cbuild .copt small { color:var(--text-secondary); } .cbuild .copt[hidden] { display:none; } .cbuild .copt:has(input:disabled) { opacity:0.4; }
 .cbuild .cv { margin:0 4px; } .cbuild .cname { font-family:monospace; font-size:13px; margin:0 6px; } .cbuild .cname.bad { color:#b42318; }
 .cbuild .cbtn { font:inherit; font-size:13px; padding:2px 10px; border:1px solid var(--accent); border-radius:6px; background:transparent; color:var(--accent); cursor:pointer; }
 .cbuild .cbtn:disabled { opacity:0.4; cursor:default; } .cbuild .cbar { display:flex; gap:8px; padding:8px 0 2px; }
@@ -205,16 +211,32 @@ OPTIONS_JS <- '
     const enc = cs => cs.map(c => c.N.join(",") + "|" + c.D.join(",")).join(";");
     const name = (N, D) => { const f = g => [...new Set(g.flatMap(v => v.split("_")))].join("_"); return f(N) + "_v_" + f(D); };
     let cs = [];
+    // close an open dropdown when clicking elsewhere (its changes are applied on close)
+    document.addEventListener("click", e => { ui.querySelectorAll("details.cdrop[open]").forEach(d => { if (!d.contains(e.target)) d.open = false; }); });
     const set = () => { x.inp.value = enc(cs); draw(); update(); };
     function draw() {
       ui.innerHTML = ""; const off = x.inp.disabled;
       cs.forEach((c, i) => {
         const row = el("div", { class: "crow" });
-        const side = k => { const w = el("span", { class: "cside" }); w.appendChild(el("span", { class: "clab" }, k === "N" ? "numerator" : "denominator"));
-          groups.forEach(g => { const b = el("button", { type: "button", class: "cg" + (c[k].includes(g) ? " on" : "") }, g + (counts[g] ? " <small>(" + counts[g] + ")</small>" : ""));
-            b.disabled = off || c[k === "N" ? "D" : "N"].includes(g);
-            b.onclick = () => { c[k] = c[k].includes(g) ? c[k].filter(v => v !== g) : groups.filter(v => v === g || c[k].includes(v)); set(); };
-            w.appendChild(b); }); return w; };
+        // one dropdown per side (like the app picker): the selection on the button, a checklist of groups (search when many)
+        const side = k => {
+          const other = c[k === "N" ? "D" : "N"], d = el("details", { class: "cdrop" + (off ? " off" : "") });
+          const lab = c[k].length ? c[k].join(" + ") : (k === "N" ? "numerator..." : "denominator...");
+          d.appendChild(el("summary", { title: k === "N" ? "numerator" : "denominator" }, "<span class=clab>" + (k === "N" ? "numerator" : "denominator") + "</span> " + lab));
+          if (off) { d.addEventListener("toggle", () => { d.open = false; }); return d; }
+          const menu = el("div", { class: "cmenu" });
+          let q = null; if (groups.length > 8) { q = el("input", { type: "search", placeholder: "find a group" }); menu.appendChild(q); }
+          const list = el("div", { class: "clist" }); menu.appendChild(list);
+          groups.forEach(g => { const l = el("label", { class: "copt" }), cb = el("input", { type: "checkbox" });
+            cb.checked = c[k].includes(g); cb.disabled = other.includes(g);
+            cb.onchange = () => { c[k] = groups.filter(v => v === g ? cb.checked : c[k].includes(v)); pend = true; };
+            l.appendChild(cb); l.appendChild(document.createTextNode(" " + g)); if (counts[g]) l.appendChild(el("small", {}, " (" + counts[g] + ")"));
+            if (other.includes(g)) l.title = "on the other side"; list.appendChild(l); });
+          if (q) q.addEventListener("input", () => { const t = q.value.toLowerCase(); list.querySelectorAll(".copt").forEach(l => { l.hidden = !l.textContent.toLowerCase().includes(t); }); });
+          let pend = false;
+          d.addEventListener("toggle", () => { if (d.open) { ui.querySelectorAll("details.cdrop[open]").forEach(o => { if (o !== d) o.open = false; }); if (q) q.focus(); }
+            else if (pend) set(); });
+          d.appendChild(menu); return d; };
         row.appendChild(side("N")); row.appendChild(el("b", { class: "cv" }, "v")); row.appendChild(side("D"));
         const nm = c.N.length && c.D.length ? name(c.N, c.D) : "(pick a group on each side)";
         row.appendChild(el("span", { class: "cname" + (!(c.N.length && c.D.length) ? " bad" : "") }, nm + (nm.length > 23 ? " <small>(Excel sheet name shortened)</small>" : "")));
@@ -229,7 +251,7 @@ OPTIONS_JS <- '
       const pool = X.comp_spqc ? String(val(X.comp_spqc)) : "SPQC", gs = groups.filter(g => g !== pool);
       if (gs.length > 2) {
         const all = el("button", { type: "button", class: "cbtn" }, "+ Every pair of groups (" + gs.length * (gs.length - 1) / 2 + ")");
-        all.onclick = () => { const have = new Set(cs.map(c => [c.N.join(","), c.D.join(",")].sort().join("|")));
+        all.onclick = () => { const k = gs.length * (gs.length - 1) / 2; if (k > 10 && !window.confirm("Add every pair of groups (" + k + " comparisons)?")) return; const have = new Set(cs.map(c => [c.N.join(","), c.D.join(",")].sort().join("|")));
           for (let a = 0; a < gs.length; a++) for (let b = a + 1; b < gs.length; b++) if (!have.has([gs[a], gs[b]].sort().join("|"))) cs.push({ N: [gs[b]], D: [gs[a]] });
           set(); };
         bar.appendChild(all);

@@ -76,8 +76,9 @@ from the stats tables. `--png=TRUE` also writes app-style static PNGs (shown in 
 - **PCA** (sample sets, nearest sample), the static graphs from 10b, the protein plots from 10c, and the Excel paths.
 
 **Stats options panel (user, 2026-11-13):** every Stats option, and a **comparison builder**: each row is numerator group(s) **v**
-denominator group(s) (click groups to pick them; several on one side are pooled), **Swap** turns it around, **Remove**, **+ Add
-comparison**, and with more than 2 groups **+ Every pair of groups**. Preview, then Apply (apply only after preview: it uses the
+denominator group(s), each side a dropdown checklist like the app's picker (search box when more than 8 groups; several groups on
+one side are pooled), **Swap** turns it around, **Remove**, **+ Add comparison**, and with more than 2 groups **+ Every pair of
+groups** (asks first when that is more than 10). Preview, then Apply (apply only after preview: it uses the
 preview's settings; differences are refused). After the results, the panel stays editable: a new preview replaces the results.
 Page choices: `preview` -> `10_stats.R --action=preview --from_page`; `apply` -> `10_stats.R --action=apply --from_page --decided_by=user`,
 then 10b and 10c; results page: `accept`, `plots`, `other`.
