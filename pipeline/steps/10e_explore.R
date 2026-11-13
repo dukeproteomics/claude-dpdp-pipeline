@@ -62,6 +62,22 @@ comps <- lapply(seq_len(nrow(sc)), function(i) {
        fc = signif(g("_FC"), 4), p = signif(g("_pval"), 3), adj = signif(g("_adjpval"), 3), call = if (!is.null(st)) st$Stats[m] else rep(NA, nrow(tab)))
 })
 
+# Each comparison's full table, as its Excel sheet (the app's stats_Final_Excel: the _final table without the _FC2 columns;
+# "Normalized" -> "Imputed" for the impute normalization), one file per comparison, loaded when the page shows that comparison.
+# row = the main row (0-based) each table row belongs to, so a click plots it.
+tables <- vapply(seq_len(nrow(sc)), function(i) {
+  ft <- final_table(sc, i, p); if (!table_exists(ft, db_path)) return("")
+  st <- read_table(ft, db_path); st <- st[, !grepl("_FC2", names(st)), drop = FALSE]
+  if (trimws(p$stat_norm) == "impute") names(st) <- gsub("Normalized", "Imputed", names(st))
+  k <- match(if (pep_out) paste(st$Accession, st$Sequence, st$Protein_PTM_Loc %||% "") else st$Accession, key_main) - 1L
+  cols <- lapply(st, function(v) if (is.numeric(v)) signif(v, 6) else as.character(v))
+  fn <- sprintf("10e_explore_table_%d.json.gz", i)
+  con <- gzfile(file.path(review_dir(run_dir), fn), "wb", compression = 6)
+  writeLines(toJSON(list(name = sc$Name[i], columns = names(st), numeric = unname(vapply(st, is.numeric, TRUE)), row = k, data = unname(cols)),
+                    auto_unbox = TRUE, digits = NA, na = "null", null = "null"), con); close(con)
+  fn }, "")
+for (i in seq_along(comps)) comps[[i]]$table <- tables[i]
+
 data <- list(run = basename(run_dir), level = if (pep_out) "peptide" else "protein", norm = trimws(p$stat_norm), spqc = p$comp_spqc,
              samples = design$Label, ids = design$ID, groups = design$Group, order = unique(design$Group), comps = comps, rows = main, pep = pep)
 f <- file.path(review_dir(run_dir), "10e_explore_data.json.gz")

@@ -20,16 +20,24 @@ review_explore <- function(db_path) {
     '<label><input type="checkbox" id="xpool" checked/> with the pool</label></div>',
     '<div id="xhits"></div><div id="xrecent" class="xchips"></div><p class="dmsg" id="xmsg">Loading the data...</p></section>',
     '<section id="xsel" hidden><h2 id="xtitle"></h2><p class="note" id="xinfo"></p>',
-    '<div class="grid2"><div><h3 id="xpt">', if (pep) "Peptide" else "Protein", ' value per sample</h3>',
+    '<div><h3 id="xpt">', if (pep) "Peptide" else "Protein", ' value per sample</h3>',
     '<div class="control"><label for="xpscale">Scale</label><select id="xpscale"><option value="int">intensity</option><option value="log2">log2 intensity</option></select></div>',
-    '<div id="xprot" style="height:360px" role="img" aria-label="Value per sample"></div></div>',
+    '<div id="xprot" style="height:380px" role="img" aria-label="Value per sample"></div></div>',
     '<div><h3 id="xpept">Peptides of the protein</h3>',
     '<div class="control"><label for="xscale">Scale</label><select id="xscale"><option value="log2">log2 intensity (mean &plusmn; SD)</option><option value="z">z-score (mean &plusmn; SD)</option></select>',
     '<label for="xorder">Order</label><select id="xorder"><option value="pos">position in the protein</option><option value="int">intensity</option></select></div>',
-    '<div id="xpep" style="height:360px" role="img" aria-label="Peptides of the protein, mean per group"></div><p class="note" id="xpepnote"></p></div></div>',
+    '<div id="xpep" style="height:480px" role="img" aria-label="Peptides of the protein, mean per group"></div><p class="note" id="xpepnote"></p></div>',
     '<h3>In each comparison</h3><div id="xstats"></div></section>',
+    '<section id="xtsec"><h2 id="xttitle">Comparison table</h2><p class="note">Every row and column of the comparison&apos;s Excel sheet (the app&apos;s final stats table, without the _FC2 columns). Click a row to plot it; click a column name to sort.</p>',
+    '<div class="control"><input type="search" id="xtq" placeholder="filter rows (any column)" style="font:inherit;font-size:14px;padding:3px 8px;width:18em"/>',
+    '<label><input type="checkbox" id="xtsig"/> Up/Down only</label><button type="button" id="xtcsv">Download CSV (these rows)</button><span class="note" id="xtcount"></span></div>',
+    '<div id="xtwrap" style="overflow:auto;max-height:640px;border:1px solid var(--grid)"><table id="xtab" class="xtab"></table></div>',
+    '<div class="control"><button type="button" id="xtprev">&lsaquo; previous</button><span id="xtpage"></span><button type="button" id="xtnext">next &rsaquo;</button></div></section>',
     '<style>#xhits button { display:block; width:100%; text-align:left; font:inherit; font-size:14px; padding:4px 8px; border:0; border-bottom:1px solid var(--grid); background:transparent; color:var(--text-primary); cursor:pointer; }
 #xhits button:hover, #xhits button.on { background:var(--surface-0); } #xhits small { color:var(--text-secondary); } .xup { color:#c0392b; font-weight:600; } .xdown { color:#2e6fb7; font-weight:600; }
+.xtab { border-collapse:collapse; font-size:12px; white-space:nowrap; } .xtab th { position:sticky; top:0; background:var(--surface-1); cursor:pointer; padding:4px 8px; border-bottom:2px solid var(--rule); text-align:left; }
+.xtab td { padding:2px 8px; border-bottom:1px solid var(--grid); } .xtab td.n { text-align:right; font-variant-numeric:tabular-nums; } .xtab tbody tr { cursor:pointer; } .xtab tbody tr:hover { background:var(--surface-0); }
+.xtab tr.sel td { background:var(--warn-bg); font-weight:600; } .xtab td.up { color:#c0392b; font-weight:600; } .xtab td.down { color:#2e6fb7; font-weight:600; }
 .xchips button { font:inherit; font-size:12px; margin:6px 4px 0 0; padding:1px 8px; border:1px solid var(--rule); border-radius:10px; background:transparent; color:var(--text-primary); cursor:pointer; }</style>',
     '<script>', plotly_js(), '</script><script>', EXPLORE_JS, '</script>')
   write_review_page(run_dir, "10e_explore", "Explore - protein and peptide plots", "Search any protein", "done", body)
@@ -122,9 +130,60 @@ EXPLORE_JS <- '
       // every comparison
       $("xstats").innerHTML = "<table><thead><tr><th>Comparison</th><th class=num>FC</th><th class=num>p</th><th class=num>adj p</th><th>Call</th></tr></thead><tbody>" +
         D.comps.map(cc => "<tr><td>" + esc(cc.name) + "</td><td class=num>" + fmtF(cc.fc[i]) + "</td><td class=num>" + fmtP(cc.p[i]) + "</td><td class=num>" + fmtP(cc.adj[i]) + "</td><td>" + (cc.p[i] == null ? "not tested" : (cc.call[i] || "-")) + "</td></tr>").join("") + "</tbody></table>";
+      if (window.dpdpExploreDrawn) window.dpdpExploreDrawn();
       $("xrecent").innerHTML = ""; if (recent.length > 1) recent.forEach(k => { const b = document.createElement("button"); b.textContent = rowName(k); b.onclick = () => choose(k); $("xrecent").appendChild(b); });
     }
-    ["xcomp", "xpool", "xscale", "xpscale", "xorder"].forEach(id => $(id).addEventListener("change", () => { if (id === "xcomp") $("xpool").disabled = comp.value === "all"; draw(); search(); }));
+    // --- the comparison table (its Excel sheet), loaded per comparison ---
+    const T = { cache: {}, cur: null, rows: [], sortCol: -1, sortDir: 1, page: 0, per: 50 };
+    const fmtCell = (name, v) => { if (v === null || v === undefined) return "";
+      if (typeof v !== "number") { const x = String(v); return x.length > 60 && (name === "Description" || name === "Name") ? "<span title=" + JSON.stringify(esc(x)) + ">" + esc(x.slice(0, 57)) + "...</span>" : esc(x); }
+      if (/_pval$|_adjpval$|_limma$/.test(name)) return v.toExponential(2);
+      if (/_FC$|_CV$|_mf$|_cohensd$/.test(name)) return v.toFixed(2);
+      return Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("en-US") : String(v); };
+    function loadTable() {
+      const c = cur(); if (!c || !c.table) { $("xtsec").hidden = true; return; }
+      $("xtsec").hidden = false; $("xttitle").textContent = "Comparison table: " + c.name;
+      if (T.cache[c.table]) { T.cur = T.cache[c.table]; filterTable(true); return; }
+      $("xtcount").textContent = "loading...";
+      fetch(c.table).then(r => r.json()).then(t => { T.cache[c.table] = t; T.cur = t; T.sortCol = -1; filterTable(true); })
+        .catch(() => { $("xtcount").textContent = "Could not load the table (re-run Step 10e)."; });
+    }
+    function filterTable(jump) {
+      const t = T.cur; if (!t) return; const q = lower($("xtq").value.trim()), sig = $("xtsig").checked, nrow = t.row.length;
+      const si = t.columns.indexOf("Stats"); let rows = [];
+      for (let r = 0; r < nrow; r++) {
+        if (sig && si >= 0 && !t.data[si][r]) continue;
+        if (q && !t.data.some((col, j) => !t.numeric[j] && col[r] != null && lower(col[r]).includes(q))) continue;
+        rows.push(r); }
+      if (T.sortCol >= 0) { const col = t.data[T.sortCol], num = t.numeric[T.sortCol];
+        rows.sort((a, b) => { const x = col[a], y = col[b]; if (x == null) return 1; if (y == null) return -1; return (num ? x - y : String(x).localeCompare(String(y))) * T.sortDir; }); }
+      T.rows = rows; T.page = 0; renderTable(jump === true);
+    }
+    function renderTable(jump) {
+      const t = T.cur; if (!t) return;
+      if (jump && sel >= 0) { const at = T.rows.findIndex(r => t.row[r] === sel); if (at >= 0) T.page = Math.floor(at / T.per); }
+      const pages = Math.max(1, Math.ceil(T.rows.length / T.per)); T.page = Math.min(T.page, pages - 1);
+      const part = T.rows.slice(T.page * T.per, (T.page + 1) * T.per);
+      $("xtab").innerHTML = "<thead><tr>" + t.columns.map((c, j) => "<th data-j=" + j + ">" + esc(c) + (T.sortCol === j ? (T.sortDir > 0 ? " &#9650;" : " &#9660;") : "") + "</th>").join("") + "</tr></thead><tbody>" +
+        part.map(r => "<tr data-r=" + r + (t.row[r] === sel ? " class=sel" : "") + ">" + t.columns.map((c, j) => { const v = t.data[j][r];
+          return "<td class=" + JSON.stringify((t.numeric[j] ? "n" : "") + (c === "Stats" && v ? " " + lower(v) : "")) + ">" + fmtCell(c, v) + "</td>"; }).join("") + "</tr>").join("") + "</tbody>";
+      $("xtcount").textContent = T.rows.length.toLocaleString("en-US") + " of " + t.row.length.toLocaleString("en-US") + " rows";
+      $("xtpage").textContent = " page " + (T.page + 1) + " of " + pages + " ";
+      $("xtprev").disabled = T.page === 0; $("xtnext").disabled = T.page >= pages - 1;
+    }
+    $("xtab").addEventListener("click", e => { const th = e.target.closest("th"), tr = e.target.closest("tbody tr");
+      if (th) { const j = +th.dataset.j; T.sortDir = T.sortCol === j ? -T.sortDir : (T.cur.numeric[j] ? 1 : 1); T.sortCol = j; filterTable(); return; }
+      if (tr) { const k = T.cur.row[+tr.dataset.r]; if (k >= 0) { choose(k); document.getElementById("xsel").scrollIntoView({ behavior: "smooth" }); } } });
+    let t1; $("xtq").addEventListener("input", () => { clearTimeout(t1); t1 = setTimeout(() => filterTable(), 200); });
+    $("xtsig").addEventListener("change", () => filterTable());
+    $("xtprev").onclick = () => { T.page--; renderTable(false); }; $("xtnext").onclick = () => { T.page++; renderTable(false); };
+    $("xtcsv").onclick = () => { const t = T.cur; if (!t) return; const DQ = String.fromCharCode(34), NL = String.fromCharCode(10);
+      const q = v => { if (v == null) return ""; const x = String(v); return (x.includes(DQ) || x.includes(",") || x.includes(NL)) ? DQ + x.split(DQ).join(DQ + DQ) + DQ : x; };
+      const csv = [t.columns.map(q).join(",")].concat(T.rows.map(r => t.columns.map((_, k) => q(t.data[k][r])).join(","))).join(NL);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = D.run + "_" + t.name + "_table.csv"; document.body.appendChild(a); a.click(); a.remove(); };
+    window.dpdpExploreDrawn = () => { if (T.cur) renderTable(true); };
+    ["xcomp", "xpool", "xscale", "xpscale", "xorder"].forEach(id => $(id).addEventListener("change", () => { if (id === "xcomp") { $("xpool").disabled = comp.value === "all"; loadTable(); } draw(); search(); }));
+    loadTable();
     msg.textContent = "";
     // start: the protein in the URL (#accession), else the top hit of the first comparison
     const h = decodeURIComponent(location.hash.slice(1));

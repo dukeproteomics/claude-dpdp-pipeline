@@ -173,6 +173,9 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   calls in every comparison. Data in `review/10e_explore_data.json.gz` (served with Content-Encoding gzip by both servers; 10658:
   15,114 proteins / 231,445 peptides = 9.4 MB, 11517: 6.3 MB, test_project: 3.8 MB), built in ~4 s. In the replay (redo) after
   10b/10c. Tested in headless Chrome on 10658 (ADH1), 11517 (phospho sites) and test_project (Actb).
+- Then (user): plots stacked full width; the comparison's full table (its Excel sheet: the _final table without _FC2), one file per
+  comparison, filter / Up/Down only / sort / pages / CSV, row click plots it. Tested on 10658 (14,998 rows, 21 columns) and 11517
+  (73,675 peptide rows, 31 columns).
 
 ## Chart downloads (user, 2026-11-13)
 - Every Plotly chart on every page (COMMON_JS in review.R wraps Plotly.newPlot / react): "PNG (email/slides)" at 3x (~300 dpi at a
