@@ -413,6 +413,61 @@ sample_charts <- function(m, labels, groups, id, ref = list(), title_suffix = ""
 
 # Group colour = categorical slot by the group's position in the run's group order (entity, not rank; 8 slots, validated).
 COMMON_JS <- '
+// Chart downloads (user, 2026-11-13): every Plotly chart gets "PNG (email/slides)" (3x, ~300 dpi) and "SVG (report)" buttons
+// instead of the camera. The file has a white background and dark text (also from dark mode), the chart title and run, and a
+// clear name; it shows the chart as it is on screen (zoom, hidden groups, slider settings).
+(function () {
+  const lum = c => { const e = document.createElement("span"); e.style.color = c; document.body.appendChild(e);
+    const m = getComputedStyle(e).color.match(/[\\d.]+/g) || [0, 0, 0]; e.remove(); return (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) / 255; };
+  const ink = c => (c && lum(c) > 0.6 ? "#222222" : c);
+  const titleOf = gd => { let n = gd;
+    for (let k = 0; k < 6 && n; k++) { let p = n.previousElementSibling;
+      while (p) { if (/^H[1-4]$/.test(p.tagName)) return p.textContent.trim(); const h = p.querySelector && p.querySelector("h3,h2"); if (h && p.tagName !== "SCRIPT") return h.textContent.trim(); p = p.previousElementSibling; }
+      n = n.parentElement; if (n && /^H[1-4]$/.test((n.firstElementChild || {}).tagName || "")) return n.firstElementChild.textContent.trim(); }
+    return gd.getAttribute("aria-label") || gd.id || "chart"; };
+  // the chart choices (menus in the controls just above it, e.g. the volcano comparison)
+  const choicesOf = gd => { let p = gd.previousElementSibling, k = 0;
+    while (p && k++ < 4 && !(p.classList && p.classList.contains("control"))) p = p.previousElementSibling;
+    if (!p || !p.classList || !p.classList.contains("control")) return "";
+    return Array.from(p.querySelectorAll("select")).map(s => (s.selectedOptions[0] || {}).textContent || "").filter(Boolean).join(", "); };
+  const slug = t => t.replace(/[^A-Za-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120);
+  async function exportChart(gd, fmt) {
+    const run = ((document.querySelector("header .meta b") || {}).textContent || "").trim();
+    const step = location.pathname.split("/").pop().replace(/\\.html$/, "");
+    const ch = choicesOf(gd), ttl = titleOf(gd) + (ch ? " - " + ch : ""), fl = gd._fullLayout || {}, L = JSON.parse(JSON.stringify(gd.layout || {}));
+    Object.assign(L, { paper_bgcolor: "#ffffff", plot_bgcolor: "#ffffff" });
+    L.font = Object.assign({}, L.font, { color: "#333333" });
+    Object.keys(fl).filter(k => /^[xy]axis\\d*$/.test(k)).forEach(k => { L[k] = Object.assign({}, L[k], { gridcolor: "#e6e6e6", zerolinecolor: "#bbbbbb", linecolor: "#999999", color: "#333333" }); });
+    (L.annotations || []).forEach(a => { a.font = Object.assign({}, a.font, { color: ink((a.font || {}).color) || "#222222" }); if (a.bgcolor && lum(a.bgcolor) < 0.4) a.bgcolor = "#ffffff"; });
+    (L.shapes || []).forEach(sh => { if (sh.line) sh.line.color = ink(sh.line.color); });
+    if (L.legend) L.legend = Object.assign({}, L.legend, { font: Object.assign({}, (L.legend || {}).font, { color: "#333333" }) });
+    // title at the very top (run name on the same line), the legend below it if it sits above the plot
+    L.title = { text: ttl + (run ? "  <span style=\\"font-size:11px;color:#777\\">" + run + "</span>" : ""), x: 0.01, xanchor: "left",
+                y: 0.985, yref: "container", yanchor: "top", font: { size: 15, color: "#111111" } };
+    const lg = fl.legend || {}, legendTop = fl.showlegend !== false && lg.orientation === "h" && (lg.y === undefined || lg.y > 1);
+    L.margin = Object.assign({}, fl.margin, L.margin); L.margin.t = Math.max(L.margin.t || 0, legendTop ? 105 : 60);
+    const w = fl.width || gd.clientWidth || 900, h = (fl.height || gd.clientHeight || 500) + 40;
+    const data = JSON.parse(JSON.stringify(gd.data, (k, v) => (v instanceof Float64Array || v instanceof Float32Array || v instanceof Int32Array ? Array.from(v) : v)));
+    const url = await window.Plotly.toImage({ data: data, layout: L }, { format: fmt, width: w, height: h, scale: fmt === "png" ? 3 : 1 });
+    const a = document.createElement("a"); a.href = url; a.download = slug([run, step, ttl].filter(Boolean).join("_")) + "." + fmt;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function patch(P) {
+    if (!P || P.__dpdp) return; P.__dpdp = true;
+    const btns = () => [
+      { name: "PNG (email/slides)", title: "Download PNG (email, slides; high resolution, white background)", icon: P.Icons.camera, click: gd => exportChart(gd, "png") },
+      { name: "SVG (report)", title: "Download SVG (reports: Word, PowerPoint; sharp at any size)", icon: P.Icons.disk, click: gd => exportChart(gd, "svg") }];
+    const cfg = c => Object.assign({}, c, { displaylogo: false, displayModeBar: "hover",   // every chart gets the download buttons modeBarButtonsToRemove: ((c || {}).modeBarButtonsToRemove || []).concat(["toImage"]),
+      modeBarButtonsToAdd: ((c || {}).modeBarButtonsToAdd || []).concat(btns()) });
+    ["newPlot", "react"].forEach(fn => { const orig = P[fn];
+      P[fn] = function (gd, data, layout, config) {
+        if (data && !Array.isArray(data) && typeof data === "object" && data.data) { data = Object.assign({}, data, { config: cfg(data.config) }); return orig.call(this, gd, data); }
+        return orig.call(this, gd, data, layout, cfg(config)); }; });
+  }
+  if (window.Plotly) patch(window.Plotly);
+  else { let P; Object.defineProperty(window, "Plotly", { configurable: true, enumerable: true, get() { return P; }, set(v) { P = v; patch(v); } }); }
+  window.dpdpExportChart = exportChart;
+})();
 window.DPDP_GCOL = function (g, order) { const i = Math.max(0, (order || []).indexOf(g));
   return getComputedStyle(document.querySelector(".viz-root")).getPropertyValue("--series-" + ((i % 8) + 1)).trim(); };
 '

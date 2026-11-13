@@ -227,7 +227,7 @@ function vdraw() {
 vdraw();
 const GC = g => DPDP_GCOL(g, D.order);
 const byGroup = (groups, f) => D.order.filter(g => groups.includes(g)).map(g => f(g, groups.map((x, i) => x === g ? i : -1).filter(i => i >= 0)));
-if (D.sg) {
+if (D.sg && document.getElementById("pset")) {   // no sample graphs section when 10b has no usable sets
   const ps = document.getElementById("pset"), pcs = document.getElementById("pcs");
   function sgdraw() {
     const s = D.sg[ps.value], ax2 = pcs.value;

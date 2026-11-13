@@ -165,6 +165,14 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
     none with no preview (chat and page, on an old-style summary without settings), fixed without a preview refused, bare apply
     after a dynamic preview applied dynamic.
 
+## Chart downloads (user, 2026-11-13)
+- Every Plotly chart on every page (COMMON_JS in review.R wraps Plotly.newPlot / react): "PNG (email/slides)" at 3x (~300 dpi at a
+  normal width) and "SVG (report)" instead of the camera; the toolbar shows on hover on every chart (also those that had it off).
+  The file: white background and dark text (also from dark mode), the chart heading plus its menu choices (e.g. the volcano's
+  comparison, p type, cutoff) and the run as title, the chart as on screen; name <run>_<step>_<title>.png/.svg.
+- Checked: volcano (3414 x 1680 PNG, SVG), Noise inflection plot exported from dark mode, buttons on all charts of Noise and Filter.
+  Also fixed a script error on Stats pages without sample graphs (pset missing).
+
 ## Stats extra columns checked (2026-11-13, throwaway 11531 run, perseus + iq_maxlfq)
 - Cohen's d: matches effsize::cohen.d (unpooled, Hedges) exactly; Hedges shrinks |d| x0.80 at 3 v 3, x0.89 at 6 v 3; sign = FC sign.
   On raw intensities (app), not log2 like the t-test: rank cor 0.94 with log2 d. Unpaired even with pair_comp.

@@ -88,6 +88,10 @@ peptides, and the protein level isn't used except to name a peptide's protein an
 
 To reuse a finished run's settings: most steps take `--settings_from=<that run's .db>`. The analyst still approves each step.
 
+**Charts for emails and reports:** every chart on the pages has two buttons in its toolbar (hover over the chart): **PNG
+(email/slides)**, high resolution, and **SVG (report)**, vector for Word / PowerPoint. White background, titled with the chart,
+its settings and the run. Tell the analyst when they ask how to get a graph out.
+
 ## Going back to an earlier step (user, 2026-11-13)
 Each step works on the result of the one before, so changing a step makes every later step out of date. The run is changed in
 place, with a backup. Pages of out-of-date steps show a red **Out of date** banner and the web app's step bar marks them.
