@@ -194,6 +194,61 @@ if (as_flag(settings$pathway_gsea)) {
   if (!is.null(gsea_note)) cat("GSEA not run:", gsea_note, "\n")
 }
 
+# --- GO with the hierarchy (topGO weight01, Alexa et al. 2006: a parent term's signal coming from a child term is discounted),
+# Up and Down separately against the tested proteins; then terms that mean nearly the same thing are grouped (GOSemSim, Wang
+# graph similarity, which needs no organism database): one representative per group (the most significant).
+go_note <- NULL
+if (as_flag(settings$pathway_topgo) && as_flag(settings$pathway_go)) {
+  suppressPackageStartupMessages({ library(topGO); library(GOSemSim) })
+  ga <- tryCatch(string_terms(taxon, file.path(dirname(run_dir), ".dpdp_cache"), c("Process", "Function", "Component")), error = function(e) { go_note <<- conditionMessage(e); NULL })
+  if (!is.null(ga)) {
+    onts <- c(BP = "Process", MF = "Function", CC = "Component")
+    semd <- list()
+    for (i in seq_along(results)) {
+      cs <- comp_sets[[i]]; bg <- unique(na.omit(sid[cs$prot$acc]))
+      hits <- list(up = unique(na.omit(sid[cs$up])), down = unique(na.omit(sid[cs$down])))
+      res_go <- list()
+      for (o in names(onts)) {
+        an <- ga[ga$category == onts[[o]] & ga$id %in% bg, ]
+        g2go <- split(an$term, an$id); uni <- names(g2go)
+        res_go[[o]] <- lapply(hits, function(h) {
+          h <- intersect(h, uni)
+          if (length(h) < 3) return(list(terms = data.frame(), note = sprintf("%d annotated hits: too few to test.", length(h))))
+          allg <- factor(as.integer(uni %in% h), levels = c(0, 1)); names(allg) <- uni
+          gd <- suppressMessages(new("topGOdata", ontology = o, allGenes = allg, annot = annFUN.gene2GO, gene2GO = g2go, nodeSize = 5))
+          rw <- suppressMessages(runTest(gd, algorithm = "weight01", statistic = "fisher")); rc <- suppressMessages(runTest(gd, algorithm = "classic", statistic = "fisher"))
+          pw <- score(rw); pc <- score(rc)[names(pw)]
+          st <- termStat(gd, names(pw))
+          k <- names(pw)[pw <= settings$pathway_topgo_p & st[names(pw), "Significant"] >= settings$pathway_min_genes]
+          if (!length(k)) return(list(terms = data.frame(), note = sprintf("No GO term with weight01 p <= %s.", settings$pathway_topgo_p)))
+          t <- data.frame(term = k, description = unname(vapply(k, function(x) tryCatch(AnnotationDbi::Term(GO.db::GOTERM[[x]]), error = function(e) x), "")),
+                          annotated = st[k, "Annotated"], hits = st[k, "Significant"], expected = round(st[k, "Expected"], 2),
+                          fold = round(st[k, "Significant"] / pmax(st[k, "Expected"], 1e-9), 2), p = signif(pw[k], 3), p_classic = signif(pc[k], 3), stringsAsFactors = FALSE)
+          t <- t[order(t$p, -t$fold), ]
+          mem <- genesInTerm(gd, t$term); t$ids <- lapply(t$term, function(x) intersect(mem[[x]], h))
+          # group similar terms
+          t$group <- seq_len(nrow(t)); t$representative <- TRUE
+          if (nrow(t) >= 2) {
+            if (is.null(semd[[o]])) semd[[o]] <<- suppressMessages(godata(ont = o, computeIC = FALSE))
+            m <- suppressWarnings(mgoSim(t$term, t$term, semData = semd[[o]], measure = "Wang", combine = NULL))
+            m[is.na(m)] <- 0; diag(m) <- 1
+            cl <- cutree(hclust(as.dist(1 - m[t$term, t$term]), method = "average"), h = 1 - settings$pathway_topgo_sim)
+            rep_of <- tapply(seq_len(nrow(t)), cl, min)          # rows are sorted by p: the first of a group is its most significant term
+            t$group <- match(cl, unique(cl))                     # groups numbered by their most significant term
+            t$representative <- seq_len(nrow(t)) %in% rep_of
+          }
+          list(terms = t, note = sprintf("%d GO terms with weight01 p <= %s in %d groups (%d annotated hits of %d tested proteins).",
+                                         nrow(t), settings$pathway_topgo_p, length(unique(t$group)), length(h), length(uni)))
+        })
+      }
+      results[[i]]$go <- res_go
+      for (o in names(res_go)) for (d in c("up", "down")) for (x in unlist(res_go[[o]][[d]]$terms$ids)) if (is.null(results[[i]]$names[[x]])) results[[i]]$names[[x]] <- unname(sname[x])
+      cat(sprintf("  GO %s: %s\n", cs$name, paste(vapply(names(res_go), function(o) sprintf("%s up %d / down %d", o, NROW(res_go[[o]]$up$terms), NROW(res_go[[o]]$down$terms)), ""), collapse = ", ")))
+    }
+  }
+  if (!is.null(go_note)) cat("GO (topGO) not run:", go_note, "\n")
+}
+
 # Excel: the term tables (Up, Down) and the network proteins of each comparison
 xdir <- file.path(run_dir, "Pathway"); dir.create(xdir, showWarnings = FALSE)
 xf <- file.path(xdir, sprintf("Pathway_STRING_%s.xlsx", trimws(p$stat_norm)))
@@ -216,6 +271,10 @@ for (i in seq_along(results)) {
   if (!is.null(r$gsea) && NROW(r$gsea$all_top)) { sh <- sprintf("C%d GSEA", i); openxlsx::addWorksheet(wb, sh); t <- r$gsea$all_top
     t$leading_edge <- vapply(t$leading, function(x) paste(unname(sname[x]), collapse = ", "), ""); t$leading <- NULL
     openxlsx::writeData(wb, sh, data.frame(Comparison = r$name, Note = r$gsea$note), startRow = 1); openxlsx::writeDataTable(wb, sh, t, startRow = 3, tableStyle = "TableStyleLight9") }
+  if (!is.null(r$go)) { gt <- do.call(rbind, lapply(names(r$go), function(o) do.call(rbind, lapply(c("up", "down"), function(d) { t <- r$go[[o]][[d]]$terms
+      if (!NROW(t)) return(NULL); t$proteins <- vapply(t$ids, function(x) paste(unname(sname[x]), collapse = ", "), ""); t$ids <- NULL
+      cbind(ontology = o, direction = d, t) }))))
+    if (NROW(gt)) { sh <- sprintf("C%d GO topGO", i); openxlsx::addWorksheet(wb, sh); openxlsx::writeDataTable(wb, sh, gt, tableStyle = "TableStyleLight9") } }
   if (!is.null(r$network)) { sh <- sprintf("C%d network", i); openxlsx::addWorksheet(wb, sh); openxlsx::writeDataTable(wb, sh, r$network$nodes[, c("name", "acc", "gene", "fc", "p", "call", "cluster", "degree")], tableStyle = "TableStyleLight9") }
 }
 openxlsx::saveWorkbook(wb, xf, overwrite = TRUE)
@@ -228,7 +287,7 @@ summary <- list(step = "11_pathway", action = "preview", db_path = db_path, sett
                   top_down = if (NROW(r$down$terms)) head(paste0(r$down$terms$description, " (", r$down$terms$source, ", FDR ", r$down$terms$fdr, ")"), 5) else list(),
                   network_proteins = NROW(r$network$nodes), network_edges = NROW(r$network$edges),
                   gsea_terms = NROW(r$gsea$terms), top_gsea = if (NROW(r$gsea$terms)) head(paste0(r$gsea$terms$description, " (NES ", r$gsea$terms$NES, ", FDR ", r$gsea$terms$fdr, ")"), 5) else list())),
-                gsea_note = gsea_note)
+                gsea_note = gsea_note, go_note = go_note)
 write_summary(summary, sd)
 write_json(results, file.path(sd, "results.json"), auto_unbox = TRUE, digits = NA, na = "null", null = "null")
 cat("\nExcel:", xf, "\nReview page:", review_pathway(db_path), "\n>>> Waiting for the analyst's review.\n")

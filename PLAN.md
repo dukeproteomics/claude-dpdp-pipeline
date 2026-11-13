@@ -173,6 +173,13 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   across comparisons (ORA or GSEA). Checked in headless Chrome (screens of every chart).
 - Next (steps 2-3): topGO weight01 GO with GOSemSim grouping; term drill-down (volcano, heatmap); GO slim profile.
 
+## Pathway step 2: GO with the hierarchy (topGO weight01) and grouping (GOSemSim) (user, 2026-11-13)
+- 11_pathway.R: topGO weight01 + classic Fisher per comparison x Up/Down x BP/MF/CC, background = tested proteins with GO
+  annotation (STRING species file), weight01 p <= 0.01; GOSemSim Wang similarity (godata without an OrgDb), average-linkage groups
+  at 1 - 0.7; Excel sheet C<n> GO topGO. ~1 min more for 11517 (4 comparisons).
+- Page: GO section (ontology, Up/Down, groups table with expand, bars or treemap, click -> network highlight + proteins); GO in the
+  overview. 11517 KO_37_v_KO_30: Down BP 7 terms (STRING ORA 34), Up groups signal transduction + stress-activated MAPK cascade.
+
 ## Step 12 Phospho: Kinase Library, logos, motif-x (user, 2026-11-13; UniProt sequences, kinase-library installed)
 - `pipeline/phospho_motifs.R` (UniProt FASTA by accession, cached; site table from Protein_PTM_Loc + Local2; 15-mer windows checked
   against the residue; pLogo-style logo; motif-x re-implemented), `pipeline/kinase_library_run.py` (kinase-library 1.8: percentile rank

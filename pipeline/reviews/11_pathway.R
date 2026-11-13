@@ -42,8 +42,15 @@ review_pathway <- function(db_path) {
     '<div id="pwgterms" style="max-height:420px;overflow:auto"></div>',
     '<h3 id="pwgest">Enrichment plot</h3><p class="note">Click a gene set in the table to draw its running enrichment score (the classic GSEA plot): the curve rises where the set&apos;s proteins sit among the highest-ranked (up) proteins, falls where they sit among the lowest.</p>',
     '<div id="pwgrun" style="height:380px" role="img" aria-label="GSEA running enrichment score"></div></section>',
+    '<section><h2>GO with the hierarchy (topGO, grouped)</h2><p class="note" id="pwgonote"></p>',
+    '<div class="control"><label for="pwgoont">Ontology</label><select id="pwgoont"><option value="BP">biological process</option><option value="MF">molecular function</option><option value="CC">cellular component</option></select>',
+    '<span class="pwdir" id="pwgodir"><button type="button" data-dir="up" class="on">Up</button><button type="button" data-dir="down">Down</button></span>',
+    '<label for="pwgochart">Chart</label><select id="pwgochart"><option value="bar">groups (bars)</option><option value="tree">groups and terms (treemap)</option></select></div>',
+    '<div id="pwgochartdiv" style="height:480px" role="img" aria-label="GO term groups"></div>',
+    '<div id="pwgoterms" style="max-height:460px;overflow:auto"></div>',
+    '<p class="note">weight01 p: topGO&apos;s test that discounts a parent term&apos;s signal coming from a more specific child term (not corrected for multiple testing, as its authors advise); classic p: the plain Fisher test for comparison. Groups: terms with GOSemSim similarity above the cutoff; the first (most significant) term represents the group. Click a term to highlight its proteins in the network below.</p></section>',
     '<section><h2>Overview across comparisons</h2><p class="note">The top terms of every comparison side by side: what is shared and what is specific. Over-representation: colour = direction (Up red, Down blue) and -log10 FDR, size = hits. GSEA: colour = NES, size = -log10 FDR. Empty = not significant there.</p>',
-    '<div class="control"><label for="pwomethod">Method</label><select id="pwomethod"><option value="ora">over-representation</option><option value="gsea">GSEA</option></select>',
+    '<div class="control"><label for="pwomethod">Method</label><select id="pwomethod"><option value="ora">over-representation</option><option value="gsea">GSEA</option><option value="go">GO (topGO, biological process)</option></select>',
     '<label for="pwosrc">Source</label><select id="pwosrc"></select><label for="pwotopn">Top per comparison</label><select id="pwotopn"><option>5</option><option selected>8</option><option>12</option><option>20</option></select></div>',
     '<div id="pwoverview" style="height:640px" role="img" aria-label="Terms across comparisons"></div></section>',
     '<section><h2>Network of the hits</h2><p class="note">STRING interactions among the Up (red) and Down (blue) proteins; size = fold change. Clusters: Louvain on the confidence scores. ',
@@ -53,7 +60,7 @@ review_pathway <- function(db_path) {
     '<div id="pwnet" style="height:720px" role="img" aria-label="STRING network of the hits"></div><p class="note" id="pwnetnote"></p>',
     '<h3>Clusters</h3><div id="pwclusters"></div><h3 id="pwmemt">Proteins</h3><div id="pwmembers" style="max-height:420px;overflow:auto"></div></section>',
     '<style>.pwdir button { font:inherit; padding:3px 12px; border:1px solid var(--accent); background:transparent; color:var(--accent); cursor:pointer; }',
-    '.pwdir button.on { background:var(--accent); color:#fff; } #pwterms table tbody tr, #pwclusters tbody tr { cursor:pointer; }',
+    '.pwdir button.on { background:var(--accent); color:#fff; } .gotog { font:inherit; font-size:11px; padding:0 5px; border:1px solid var(--rule); border-radius:8px; background:transparent; color:var(--text-secondary); cursor:pointer; } #pwterms table tbody tr, #pwclusters tbody tr { cursor:pointer; }',
     '#pwterms tr.sel td, #pwclusters tr.sel td { background:var(--warn-bg); font-weight:600; } #pwlink { margin-left:12px; }</style>',
     '<script>', plotly_js(), '</script><script>window.DPDP_PW = ', toJSON(list(run = basename(run_dir), comps = res, has_explore = file.exists(file.path(run_dir, "review", "10e_explore.html"))),
       auto_unbox = TRUE, digits = NA, null = "null", na = "null"), ';</script><script>', PATHWAY_JS, '</script>') else "")
@@ -83,10 +90,11 @@ PATHWAY_JS <- '
           "</td><td class=num>" + (+t.fold).toFixed(2) + "</td><td class=num>" + (+t.fdr).toExponential(1) + "</td><td>" + esc(names.slice(0, 8).join(", ")) + (names.length > 8 ? ", ..." : "") + "</td></tr>"; }).join("") + "</tbody></table>"
       : "<p class=note>No terms.</p>";
   }
-  $("pwterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; const k = +tr.dataset.k; selTerm = selTerm === k ? null : k; selCluster = null; drawTerms(); drawNet(); members(); });
+  $("pwterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; const k = +tr.dataset.k; window.__pwGoSel = null; selTerm = selTerm === k ? null : k; selCluster = null; drawTerms(); drawNet(); members(); });
   // network
   const log2fc = f => f == null ? 0 : Math.sign(f) * Math.log2(Math.abs(f));
   function highlighted() { const net = W.comps[ci].network; if (!net) return null;
+    if (window.__pwGoSel) return new Set(window.__pwGoSel.ids || []);
     if (selTerm !== null) return new Set(terms()[selTerm].ids || []);
     if (selCluster !== null) return new Set(net.nodes.filter(n => n.cluster === selCluster).map(n => n.id));
     return null; }
@@ -131,7 +139,7 @@ PATHWAY_JS <- '
     if (!H) { $("pwmemt").textContent = "Proteins"; $("pwmembers").innerHTML = "<p class=note>Click a term or a cluster to list its proteins.</p>"; return; }
     const byId = Object.assign({}, W.comps[ci].hits || {}); ((net && net.nodes) || []).forEach(n => { byId[n.id] = Object.assign({}, byId[n.id], n); });
     const ids = [...H].sort((a, b) => ((byId[a] || {}).p ?? 2) - ((byId[b] || {}).p ?? 2));
-    $("pwmemt").textContent = (selTerm !== null ? terms()[selTerm].description : "Cluster " + selCluster) + ": " + ids.length + " proteins";
+    $("pwmemt").textContent = (window.__pwGoSel ? window.__pwGoSel.description : selTerm !== null ? terms()[selTerm].description : "Cluster " + selCluster) + ": " + ids.length + " proteins";
     $("pwmembers").innerHTML = "<table><thead><tr><th>Protein</th><th>Accession</th><th class=num>FC</th><th class=num>p</th><th>Call</th></tr></thead><tbody>" +
       ids.map(id => { const n = byId[id]; const nm = n ? n.name : nameOf(id);
         const a = n ? (W.has_explore ? "<a href=\\"10e_explore.html#" + encodeURIComponent(n.acc) + "\\" target=_blank>" + esc(n.acc) + "</a>" : esc(n.acc)) : "";
@@ -139,11 +147,11 @@ PATHWAY_JS <- '
           "</td><td>" + (n ? esc(n.call) : "") + "</td></tr>"; }).join("") + "</tbody></table>";
   }
   $("pwcomp").addEventListener("change", () => { ci = +$("pwcomp").value; selTerm = null; selCluster = null; fillSources(); drawTerms(); drawNet(); members(); });
-  document.querySelectorAll(".pwdir button").forEach(b => b.addEventListener("click", () => { dir = b.dataset.dir; document.querySelectorAll(".pwdir button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".pwdir:not(#pwgodir) button").forEach(b => b.addEventListener("click", () => { dir = b.dataset.dir; document.querySelectorAll(".pwdir:not(#pwgodir) button").forEach(x => x.classList.toggle("on", x === b));
     selTerm = null; fillSources(); drawTerms(); drawNet(); members(); }));
   ["pwsrc", "pwq"].forEach(id => $(id).addEventListener("input", drawTerms));
   ["pwcolor", "pwlabels", "pwiso"].forEach(id => $(id).addEventListener("change", drawNet));
-  $("pwclear").onclick = () => { selTerm = null; selCluster = null; drawTerms(); drawNet(); members(); };
+  $("pwclear").onclick = () => { window.__pwGoSel = null; selTerm = null; selCluster = null; drawTerms(); drawNet(); members(); if (window.__pwGoDraw) window.__pwGoDraw(); };
   // --- publication charts: top over-represented terms ---
   const short = (t, n) => (t.length > n ? t.slice(0, n - 3) + "..." : t);
   const lfdr = v => -Math.log10(Math.max(+v, 1e-300));
@@ -217,6 +225,42 @@ PATHWAY_JS <- '
   }
   $("pwgterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; gsel = tr.dataset.t; gseaDraw(); $("pwgrun").scrollIntoView({ behavior: "smooth", block: "center" }); });
   ["pwgsrc", "pwgq", "pwgtopn"].forEach(id => $(id).addEventListener("input", gseaDraw));
+  // --- GO (topGO, grouped) ---
+  let godir = "up", open_ = new Set();
+  function goData() { const g = W.comps[ci].go; return g ? (g[$("pwgoont").value] || {})[godir] : null; }
+  function goDraw() {
+    const d = goData();
+    if (!W.comps[ci].go) { $("pwgonote").textContent = "GO (topGO) was not run (switch it on in the options)."; Plotly.purge("pwgochartdiv"); $("pwgoterms").innerHTML = ""; return; }
+    const T = (d && d.terms) || []; $("pwgonote").textContent = W.comps[ci].name + ", " + (godir === "up" ? "Up" : "Down") + ": " + ((d && d.note) || "");
+    if (!T.length) { Plotly.purge("pwgochartdiv"); $("pwgoterms").innerHTML = "<p class=note>No term.</p>"; return; }
+    const groups = {}; T.forEach(t => { (groups[t.group] = groups[t.group] || []).push(t); });
+    const G2 = Object.keys(groups).map(k => groups[k]).sort((a, b) => a[0].p - b[0].p), col = godir === "up" ? UP : DOWN;
+    if ($("pwgochart").value === "bar") {
+      const R = G2.slice(0, 25).reverse();
+      Plotly.react("pwgochartdiv", [{ type: "bar", orientation: "h", y: R.map(g => short(g[0].description, 55) + (g.length > 1 ? " (+" + (g.length - 1) + ")" : "")), x: R.map(g => lfdr(g[0].p)),
+        marker: { color: col }, customdata: R.map(g => [g[0].term, g[0].hits, g[0].annotated, g[0].fold, g[0].p, g.slice(1).map(t => t.description).join("; ")]),
+        hovertemplate: "%{y}<br>%{customdata[0]}: %{customdata[1]} of %{customdata[2]}, fold %{customdata[3]}, weight01 p %{customdata[4]:.2g}<br>%{customdata[5]}<extra></extra>" }],
+        Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 50 }, xaxis: { title: "-log10 p (topGO weight01)", gridcolor: C("--grid") }, yaxis: { automargin: true, tickfont: { size: 11 } } }), cfg);
+    } else {
+      const ids = [], labels = [], parents = [], values = [], colors = [];
+      G2.forEach((g, k) => { const gid = "g" + k; ids.push(gid); labels.push(short(g[0].description, 40)); parents.push(""); values.push(0); colors.push(PAL[k % PAL.length]);
+        g.forEach(t => { ids.push(gid + "/" + t.term); labels.push(short(t.description, 40)); parents.push(gid); values.push(lfdr(t.p)); colors.push(PAL[k % PAL.length]); }); });
+      Plotly.react("pwgochartdiv", [{ type: "treemap", ids, labels, parents, values, branchvalues: "remainder", marker: { colors }, textinfo: "label",
+        hovertemplate: "%{label}<br>-log10 p %{value:.2f}<extra></extra>", tiling: { pad: 2 } }], Object.assign(bp(), { margin: { l: 4, r: 4, t: 4, b: 4 } }), cfg);
+    }
+    const row = (t, rep, n) => "<tr data-term=\\"" + t.term + "\\"" + (window.__pwGoSel && window.__pwGoSel.term === t.term ? " class=sel" : "") + (rep ? "" : " style=\\"font-size:12px\\"") + "><td>" +
+      (rep ? (n > 1 ? "<button type=button class=gotog data-g=\\"" + t.group + "\\">" + (open_.has(String(t.group)) ? "&minus;" : "+") + (n - 1) + "</button> " : "") + "<b>" + esc(t.description) + "</b>" : "&nbsp;&nbsp;&nbsp;&#8627; " + esc(t.description)) +
+      " <small>" + t.term + "</small></td><td class=num>" + t.hits + " / " + t.annotated + "</td><td class=num>" + t.expected + "</td><td class=num>" + (+t.fold).toFixed(2) + "</td><td class=num>" + (+t.p).toExponential(1) +
+      "</td><td class=num>" + (+t.p_classic).toExponential(1) + "</td><td>" + esc((t.ids || []).slice(0, 8).map(nameOf).join(", ")) + ((t.ids || []).length > 8 ? ", ..." : "") + "</td></tr>";
+    $("pwgoterms").innerHTML = "<table><thead><tr><th>GO term (group)</th><th class=num>Hits / annotated</th><th class=num>Expected</th><th class=num>Fold</th><th class=num>weight01 p</th><th class=num>classic p</th><th>Proteins</th></tr></thead><tbody>" +
+      G2.map(g => row(g[0], true, g.length) + (open_.has(String(g[0].group)) ? g.slice(1).map(t => row(t, false, 0)).join("") : "")).join("") + "</tbody></table>";
+  }
+  window.__pwGoDraw = goDraw;
+  $("pwgoterms").addEventListener("click", e => { const b = e.target.closest("button.gotog"); if (b) { const g = b.dataset.g; open_.has(g) ? open_.delete(g) : open_.add(g); goDraw(); return; }
+    const tr = e.target.closest("tbody tr"); if (!tr) return; const t = ((goData() || {}).terms || []).find(x => x.term === tr.dataset.term); if (!t) return;
+    window.__pwGoSel = window.__pwGoSel && window.__pwGoSel.term === t.term ? null : t; selTerm = null; selCluster = null; goDraw(); drawTerms(); drawNet(); members(); });
+  ["pwgoont", "pwgochart"].forEach(id => $(id).addEventListener("input", () => { open_.clear(); goDraw(); }));
+  document.querySelectorAll("#pwgodir button").forEach(b => b.addEventListener("click", () => { godir = b.dataset.dir; document.querySelectorAll("#pwgodir button").forEach(x => x.classList.toggle("on", x === b)); open_.clear(); window.__pwGoSel = null; goDraw(); drawNet(); members(); }));
   // --- overview across comparisons ---
   function ovSources() { const s = $("pwosrc"), have = new Set(); W.comps.forEach(c => { ["up", "down"].forEach(d => (c[d].terms || []).forEach(t => have.add(t.source))); ((c.gsea || {}).terms || []).forEach(t => have.add(t.source)); });
     s.innerHTML = "<option value=\\"\\">all</option>" + [...have].sort().map(x => "<option>" + esc(x) + "</option>").join(""); }
@@ -227,6 +271,9 @@ PATHWAY_JS <- '
       if (m === "ora") ["up", "down"].forEach(d => (c[d].terms || []).filter(t => !src || t.source === src).forEach((t, k) => {
           const key = t.term, v = cell[key + "|" + c.name]; const val = { s: (d === "up" ? 1 : -1) * lfdr(t.fdr), size: t.hits, t: t, d: d };
           if (!v || Math.abs(val.s) > Math.abs(v.s)) cell[key + "|" + c.name] = val; if (k < n) pick.set(key, t.description); }));
+      else if (m === "go") ["up", "down"].forEach(d => ((((c.go || {}).BP || {})[d] || {}).terms || []).filter(t => t.representative).forEach((t, k) => {
+          const key = t.term, v = cell[key + "|" + c.name], val = { s: (d === "up" ? 1 : -1) * lfdr(t.p), size: t.hits, t: Object.assign({ fdr: t.p, term_size: t.annotated }, t), d: d };
+          if (!v || Math.abs(val.s) > Math.abs(v.s)) cell[key + "|" + c.name] = val; if (k < n) pick.set(key, t.description); }));
       else (((c.gsea || {}).terms) || []).filter(t => !src || t.source === src).forEach((t, k) => { cell[t.term + "|" + c.name] = { s: t.NES, size: lfdr(t.fdr), t: t };
           if (k < n) pick.set(t.term, t.description); });
     });
@@ -236,21 +283,21 @@ PATHWAY_JS <- '
     terms.sort((a, b) => { const fa = comps.findIndex(c => cell[a + "|" + c]), fb = comps.findIndex(c => cell[b + "|" + c]); return fb - fa || (pick.get(b) < pick.get(a) ? -1 : 1); });
     const X = [], Y = [], Z = [], S = [], H = [];
     terms.forEach(t => comps.forEach(c => { const v = cell[t + "|" + c]; if (!v) return; X.push(c); Y.push(short(pick.get(t), 60)); Z.push(v.s);
-      S.push(m === "ora" ? 6 + 2.2 * Math.sqrt(v.size) : 6 + 3 * Math.min(8, v.size));
-      H.push(m === "ora" ? (v.d === "up" ? "Up" : "Down") + ", " + v.t.hits + " of " + v.t.term_size + ", FDR " + (+v.t.fdr).toPrecision(2) : "NES " + (+v.t.NES).toFixed(2) + ", FDR " + (+v.t.fdr).toPrecision(2)); }));
+      S.push(m !== "gsea" ? 6 + 2.2 * Math.sqrt(v.size) : 6 + 3 * Math.min(8, v.size));
+      H.push(m !== "gsea" ? (v.d === "up" ? "Up" : "Down") + ", " + v.t.hits + " of " + v.t.term_size + ", FDR " + (+v.t.fdr).toPrecision(2) : "NES " + (+v.t.NES).toFixed(2) + ", FDR " + (+v.t.fdr).toPrecision(2)); }));
     const lim = Math.max(...Z.map(Math.abs), 1);
     $("pwoverview").style.height = Math.max(360, 110 + 22 * terms.length) + "px";
     Plotly.react("pwoverview", [{ type: "scatter", mode: "markers", x: X, y: Y, text: H, hovertemplate: "%{y}<br>%{x}: %{text}<extra></extra>",
       marker: { size: S, color: Z, cmin: -lim, cmax: lim, colorscale: [[0, DOWN], [0.5, "#f2f2f2"], [1, UP]], line: { width: 0.5, color: C("--text-primary") },
-                colorbar: { title: { text: m === "ora" ? "-log10 FDR (Down -, Up +)" : "NES" } } } }],
+                colorbar: { title: { text: m === "ora" ? "-log10 FDR (Down -, Up +)" : m === "go" ? "-log10 p weight01 (Down -, Up +)" : "NES" } } } }],
       Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 120 }, xaxis: { type: "category", categoryorder: "array", categoryarray: comps, tickangle: -30, gridcolor: C("--grid") },
         yaxis: { type: "category", categoryorder: "array", categoryarray: terms.map(t => short(pick.get(t), 60)).reverse(), automargin: true, tickfont: { size: 11 }, gridcolor: C("--grid") } }), cfg);
   }
   ["pwomethod", "pwosrc", "pwotopn"].forEach(id => $(id).addEventListener("input", overview));
   ["pwchart", "pwtopn"].forEach(id => $(id).addEventListener("input", oraChart));
   $("pwsrc").addEventListener("input", oraChart); $("pwq").addEventListener("input", () => {});
-  $("pwcomp").addEventListener("change", () => { gsel = null; gseaSources(); gseaDraw(); oraChart(); });
-  document.querySelectorAll(".pwdir button").forEach(b => b.addEventListener("click", oraChart));
-  fillSources(); drawTerms(); drawNet(); members(); oraChart(); gseaSources(); gseaDraw(); ovSources(); overview();
+  $("pwcomp").addEventListener("change", () => { gsel = null; window.__pwGoSel = null; open_.clear(); gseaSources(); gseaDraw(); oraChart(); goDraw(); });
+  document.querySelectorAll(".pwdir:not(#pwgodir) button").forEach(b => b.addEventListener("click", oraChart));
+  fillSources(); drawTerms(); drawNet(); members(); oraChart(); gseaSources(); gseaDraw(); goDraw(); ovSources(); overview();
 })();
 '

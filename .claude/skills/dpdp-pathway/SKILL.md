@@ -35,12 +35,20 @@ annotation file of the species (`<data>/.dpdp_cache/<taxon>.protein.enrichment.t
 in STRING's downloads), gene sets of 10-500 tested proteins (options). Report NES (+ up, - down), FDR and the leading-edge
 proteins. GSEA finds pathways where many proteins shift a little; say so when it finds terms ORA misses (few hits) or vice versa.
 
+## GO with the hierarchy (topGO, added 2026-11-13)
+topGO weight01 (the method of the app's ViSEAGO GO analysis): Up and Down separately against the tested proteins, for BP, MF and
+CC, GO annotations from STRING's species file; terms with weight01 p <= 0.01 (not FDR-corrected, as topGO's authors advise; the
+classic Fisher p is shown next to it) and >= the minimum hits. Similar terms are grouped (GOSemSim, Wang similarity >= 0.7, no
+organism database needed); the most significant term represents its group. 11517 (KO_37_v_KO_30, Down BP): STRING ORA 34 GO
+process terms, topGO 7 specific ones. Report the group representatives; mention the grouped terms only when they add meaning.
+
 ## Charts for publication (all with PNG / SVG download)
+- GO: group representatives as bars (-log10 weight01 p, "+n" = similar terms), or a treemap of groups and terms (REVIGO-style).
 - Over-representation: top terms as a diverging bar chart (Down left, Up right, -log10 FDR) or a dot plot (hit ratio, size =
   hits, colour = FDR); follows the source filter.
 - GSEA: NES bar chart (top up / down), the table, and the classic running enrichment-score plot of a clicked gene set.
 - Overview across comparisons: dot plot of the top terms of every comparison (ORA: colour = direction x -log10 FDR, size = hits;
-  GSEA: colour = NES, size = -log10 FDR).
+  GSEA: colour = NES, size = -log10 FDR; GO: the group representatives of biological process).
 
 ## Output
 - `review/11_pathway.html`: per comparison and direction the enriched terms (source, hits / term size, fold enrichment, FDR,
@@ -59,5 +67,4 @@ triple-spike's human proteins don't change, so its few human hits enrich nothing
 expected with large hit lists; point to the specific ones.
 
 ## Next
-Report (not built yet). Planned for this step: hierarchy-aware GO (topGO weight01) with grouping of redundant terms (GOSemSim),
-term drill-down (volcano, heatmap), GO slim profile.
+Report (not built yet). Planned for this step: term drill-down (volcano, heatmap), GO slim profile.

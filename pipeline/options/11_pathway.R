@@ -36,6 +36,13 @@ pathway_options <- function(p = NULL, orgs = NULL) {
       opt("pathway_gsea", "Run GSEA", "checkbox", TRUE, "", app = FALSE),
       opt("pathway_gsea_min", "Smallest gene set", "number", 10, "Gene sets with fewer tested proteins are skipped.", depends = "pathway_gsea", min = 3, step = 1, app = FALSE),
       opt("pathway_gsea_max", "Largest gene set", "number", 500, "Very broad sets (e.g. 'Cytoplasm') are skipped.", depends = "pathway_gsea", min = 20, step = 10, app = FALSE))),
+    opt_section("GO with the hierarchy (topGO)", note = "topGO weight01 (Alexa et al. 2006; the method of the app's ViSEAGO GO analysis): a parent term whose signal comes from a child term is discounted, so the list is shorter and more specific. Then similar terms are grouped (GOSemSim, Wang similarity). GO annotations: STRING's file of the species.", list(
+      opt("pathway_topgo", "Run GO (topGO)", "checkbox", TRUE, "Needs the GO switch above.", app = FALSE),
+      opt("pathway_topgo_p", "p cutoff (weight01)", "number", 0.01,
+          "topGO's authors advise not to correct weight01 p for multiple testing (the tests are not independent); 0.01 is their usual cutoff.",
+          depends = "pathway_topgo", min = 0, max = 0.1, step = "any", app = FALSE),
+      opt("pathway_topgo_sim", "Group terms more similar than", "number", 0.7, "GOSemSim Wang similarity (0 to 1): 0.7 groups close relatives, 0.5 groups more broadly.",
+          depends = "pathway_topgo", min = 0.3, max = 0.95, step = 0.05, app = FALSE))),
     opt_section("Network (STRING)", list(
       opt("pathway_score", "Interaction confidence", "select", "400",
           "STRING combined score: 150 low, 400 medium, 700 high, 900 highest.", choices = c("150", "400", "700", "900"), app = FALSE),
