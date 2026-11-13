@@ -110,7 +110,7 @@ review_stats <- function(db_path) {
   group_order <- read_table("sample_groups", db_path)$Group
   ginfo <- if (!is.null(graphs$info)) Filter(function(x) !is.null(x$heatmap), graphs$info) else list()
   pca_html <- if (length(ginfo)) paste0('<section><h2>Samples</h2>',
-    sprintf('<p class="note">%s Each set is a comparison&apos;s samples (or all samples with the pool). Complete rows only, as the app&apos;s plots.</p>', esc(graphs$note %||% "")),
+    sprintf('<p class="note">%s Each set is a comparison&apos;s samples with the pool (SPQC), or all samples with the pool. Complete rows only, as the app&apos;s plots.</p>', esc(graphs$note %||% "")),
     '<div class="control"><label for="pset">Samples</label><select id="pset">', paste0('<option>', esc(names(ginfo)), '</option>', collapse = ""), '</select>',
     '<label for="pcs">PCA axes</label><select id="pcs"><option value="PC2">PC1 vs PC2</option><option value="PC3">PC1 vs PC3</option></select></div>',
     '<div class="grid2"><div><h3>Total intensity per sample</h3><div id="sgbar" style="height:300px" role="img" aria-label="Total intensity per sample"></div></div>',

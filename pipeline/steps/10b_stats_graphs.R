@@ -7,8 +7,8 @@
 #
 # Usage:
 #   Rscript pipeline/steps/10b_stats_graphs.R --db=<db> [--comps=B_v_A] [--include_spqc=TRUE] [--heatmap_rows=1000] [--png=FALSE]
-#   --comps         comparisons (default: all in stats_comp). Each comparison's samples is one set, plus an "all samples" set
-#                   (comparisons + SPQC) when --include_spqc=TRUE.
+#   --comps         comparisons (default: all in stats_comp). Each comparison's samples is one set (with the SPQC pool when
+#                   --include_spqc=TRUE, the default when the run has one), plus an "all samples" set (comparisons + SPQC).
 #   --png=TRUE      also write the app-style static PNGs (bar, box, PCA, sample distance, heatmap) to QC/Stats_<set>_<plot>.png
 #
 # Output: steps/10_stats/graphs.json (chart data); QC/Stats_*.png only with --png=TRUE
@@ -49,11 +49,15 @@ row_label <- if (is_peptide_output(p)) {
   trimws(paste(ifelse(is.na(tab$Genes) | tab$Genes == "", tab$Accession, tab$Genes), ifelse(nzchar(site), site, gsub("_", "", tab$Sequence))))
 } else ifelse(is.na(tab$Genes) | tab$Genes == "", tab$Accession, paste(tab$Genes, tab$Accession))
 
-sets <- lapply(comps, function(cp) { i <- which(stats_comp$Name == cp); c(locs(stats_comp$N_loc[i]), locs(stats_comp$D_loc[i])) })
+# Each comparison's samples, with the pool (SPQC) when the run has one (user, 2026-11-13: the pool belongs in the PCA: it shows
+# the technical spread next to the groups' separation).
+sets <- lapply(comps, function(cp) { i <- which(stats_comp$Name == cp)
+  c(locs(stats_comp$N_loc[i]), locs(stats_comp$D_loc[i]), if (include_spqc) locs(stats_comp$SPQC_loc[i])) })
 names(sets) <- comps
 if (include_spqc) {
   sp <- unique(unlist(lapply(comps, function(cp) locs(stats_comp$SPQC_loc[stats_comp$Name == cp]))))
-  sets[["all samples"]] <- sort(unique(c(unlist(sets), sp)))
+  all_s <- sort(unique(c(unlist(sets), sp)))
+  if (!any(vapply(sets, function(x) setequal(x, all_s), TRUE))) sets[["all samples"]] <- all_s   # not when a comparison already has them all
 }
 grp_of <- rep(read_table("sample_groups", db_path)$Group, as.integer(read_table("sample_groups", db_path)$Count))
 

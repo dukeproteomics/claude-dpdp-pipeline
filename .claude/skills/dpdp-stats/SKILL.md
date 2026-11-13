@@ -21,9 +21,9 @@ description: Step 10 of the DPDP proteomics pipeline (same as the Shiny app's St
 | `peptide_missing_filter`, `peptide_cv_filter` | FALSE | now extra **flag** rules (precursors they would remove count toward the refilter flag) |
 | `checkbox_report_ptm` / `peptide_report_grep` | FALSE; **PTM peptide runs: TRUE / `ptm_grep`** | user rule 2026-11-05: only PTM peptides are tested and reported. Unlike the app (adjusts p over all peptides, then hides the rest), the pipeline drops them **before** testing, so adj p and limma's prior cover the PTM peptides only |
 | others (`peptide_*`, `stats_*_cv_filter*`, `checkbox_cohensd*`, `checkbox_limmapvalue`) | off | every option is in `pipeline/options/10_stats.R` |
-| `pair_comp` | FALSE | paired t-test on log2; samples paired by sheet order within each side; FC = mean of per-pair ratios. Needs the same number of samples on both sides (checked at preview; the app crashed). The page lists the pairs. Refused after limpa |
-| `checkbox_cohensd` / `_hedges` | FALSE | `<comp>_cohensd` (effsize, unpooled; Hedges shrinks it for small n). **The app computes it on raw intensities, not log2** like the t-test (11531 3 v 3: rank cor 0.94 with log2 d; large effects 1,145 raw v 942 log2). Unpaired even with pair_comp |
-| `checkbox_limmapvalue` | FALSE | `<comp>_limma`: ordinary limma p (log2, unpaired) next to the t-test p; not used for calls |
+| `pair_comp` | FALSE | paired t-test on log2 (Cohen's d and limma p paired too); samples paired by sheet order within each side; FC = mean of per-pair ratios. Needs the same number of samples on both sides (checked at preview; the app crashed). The page lists the pairs. Refused after limpa |
+| `checkbox_cohensd` / `_hedges` | FALSE | `<comp>_cohensd`, **pipeline version** (user, 2026-11-13; the app's took raw intensities and the whole-sample SD, and ignored pairing): on log2, (mean N - mean D) / pooled SD; Hedges' g x (1 - 3/(4(nN+nD)-9)). Paired: d_z = mean / SD of the per-pair log2 differences, J = 1 - 3/(4(n-1)-1). Matches effsize (log2, pooled, hedges) |
+| `checkbox_limmapvalue` | FALSE | `<comp>_limma`: limma moderated t p on log2 over all rows (before the missing-factor filter, as the app); paired: pair as a blocking factor (~ pair + group). Not used for calls |
 
 `--settings_from=<db>` copies the settings **and** the comparisons from a previous run.
 

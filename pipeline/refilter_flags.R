@@ -62,7 +62,37 @@ refilter_flags <- function(db_path, stats_comp, i, p) {
 # last sample_number columns of protein_<norm>_final, which end with CV columns, and its detected counts assume every sample is in the
 # comparison, so it fails when other groups exist). Same core as the app: stat_create_comp_df + the app's stat_add (CVs, FC, p, adj p,
 # missing factor filter, Up/Down), on the whole-dataset protein_<norm> table. Runs in callr with the app directory as working directory.
+# Effect size and limma p for a comparison (pipeline, user 2026-11-13: "statistically and programmatically correct"). Replaces
+# the app's versions, which took Cohen's d on raw intensities with the whole-sample SD (effsize pooled = FALSE) and ignored pairing.
+#   Cohen's d on log2 (the scale of the t-test), numerator minus denominator, over the pooled SD of the two groups;
+#   Hedges' g = d x J, J = 1 - 3 / (4 (nN + nD) - 9). Paired: d_z = mean of the per-pair log2 differences / their SD,
+#   J = 1 - 3 / (4 (n - 1) - 1). NA where an SD is 0 or there are fewer than 2 values (pairs) per side.
+#   limma p: limma on log2 (lmFit + eBayes over all rows), group N v D; paired: the pair as a blocking factor (~ pair + group).
+# xN, xD: numeric matrices (rows = proteins/peptides, columns = samples in design order; paired: column k of xN with column k of xD).
 stat_calc_norefilter_bg <- function(db_path, comp_number, stats_comp) {
+  # run_bg runs this in a fresh R process: the pipeline helpers it needs are defined here.
+  comp_col <- function(nm, suffix) make.names(paste0(nm, suffix))
+  stat_effect_size <- function(xN, xD, paired = FALSE, hedges = FALSE) {
+    a <- log2(as.matrix(xN)); b <- log2(as.matrix(xD)); a[!is.finite(a)] <- NA; b[!is.finite(b)] <- NA
+    rv <- function(m) { k <- rowSums(!is.na(m)); mu <- rowMeans(m, na.rm = TRUE); v <- rowSums((m - mu)^2, na.rm = TRUE) / (k - 1); list(n = k, mu = mu, v = v) }
+    if (paired) {
+      dd <- rv(a - b); d <- dd$mu / sqrt(dd$v); J <- 1 - 3 / (4 * (dd$n - 1) - 1); ok <- dd$n >= 2
+    } else {
+      A <- rv(a); B <- rv(b); sp <- sqrt(((A$n - 1) * A$v + (B$n - 1) * B$v) / (A$n + B$n - 2))
+      d <- (A$mu - B$mu) / sp; J <- 1 - 3 / (4 * (A$n + B$n) - 9); ok <- A$n >= 2 & B$n >= 2
+    }
+    if (isTRUE(hedges)) d <- d * J
+    d[!ok | !is.finite(d)] <- NA
+    signif(d, 4)
+  }
+  stat_limma_p <- function(xN, xD, paired = FALSE) {
+    y <- log2(cbind(as.matrix(xN), as.matrix(xD))); y[!is.finite(y)] <- NA
+    g <- factor(c(rep("N", ncol(xN)), rep("D", ncol(xD))), levels = c("D", "N"))
+    des <- if (paired) model.matrix(~ factor(c(seq_len(ncol(xN)), seq_len(ncol(xD)))) + g) else model.matrix(~ g)
+    fit <- limma::eBayes(limma::lmFit(y, des))
+    signif(as.numeric(fit$p.value[, "gN"]), 7)
+  }
+
   source("Shiny_MVA_Functions.R"); source("Shiny_Misc_Functions.R"); source("Shiny_File.R")
   params <- get_params(db_path); df_design <- read_table_try("design", db_path)
   base <- if (params$data_output == "Peptide") stringr::str_c("peptide_impute_", trimws(params$stat_norm)) else stringr::str_c("protein_", trimws(params$stat_norm))
@@ -79,7 +109,23 @@ stat_calc_norefilter_bg <- function(db_path, comp_number, stats_comp) {
   df <- if (spqc) cbind(df_list[[1]], df_list[[2]], df_list[[3]], df_list[[4]]) else cbind(df_list[[1]], df_list[[2]], df_list[[3]])
   nl <- str_to_numlist(stats_comp$N_loc[comp_number]); dl <- str_to_numlist(stats_comp$D_loc[comp_number])
   df_missing <- as.data.frame(cnt[, c(nl, dl), drop = FALSE])
+  # Cohen's d and limma p: the pipeline's (stat_effect_size / stat_limma_p above), on the same rows as the app's (before its filters)
+  want_d <- as.logical(params$checkbox_cohensd); want_l <- as.logical(params$checkbox_limmapvalue)
+  paired <- as.logical(params$pair_comp)
+  extra <- list()
+  if (want_d) extra$cohensd <- stat_effect_size(df_list[[2]], df_list[[3]], paired, as.logical(params$checkbox_cohensd_hedges))
+  if (want_l) extra$limma <- stat_limma_p(df_list[[2]], df_list[[3]], paired)
+  params$checkbox_cohensd <- FALSE; params$checkbox_limmapvalue <- FALSE   # the app's versions are not used
+  df <- cbind(.row = seq_len(nrow(df)), df)   # first, not last: stat_add finds the sample columns counting from the end
   df <- stat_add(df, df_missing, params, comp_number, stats_comp, df_design)
+  nm <- stats_comp$Name[comp_number]
+  if (length(extra)) {   # put them where the app puts them: after _pval / _adjpval
+    at <- max(which(names(df) %in% c(comp_col(nm, "_pval"), comp_col(nm, "_adjpval"))))
+    add <- as.data.frame(lapply(extra, function(v) v[df$.row]))
+    names(add) <- vapply(names(extra), function(k) comp_col(nm, paste0("_", k)), "")
+    df <- cbind(df[, seq_len(at), drop = FALSE], add, df[, -seq_len(at), drop = FALSE])
+  }
+  df$.row <- NULL
   if (params$stat_norm == "impute") colnames(df) <- gsub("Normalized", "Imputed", colnames(df))
   write_table_try(if (params$data_output == "Peptide") stats_comp$Final_Table_Name_Peptide[comp_number] else stats_comp$Final_Table_Name[comp_number], df, db_path)
   invisible(TRUE)

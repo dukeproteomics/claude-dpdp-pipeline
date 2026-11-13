@@ -64,11 +64,12 @@ stats_options <- function(p = NULL, design = NULL, norms = NULL, limpa = FALSE) 
     opt_section("Extra columns", list(
       opt("pair_comp", "Pairwise Comparisons", "checkbox", FALSE,
           paste("Paired t-test: the samples of the two sides are paired by their order in the sample sheet (1st with 1st, ...), so both",
-                "sides need the same number of samples; fold change = mean of the per-pair ratios. Cohen&apos;s d and the limma p stay unpaired (as in the app)."),
+                "sides need the same number of samples; fold change = mean of the per-pair ratios. Cohen&apos;s d and the limma p are paired too."),
           disabled = if (isTRUE(limpa)) "Not built for limpa (dpcDE) yet."),
-      opt("checkbox_cohensd", "Include Cohen's D?", "checkbox", FALSE, "Effect size (R package effsize)."),
-      opt("checkbox_cohensd_hedges", "Use Hedge's Correction (low N)?", "checkbox", FALSE, "Correction for small sample size.", depends = "checkbox_cohensd"),
-      opt("checkbox_limmapvalue", "Include Limma Pvalue?", "checkbox", FALSE, "Adds limma's p (R package limma)."))),
+      opt("checkbox_cohensd", "Include Cohen's D?", "checkbox", FALSE, paste("Effect size on log2 (the scale of the t-test): (numerator mean - denominator mean) / pooled SD; paired: mean / SD of the",
+                "per-pair differences. Pipeline version: the app took it on raw intensities with the whole-sample SD.")),
+      opt("checkbox_cohensd_hedges", "Use Hedge's Correction (low N)?", "checkbox", FALSE, "Hedges&apos; g: d x (1 - 3 / (4 (n1 + n2) - 9)), less biased with few samples.", depends = "checkbox_cohensd"),
+      opt("checkbox_limmapvalue", "Include Limma Pvalue?", "checkbox", FALSE, "Moderated t-test p (limma on log2; paired: pairs as a blocking factor), next to the t-test p; the calls still use the t-test p."))),
     opt_section("Report", list(
       opt("checkbox_report_ptm", "Report Only PTM?", "checkbox", ptm_pep,
           "Tests and reports only the peptides whose Sequence matches the grep; adjusted p covers those only (the app adjusts over all, then hides the rest).",

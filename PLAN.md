@@ -172,6 +172,12 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
 - pair_comp: paired t-test on log2 and mean of per-pair ratios, pairs by sheet order (152798~152545, ...); calls 52/9 -> 115/12 on
   3 v 3. The app crashed with unequal sides (6 v 3: "undefined columns selected"): now refused at preview (step and page), and the
   page lists the pairs. All four columns reach the Excel sheets.
+- **Then corrected (user: "statistically and programmatically correct"):** the pipeline computes Cohen's d and the limma p itself
+  (refilter_flags.R stat_calc_norefilter_bg; the app's are switched off for stat_add): d on log2 with the pooled SD (Hedges J), paired
+  d_z; limma p on log2, paired with the pair as a blocking factor. Verified: Hedges g = effsize(log2, pooled, hedges) to rounding,
+  limma p = independent lmFit/eBayes (rel diff 5e-7), paired d_z = t / sqrt(n), paired limma = ~ pair + group.
+- **PCA with the pool:** every comparison's sample set in 10b (PCA, distance, heatmap, totals) includes the SPQC samples; "all
+  samples" only when it adds samples. Checked on the page: the pool sits tightly between the groups.
 
 ## Fixes from note.md (test_project web session, 2026-11-13)
 1. Group names starting with a digit (51C, 55Ex): the app's stats tables get R-style names (`X55Ex_v_51C_FC`, also sample and CV
