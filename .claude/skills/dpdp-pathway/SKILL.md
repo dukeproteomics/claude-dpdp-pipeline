@@ -40,7 +40,17 @@ topGO weight01 (the method of the app's ViSEAGO GO analysis): Up and Down separa
 CC, GO annotations from STRING's species file; terms with weight01 p <= 0.01 (not FDR-corrected, as topGO's authors advise; the
 classic Fisher p is shown next to it) and >= the minimum hits. Similar terms are grouped (GOSemSim, Wang similarity >= 0.7, no
 organism database needed); the most significant term represents its group. 11517 (KO_37_v_KO_30, Down BP): STRING ORA 34 GO
-process terms, topGO 7 specific ones. Report the group representatives; mention the grouped terms only when they add meaning.
+process terms, topGO 9 specific ones (nuclear migration, spindle localization, chromosome condensation, transcription by RNA pol II).
+Report the group representatives; mention the grouped terms only when they add meaning.
+
+## GO slim profile and term drill-down (added 2026-11-13)
+- GO slim: the GO Consortium's generic slim (broad categories; a protein counts in every category above its terms). Per comparison
+  and ontology, the share of the annotated tested, Up and Down proteins in each category; Fisher (Up or Down v tested), BH. A
+  descriptive overview for reports ("what kinds of proteins changed"); the specific answer is in topGO / ORA.
+- Drill-down (page only): clicking any term (ORA, GSEA, GO, slim) or network cluster shows its tested proteins on the volcano and
+  in a heatmap of the comparison samples, plus a member table. Members come from STRING's annotation file of the same version as
+  the API; for KEGG (not in the downloads) only the hits are known ("partial").
+- Annotation files follow the API's STRING version (`protein.enrichment.terms.v<version>`, cached in `<data>/.dpdp_cache`).
 
 ## Charts for publication (all with PNG / SVG download)
 - GO: group representatives as bars (-log10 weight01 p, "+n" = similar terms), or a treemap of groups and terms (REVIGO-style).
@@ -56,7 +66,8 @@ process terms, topGO 7 specific ones. Report the group representatives; mention 
   interactions hidden, a switch shows them; colour by cluster), the clusters (Louvain on the confidence scores) with what each is
   enriched for, and a link to the same network on string-db.org. Click a term or a cluster to highlight its proteins and list them
   (FC, p, call, Explore link); click a protein in the network to open it in the Explore tab.
-- `Pathway/Pathway_STRING_<norm>.xlsx`: About (versions, settings), C<n> Up / C<n> Down (terms with their proteins), C<n> network.
+- `Pathway/Pathway_STRING_<norm>.xlsx`: About (versions, settings), C<n> Up / C<n> Down (terms with their proteins), C<n> GSEA,
+  C<n> GO topGO, C<n> GO slim, C<n> network. `review/11_pathway_drill_<n>.json.gz`: the drill-down data per comparison.
 - `steps/11_pathway/summary.json` (counts, top terms) and `results.json` (everything the page shows); STRING id map cached per
   species and STRING version (`string_ids_<taxon>_<version>.csv`).
 
@@ -67,4 +78,4 @@ triple-spike's human proteins don't change, so its few human hits enrich nothing
 expected with large hit lists; point to the specific ones.
 
 ## Next
-Report (not built yet). Planned for this step: term drill-down (volcano, heatmap), GO slim profile.
+Report (not built yet).

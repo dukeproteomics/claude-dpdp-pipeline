@@ -180,6 +180,19 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
 - Page: GO section (ontology, Up/Down, groups table with expand, bars or treemap, click -> network highlight + proteins); GO in the
   overview. 11517 KO_37_v_KO_30: Down BP 7 terms (STRING ORA 34), Up groups signal transduction + stress-activated MAPK cascade.
 
+## Pathway step 3: term drill-down and GO slim profile (user, 2026-11-13)
+- Annotation files now match the API version (protein.enrichment.terms.v12.5, was v12.0: STRING cluster ids renumbered, term sizes
+  off). This changed GSEA / topGO on 11517 (KO_37_v_KO_30 BP topGO: Up 9, Down 9 terms).
+- 11_pathway.R writes review/11_pathway_drill_<n>.json.gz per comparison: tested proteins (one per accession; phospho = most significant
+  site), log2 values of the comparison samples (N, D, SPQC; base table rows), members among the tested proteins of every ORA / GSEA
+  term (STRING file as is, plus STRING's own hits; < 90% of hits in the file -> hits only, "partial", e.g. KEGG) and of every topGO /
+  slim term (GO with ancestors from GO.db, go_terms). GO slim: GO Consortium generic slim (cached .dpdp_cache/goslim_generic.obo);
+  share of annotated tested / Up / Down per category, Fisher (greater) Up or Down v tested, BH per ontology; Excel C<n> GO slim.
+- Page: GO slim section (ontology, order, bars tested / Up / Down %, * FDR <= 0.05, table); Term drill-down section (any click on an
+  ORA, GSEA, GO or slim term or a network cluster): volcano with the term members (20 smallest p named), heatmap (z-score or log2,
+  hits only / 50 / 100 / 300 smallest p, ordered by FC, group labels), member table with Explore links.
+- Tested on 11517 (phospho) and 10658 (protein, human; 7m51s with the first human file download) in headless Chrome.
+
 ## Step 12 Phospho: Kinase Library, logos, motif-x (user, 2026-11-13; UniProt sequences, kinase-library installed)
 - `pipeline/phospho_motifs.R` (UniProt FASTA by accession, cached; site table from Protein_PTM_Loc + Local2; 15-mer windows checked
   against the residue; pLogo-style logo; motif-x re-implemented), `pipeline/kinase_library_run.py` (kinase-library 1.8: percentile rank

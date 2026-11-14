@@ -55,6 +55,7 @@ org_name <- if (length(orgs) && identical(unname(STRING_TAXA[names(orgs)[1]]), t
 cats <- pathway_categories(settings)
 sp <- qc_spike_settings(run_dir)
 v <- string_version()
+sv <- gsub("[^0-9.]", "", v$version)   # the annotation files of the same STRING version as the API
 cat(sprintf("STRING %s (%s), species %d%s\n", v$version, v$base, taxon, if (!is.na(org_name)) paste0(" (", org_name, ")") else ""))
 
 # Per comparison: the tested proteins (background) and the hits, one row per protein (Peptide output: collapsed by accession)
@@ -71,7 +72,8 @@ comp_sets <- lapply(seq_len(nrow(sc)), function(i) {
                    ifelse(!is.na(pv) & pv <= settings$pathway_p_cutoff & fc <= -settings$pathway_fc_cutoff, "Down", ""))
   } else call <- ifelse(is.na(st$Stats), "", st$Stats)
   praw <- comp_get(st, nm, "_pval")
-  d <- data.frame(acc = acc, gene = ifelse(is.na(st$Genes), "", st$Genes), fc = fc, p = praw, call = call, stringsAsFactors = FALSE)[keep, ]
+  key <- if (pep_out) paste(st$Accession, st$Sequence, st$Protein_PTM_Loc %||% "") else st$Accession   # the row in the base table (heatmap values)
+  d <- data.frame(acc = acc, gene = ifelse(is.na(st$Genes), "", st$Genes), fc = fc, p = praw, call = call, key = key, site = if (pep_out) ifelse(is.na(st$Protein_PTM_Loc %||% NA), "", st$Protein_PTM_Loc %||% "") else "", stringsAsFactors = FALSE)[keep, ]
   # one row per protein: the most significant row (sites in Peptide output); Up / Down if any row is
   d <- d[order(d$p), ]
   up <- unique(d$acc[d$call == "Up"]); down <- unique(d$acc[d$call == "Down"])
@@ -161,7 +163,7 @@ results <- lapply(comp_sets, function(cs) {
 gsea_note <- NULL
 if (as_flag(settings$pathway_gsea)) {
   gcats <- setdiff(cats, "KEGG")
-  tt <- tryCatch(string_terms(taxon, file.path(dirname(run_dir), ".dpdp_cache"), gcats), error = function(e) { gsea_note <<- conditionMessage(e); NULL })
+  tt <- tryCatch(string_terms(taxon, file.path(dirname(run_dir), ".dpdp_cache"), gcats, sv), error = function(e) { gsea_note <<- conditionMessage(e); NULL })
   if (!is.null(tt)) {
     tdesc <- tt[!duplicated(tt$term), c("term", "category", "description")]
     sets_all <- split(tt$id, tt$term)
@@ -200,7 +202,7 @@ if (as_flag(settings$pathway_gsea)) {
 go_note <- NULL
 if (as_flag(settings$pathway_topgo) && as_flag(settings$pathway_go)) {
   suppressPackageStartupMessages({ library(topGO); library(GOSemSim) })
-  ga <- tryCatch(string_terms(taxon, file.path(dirname(run_dir), ".dpdp_cache"), c("Process", "Function", "Component")), error = function(e) { go_note <<- conditionMessage(e); NULL })
+  ga <- tryCatch(string_terms(taxon, file.path(dirname(run_dir), ".dpdp_cache"), c("Process", "Function", "Component"), sv), error = function(e) { go_note <<- conditionMessage(e); NULL })
   if (!is.null(ga)) {
     onts <- c(BP = "Process", MF = "Function", CC = "Component")
     semd <- list()
@@ -249,6 +251,67 @@ if (as_flag(settings$pathway_topgo) && as_flag(settings$pathway_go)) {
   if (!is.null(go_note)) cat("GO (topGO) not run:", go_note, "\n")
 }
 
+# --- Drill-down data (the page: volcano and heatmap of any term's tested proteins) and the GO slim profile.
+# Members of each term among the tested proteins: STRING's annotation file (GO with every ancestor added, as topGO counts them);
+# KEGG is not in STRING's downloads, so a KEGG term has only its hits. One gzip file per comparison, loaded when a term is clicked.
+cache_dir <- file.path(dirname(run_dir), ".dpdp_cache")
+# ann: as STRING annotates (over-representation, GSEA); ann_go: GO with every ancestor added (topGO, GO slim)
+GOC <- c("Process", "Function", "Component")
+ann <- tryCatch(string_terms(taxon, cache_dir, setdiff(union(cats, if (as_flag(settings$pathway_go)) GOC), "KEGG"), sv)[, c("id", "category", "term")],
+                error = function(e) { cat("Term members (drill-down) not available:", conditionMessage(e), "\n"); NULL })
+ann_go <- if (!is.null(ann) && any(ann$category %in% GOC)) { suppressPackageStartupMessages(library(GO.db)); go_propagate(ann[ann$category %in% GOC, ]) } else NULL
+slim <- NULL; slim_note <- NULL
+if (as_flag(settings$pathway_goslim) && !is.null(ann_go))
+  slim <- tryCatch(goslim_generic(cache_dir), error = function(e) { slim_note <<- conditionMessage(e); NULL })
+n_s <- as.integer(p$sample_number)
+vals <- { m <- as.matrix(base_tab[, (ncol(base_tab) - n_s + 1):ncol(base_tab)]); storage.mode(m) <- "numeric"; m[!is.na(m) & m <= 0] <- NA
+          v_ <- round(log2(m) * 100); storage.mode(v_) <- "integer"; v_ }
+base_key <- if (pep_out) paste(base_tab$Accession, base_tab$Sequence, base_tab$Protein_PTM_Loc %||% "") else base_tab$Accession
+design <- read_table("design", db_path)
+locs <- function(x) if (is.na(x) || !nzchar(x)) integer(0) else as.integer(trimws(strsplit(as.character(x), ",")[[1]]))
+onts_slim <- c(BP = "Process", MF = "Function", CC = "Component")
+for (i in seq_along(results)) {
+  cs <- comp_sets[[i]]; d <- cs$prot; ids <- unname(sid[d$acc]); r <- results[[i]]
+  smp <- c(locs(sc$N_loc[i]), locs(sc$D_loc[i]), locs(sc$SPQC_loc[i]))
+  members_of <- function(a, want) { if (is.null(a) || !length(want)) return(list()); a <- a[a$term %in% want & a$id %in% ids, ]
+    lapply(split(match(a$id, ids) - 1L, a$term), function(x) sort(unique(x))) }
+  mem <- members_of(ann, unique(c(r$up$terms$term, r$down$terms$term, r$gsea$all_top$term)))
+  mem_go <- members_of(ann_go, unique(c(unlist(lapply(r$go, function(o) c(o$up$terms$term, o$down$terms$term))), slim$term)))
+  # over-representation terms: STRING's own hits are always members; when the file misses many of them (e.g. KEGG, not in the
+  # downloads), only the hits are shown (partial)
+  partial <- character(0)
+  for (dd in c("up", "down")) { t <- r[[dd]]$terms; if (NROW(t)) for (j in seq_len(nrow(t))) { h <- match(t$ids[[j]], ids) - 1L; h <- h[!is.na(h)]; f <- mem[[t$term[j]]] %||% integer(0)
+    if (!length(f) || mean(h %in% f) < 0.9) { mem[[t$term[j]]] <- sort(unique(h)); partial <- c(partial, t$term[j]) } else mem[[t$term[j]]] <- sort(unique(c(f, h))) } }
+  # GO slim profile: the share of the annotated Up, Down and tested proteins in each slim category; Fisher's test (greater) of Up and of
+  # Down v the tested proteins, BH within the ontology
+  if (!is.null(slim)) {
+    up_i <- which(d$acc %in% cs$up) - 1L; dn_i <- which(d$acc %in% cs$down) - 1L
+    results[[i]]$slim <- lapply(names(onts_slim), function(o) {
+      annot <- unique(match(ann_go$id[ann_go$category == onts_slim[[o]] & ann_go$id %in% ids], ids) - 1L)
+      N <- length(annot); nU <- sum(up_i %in% annot); nD <- sum(dn_i %in% annot)
+      s_ <- slim[slim$ont == o, ]
+      t <- do.call(rbind, lapply(seq_len(nrow(s_)), function(j) { m_ <- mem_go[[s_$term[j]]] %||% integer(0)
+        data.frame(term = s_$term[j], description = s_$name[j], tested = length(m_), up = sum(up_i %in% m_), down = sum(dn_i %in% m_), stringsAsFactors = FALSE) }))
+      t <- t[t$tested > 0, ]
+      if (!nrow(t)) return(list(annotated = N, up = nU, down = nD, terms = data.frame()))
+      fp <- function(a, n) vapply(seq_len(nrow(t)), function(j) fisher.test(matrix(c(a[j], n - a[j], t$tested[j] - a[j], N - n - t$tested[j] + a[j]), 2), alternative = "greater")$p.value, 0)
+      t$p_up <- if (nU) signif(fp(t$up, nU), 3) else NA; t$p_down <- if (nD) signif(fp(t$down, nD), 3) else NA
+      t$fdr_up <- signif(p.adjust(t$p_up, "BH"), 3); t$fdr_down <- signif(p.adjust(t$p_down, "BH"), 3)
+      t$pct_tested <- round(100 * t$tested / max(N, 1), 2); t$pct_up <- round(100 * t$up / max(nU, 1), 2); t$pct_down <- round(100 * t$down / max(nD, 1), 2)
+      list(annotated = N, up = nU, down = nD, terms = t[order(-t$tested), ])
+    }); names(results[[i]]$slim) <- names(onts_slim)
+  }
+  fn <- sprintf("11_pathway_drill_%d.json.gz", i)
+  con <- gzfile(file.path(review_dir(run_dir), fn), "wb", compression = 6)
+  writeLines(toJSON(list(name = cs$name, samples = design$Label[smp], groups = design$Group[smp], order = unique(design$Group[smp]),
+                         prot = list(acc = d$acc, name = ifelse(is.na(ids), d$gene, unname(sname[ids])), sid = ids, fc = signif(d$fc, 4), p = signif(d$p, 3), call = d$call,
+                                     site = if (pep_out) d$site else NULL),
+                         v = unname(vals[match(d$key, base_key), smp, drop = FALSE]), terms = mem, go_terms = mem_go, partial = partial, level = if (pep_out) "site" else "protein"),
+                    auto_unbox = TRUE, digits = NA, na = "null", null = "null"), con); close(con)
+  results[[i]]$drill_file <- fn
+}
+if (!is.null(slim_note)) cat("GO slim not made:", slim_note, "\n")
+
 # Excel: the term tables (Up, Down) and the network proteins of each comparison
 xdir <- file.path(run_dir, "Pathway"); dir.create(xdir, showWarnings = FALSE)
 xf <- file.path(xdir, sprintf("Pathway_STRING_%s.xlsx", trimws(p$stat_norm)))
@@ -275,6 +338,8 @@ for (i in seq_along(results)) {
       if (!NROW(t)) return(NULL); t$proteins <- vapply(t$ids, function(x) paste(unname(sname[x]), collapse = ", "), ""); t$ids <- NULL
       cbind(ontology = o, direction = d, t) }))))
     if (NROW(gt)) { sh <- sprintf("C%d GO topGO", i); openxlsx::addWorksheet(wb, sh); openxlsx::writeDataTable(wb, sh, gt, tableStyle = "TableStyleLight9") } }
+  if (!is.null(r$slim)) { gt <- do.call(rbind, lapply(names(r$slim), function(o) if (NROW(r$slim[[o]]$terms)) cbind(ontology = o, r$slim[[o]]$terms)))
+    if (NROW(gt)) { sh <- sprintf("C%d GO slim", i); openxlsx::addWorksheet(wb, sh); openxlsx::writeDataTable(wb, sh, gt, tableStyle = "TableStyleLight9") } }
   if (!is.null(r$network)) { sh <- sprintf("C%d network", i); openxlsx::addWorksheet(wb, sh); openxlsx::writeDataTable(wb, sh, r$network$nodes[, c("name", "acc", "gene", "fc", "p", "call", "cluster", "degree")], tableStyle = "TableStyleLight9") }
 }
 openxlsx::saveWorkbook(wb, xf, overwrite = TRUE)

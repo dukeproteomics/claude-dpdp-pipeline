@@ -49,6 +49,13 @@ review_pathway <- function(db_path) {
     '<div id="pwgochartdiv" style="height:480px" role="img" aria-label="GO term groups"></div>',
     '<div id="pwgoterms" style="max-height:460px;overflow:auto"></div>',
     '<p class="note">weight01 p: topGO&apos;s test that discounts a parent term&apos;s signal coming from a more specific child term (not corrected for multiple testing, as its authors advise); classic p: the plain Fisher test for comparison. Groups: terms with GOSemSim similarity above the cutoff; the first (most significant) term represents the group. Click a term to highlight its proteins in the network below.</p></section>',
+    '<section><h2>GO slim profile</h2><p class="note" id="pwslnote"></p>',
+    '<div class="control"><label for="pwslont">Ontology</label><select id="pwslont"><option value="BP">biological process</option><option value="MF">molecular function</option><option value="CC">cellular component</option></select>',
+    '<label for="pwslorder">Order</label><select id="pwslorder"><option value="tested">share of the tested proteins</option><option value="sig">most enriched in Up or Down</option></select>',
+    '<label for="pwsltopn">Categories</label><select id="pwsltopn"><option>15</option><option selected>25</option><option>40</option><option value="999">all</option></select></div>',
+    '<div id="pwslchart" style="height:640px" role="img" aria-label="GO slim profile"></div>',
+    '<div id="pwslterms" style="max-height:420px;overflow:auto"></div>',
+    '<p class="note">Broad GO categories (the GO Consortium&apos;s generic slim; a protein counts in every category above its own terms). Bars: the share of the annotated tested, Up and Down proteins in each category; a category can hold more than one bar&apos;s worth because proteins sit in several. * = Up or Down enriched v the tested proteins (Fisher, BH FDR &le; 0.05). Click a category for its drill-down.</p></section>',
     '<section><h2>Overview across comparisons</h2><p class="note">The top terms of every comparison side by side: what is shared and what is specific. Over-representation: colour = direction (Up red, Down blue) and -log10 FDR, size = hits. GSEA: colour = NES, size = -log10 FDR. Empty = not significant there.</p>',
     '<div class="control"><label for="pwomethod">Method</label><select id="pwomethod"><option value="ora">over-representation</option><option value="gsea">GSEA</option><option value="go">GO (topGO, biological process)</option></select>',
     '<label for="pwosrc">Source</label><select id="pwosrc"></select><label for="pwotopn">Top per comparison</label><select id="pwotopn"><option>5</option><option selected>8</option><option>12</option><option>20</option></select></div>',
@@ -59,9 +66,15 @@ review_pathway <- function(db_path) {
     '<label><input type="checkbox" id="pwlabels" checked/> names</label><label><input type="checkbox" id="pwiso"/> proteins without interactions</label><button type="button" id="pwclear">Clear highlight</button><a id="pwlink" target="_blank" rel="noopener">Open this network on string-db.org</a></div>',
     '<div id="pwnet" style="height:720px" role="img" aria-label="STRING network of the hits"></div><p class="note" id="pwnetnote"></p>',
     '<h3>Clusters</h3><div id="pwclusters"></div><h3 id="pwmemt">Proteins</h3><div id="pwmembers" style="max-height:420px;overflow:auto"></div></section>',
+    '<section id="pwdrill"><h2 id="pwdrt">Term drill-down</h2><p class="note" id="pwdrnote">Click a term (over-representation, GSEA, GO or GO slim) or a network cluster: its tested proteins are shown on the volcano and in a heatmap.</p>',
+    '<div class="control"><label><input type="checkbox" id="pwdrlab" checked/> names on the volcano (20 smallest p)</label><label for="pwdrscale">Heatmap</label><select id="pwdrscale"><option value="z">z-score per protein</option><option value="log2">log2 intensity</option></select>',
+    '<label for="pwdrrows">Rows</label><select id="pwdrrows"><option value="hits">hits only</option><option value="50" selected>50 smallest p</option><option value="100">100 smallest p</option><option value="300">300 smallest p</option></select></div>',
+    '<div id="pwdrvol" style="height:520px" role="img" aria-label="Volcano with the term proteins highlighted"></div>',
+    '<div id="pwdrheat" style="height:520px" role="img" aria-label="Heatmap of the term proteins"></div>',
+    '<h3 id="pwdrtt">Proteins of the term</h3><div id="pwdrtab" style="max-height:420px;overflow:auto"></div></section>',
     '<style>.pwdir button { font:inherit; padding:3px 12px; border:1px solid var(--accent); background:transparent; color:var(--accent); cursor:pointer; }',
     '.pwdir button.on { background:var(--accent); color:#fff; } .gotog { font:inherit; font-size:11px; padding:0 5px; border:1px solid var(--rule); border-radius:8px; background:transparent; color:var(--text-secondary); cursor:pointer; } #pwterms table tbody tr, #pwclusters tbody tr { cursor:pointer; }',
-    '#pwterms tr.sel td, #pwclusters tr.sel td { background:var(--warn-bg); font-weight:600; } #pwlink { margin-left:12px; }</style>',
+    '#pwterms tr.sel td, #pwclusters tr.sel td { background:var(--warn-bg); font-weight:600; } #pwlink { margin-left:12px; } #pwclusters td, #pwterms td, #pwgterms td, #pwgoterms td { white-space:normal; }</style>',
     '<script>', plotly_js(), '</script><script>window.DPDP_PW = ', toJSON(list(run = basename(run_dir), comps = res, has_explore = file.exists(file.path(run_dir, "review", "10e_explore.html"))),
       auto_unbox = TRUE, digits = NA, null = "null", na = "null"), ';</script><script>', PATHWAY_JS, '</script>') else "")
   write_review_page(run_dir, "11_pathway", "Step 11 - Pathway (STRING)", if (!is.null(acc)) "Accepted" else if (!is.null(res)) "Review the results" else "Set the options",
@@ -90,7 +103,8 @@ PATHWAY_JS <- '
           "</td><td class=num>" + (+t.fold).toFixed(2) + "</td><td class=num>" + (+t.fdr).toExponential(1) + "</td><td>" + esc(names.slice(0, 8).join(", ")) + (names.length > 8 ? ", ..." : "") + "</td></tr>"; }).join("") + "</tbody></table>"
       : "<p class=note>No terms.</p>";
   }
-  $("pwterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; const k = +tr.dataset.k; window.__pwGoSel = null; selTerm = selTerm === k ? null : k; selCluster = null; drawTerms(); drawNet(); members(); });
+  $("pwterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; const k = +tr.dataset.k; window.__pwGoSel = null; selTerm = selTerm === k ? null : k; selCluster = null; drawTerms(); drawNet(); members();
+    const t = selTerm !== null ? terms()[selTerm] : null; window.__pwDrill(t ? { term: t.term, label: t.description, ids: t.ids, src: t.source + ", " + (dir === "up" ? "Up" : "Down") } : null); });
   // network
   const log2fc = f => f == null ? 0 : Math.sign(f) * Math.log2(Math.abs(f));
   function highlighted() { const net = W.comps[ci].network; if (!net) return null;
@@ -133,7 +147,8 @@ PATHWAY_JS <- '
       cl.map(c => "<tr data-c=" + c.cluster + (selCluster === c.cluster ? " class=sel" : "") + "><td>cluster " + c.cluster + "</td><td class=num>" + c.size + "</td><td>" + esc((c.terms || []).join("; ") || "-") + "</td></tr>").join("") + "</tbody></table>"
       : "<p class=note>No cluster of 5 or more proteins.</p>";
   }
-  $("pwclusters").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; const k = +tr.dataset.c; selCluster = selCluster === k ? null : k; selTerm = null; drawTerms(); drawNet(); members(); });
+  $("pwclusters").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; const k = +tr.dataset.c; selCluster = selCluster === k ? null : k; selTerm = null; drawTerms(); drawNet(); members();
+    window.__pwDrill(selCluster !== null ? { label: "network cluster " + k, ids: W.comps[ci].network.nodes.filter(n => n.cluster === k).map(n => n.id), src: "STRING network" } : null); });
   function members() {
     const net = W.comps[ci].network, H = highlighted();
     if (!H) { $("pwmemt").textContent = "Proteins"; $("pwmembers").innerHTML = "<p class=note>Click a term or a cluster to list its proteins.</p>"; return; }
@@ -151,7 +166,7 @@ PATHWAY_JS <- '
     selTerm = null; fillSources(); drawTerms(); drawNet(); members(); }));
   ["pwsrc", "pwq"].forEach(id => $(id).addEventListener("input", drawTerms));
   ["pwcolor", "pwlabels", "pwiso"].forEach(id => $(id).addEventListener("change", drawNet));
-  $("pwclear").onclick = () => { window.__pwGoSel = null; selTerm = null; selCluster = null; drawTerms(); drawNet(); members(); if (window.__pwGoDraw) window.__pwGoDraw(); };
+  $("pwclear").onclick = () => { window.__pwGoSel = null; selTerm = null; selCluster = null; drawTerms(); drawNet(); members(); if (window.__pwGoDraw) window.__pwGoDraw(); window.__pwDrill(null); };
   // --- publication charts: top over-represented terms ---
   const short = (t, n) => (t.length > n ? t.slice(0, n - 3) + "..." : t);
   const lfdr = v => -Math.log10(Math.max(+v, 1e-300));
@@ -223,7 +238,8 @@ PATHWAY_JS <- '
         xaxis: { title: "rank (up to down)", gridcolor: C("--grid"), range: [0, N] }, yaxis: { domain: [0.42, 1], title: "enrichment score", gridcolor: C("--grid"), zerolinecolor: C("--text-muted") },
         yaxis2: { domain: [0.3, 0.4], visible: false, range: [-1, 1] }, yaxis3: { domain: [0, 0.26], title: "score", gridcolor: C("--grid") } }), cfg);
   }
-  $("pwgterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; gsel = tr.dataset.t; gseaDraw(); $("pwgrun").scrollIntoView({ behavior: "smooth", block: "center" }); });
+  $("pwgterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; gsel = tr.dataset.t; gseaDraw(); $("pwgrun").scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = (G().terms || []).find(x => x.term === gsel); window.__pwDrill({ term: gsel, label: t ? t.description : gsel, ids: t ? t.leading : [], src: "GSEA" + (t ? ", NES " + (+t.NES).toFixed(2) : "") }); });
   ["pwgsrc", "pwgq", "pwgtopn"].forEach(id => $(id).addEventListener("input", gseaDraw));
   // --- GO (topGO, grouped) ---
   let godir = "up", open_ = new Set();
@@ -258,7 +274,8 @@ PATHWAY_JS <- '
   window.__pwGoDraw = goDraw;
   $("pwgoterms").addEventListener("click", e => { const b = e.target.closest("button.gotog"); if (b) { const g = b.dataset.g; open_.has(g) ? open_.delete(g) : open_.add(g); goDraw(); return; }
     const tr = e.target.closest("tbody tr"); if (!tr) return; const t = ((goData() || {}).terms || []).find(x => x.term === tr.dataset.term); if (!t) return;
-    window.__pwGoSel = window.__pwGoSel && window.__pwGoSel.term === t.term ? null : t; selTerm = null; selCluster = null; goDraw(); drawTerms(); drawNet(); members(); });
+    window.__pwGoSel = window.__pwGoSel && window.__pwGoSel.term === t.term ? null : t; selTerm = null; selCluster = null; goDraw(); drawTerms(); drawNet(); members();
+    window.__pwDrill(window.__pwGoSel ? { term: t.term, label: t.description, ids: t.ids, src: "GO topGO, " + (godir === "up" ? "Up" : "Down"), go: true } : null); });
   ["pwgoont", "pwgochart"].forEach(id => $(id).addEventListener("input", () => { open_.clear(); goDraw(); }));
   document.querySelectorAll("#pwgodir button").forEach(b => b.addEventListener("click", () => { godir = b.dataset.dir; document.querySelectorAll("#pwgodir button").forEach(x => x.classList.toggle("on", x === b)); open_.clear(); window.__pwGoSel = null; goDraw(); drawNet(); members(); }));
   // --- overview across comparisons ---
@@ -294,10 +311,106 @@ PATHWAY_JS <- '
         yaxis: { type: "category", categoryorder: "array", categoryarray: terms.map(t => short(pick.get(t), 60)).reverse(), automargin: true, tickfont: { size: 11 }, gridcolor: C("--grid") } }), cfg);
   }
   ["pwomethod", "pwosrc", "pwotopn"].forEach(id => $(id).addEventListener("input", overview));
+  // --- term drill-down: volcano and heatmap of the tested proteins of the chosen term (data per comparison, loaded on demand) ---
+  const DR = {}; let drSel = null;
+  function drLoad(k) { if (DR[k]) return Promise.resolve(DR[k]); const f = W.comps[k].drill_file;
+    if (!f) return Promise.reject(new Error("not made: run the Pathway step again"));
+    if (!location.protocol.startsWith("http")) return Promise.reject(new Error("open the page through the review server or the web app"));
+    return fetch(f).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(d => { d.sidIx = {}; d.prot.sid.forEach((s, j) => { if (s) d.sidIx[s] = j; }); DR[k] = d; return d; }); }
+  window.__pwDrill = sel => { drSel = sel; drill(); };
+  function drill() {
+    const k = ci;
+    if (!drSel) { $("pwdrt").textContent = "Term drill-down"; ["pwdrvol", "pwdrheat"].forEach(id => Plotly.purge(id)); $("pwdrtab").innerHTML = "";
+      $("pwdrnote").textContent = "Click a term (over-representation, GSEA, GO or GO slim) or a network cluster: its tested proteins are shown on the volcano and in a heatmap."; return; }
+    $("pwdrt").textContent = "Term drill-down: " + drSel.label;
+    drLoad(k).then(D => { if (k !== ci) return; drDraw(D); }).catch(e => { $("pwdrnote").textContent = "Drill-down data could not be loaded (" + e.message + ")."; });
+  }
+  function drDraw(D) {
+    const P = D.prot, n = P.acc.length, site = D.level === "site";
+    const TT = drSel.go ? (D.go_terms || {}) : (D.terms || {});
+    let ix = drSel.term && TT[drSel.term], partial = !!drSel.term && (D.partial || []).includes(drSel.term) && !drSel.go;
+    if (!ix) { ix = (drSel.ids || []).map(s => D.sidIx[s]).filter(j => j != null); partial = !!drSel.term; }
+    ix = [...new Set(ix)];
+    const inT = new Set(ix), l2 = f => f == null ? null : Math.sign(f) * Math.log2(Math.max(Math.abs(f), 1)), lp = v => v == null ? null : -Math.log10(Math.max(v, 1e-300));
+    const nu = ix.filter(j => P.call[j] === "Up").length, nd = ix.filter(j => P.call[j] === "Down").length;
+    const med = (a => { a = a.filter(x => x != null).sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; })(ix.map(j => l2(P.fc[j])));
+    $("pwdrnote").textContent = ix.length + " of " + n + " tested proteins in this term" + (drSel.src ? " (" + drSel.src + ")" : "") + ": " + nu + " Up, " + nd + " Down" +
+      (med != null ? "; median log2 FC " + med.toFixed(2) : "") + "." + (partial ? " Only its hits are shown: the STRING download does not list this term (KEGG) or lists it differently (e.g. STRING clusters), so its unchanged members are not known." : "") +
+      (site ? " Phospho: each protein is shown by its most significant site." : "");
+    // volcano
+    const rest = [], mem = { Up: [], Down: [], "": [] };
+    for (let j = 0; j < n; j++) { if (P.fc[j] == null || P.p[j] == null) continue; if (inT.has(j)) (mem[P.call[j]] || mem[""]).push(j); else rest.push(j); }
+    const labSet = new Set($("pwdrlab").checked ? ix.filter(j => P.p[j] != null).sort((a, b) => P.p[a] - P.p[b]).slice(0, 20) : []), lab = labSet.size > 0;
+    const nm = j => (P.name[j] || P.acc[j]) + (site && P.site[j] ? " " + P.site[j] : "");
+    const tr = (js, name, col, size, op, text) => ({ type: "scatter", mode: text ? "markers+text" : "markers", name: name, x: js.map(j => l2(P.fc[j])), y: js.map(j => lp(P.p[j])),
+      text: text ? js.map(j => labSet.has(j) ? nm(j) : "") : undefined, textposition: "top center", textfont: { size: 10, color: C("--text-secondary") }, hovertext: js.map(nm), customdata: js.map(j => [P.acc[j], P.fc[j], P.p[j]]),
+      hovertemplate: "<b>%{hovertext}</b> %{customdata[0]}<br>FC %{customdata[1]:.2f}, p %{customdata[2]:.2g}<extra></extra>", marker: { size: size, color: col, opacity: op, line: { width: text === null ? 0 : 0.5, color: C("--text-primary") } } });
+    Plotly.react("pwdrvol", [tr(rest, "other tested", C("--text-muted"), 4, 0.35, null), tr(mem[""], "in term, unchanged", "#7a7a7a", 8, 0.95, lab ? 1 : 0), tr(mem.Down, "in term, Down", DOWN, 9, 0.95, lab ? 1 : 0), tr(mem.Up, "in term, Up", UP, 9, 0.95, lab ? 1 : 0)],
+      Object.assign(bp(), { margin: { l: 60, r: 20, t: 10, b: 50 }, legend: { orientation: "h", y: 1.07 }, hovermode: "closest",
+        xaxis: { title: "log2 fold change (" + W.comps[ci].name + ")", gridcolor: C("--grid"), zerolinecolor: C("--text-muted") }, yaxis: { title: "-log10 p", gridcolor: C("--grid") } }), cfg);
+    const pv = $("pwdrvol"); if (!pv.__click) { pv.__click = true; pv.on("plotly_click", ev => { const pt = ev.points && ev.points[0]; if (pt && pt.customdata && W.has_explore) window.open("10e_explore.html#" + encodeURIComponent(pt.customdata[0]), "_blank"); }); }
+    // heatmap
+    const rv = $("pwdrrows").value, z = $("pwdrscale").value === "z";
+    let H = ix.filter(j => P.p[j] != null).sort((a, b) => P.p[a] - P.p[b]);
+    H = rv === "hits" ? H.filter(j => P.call[j] === "Up" || P.call[j] === "Down") : H.slice(0, +rv);
+    H.sort((a, b) => (P.fc[b] ?? 0) - (P.fc[a] ?? 0));
+    if (!H.length || !D.v || !D.v.length) { Plotly.purge("pwdrheat"); }
+    else {
+      const row = j => { const a = (D.v[j] || []).map(x => x == null ? null : x / 100); if (!z) return a; const v = a.filter(x => x !== null), m = v.reduce((s, x) => s + x, 0) / Math.max(1, v.length),
+        sd = Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / Math.max(1, v.length - 1)); return a.map(x => x === null || !sd ? null : (x - m) / sd); };
+      const Z = H.map(row), ys = H.map(j => nm(j) + "​".repeat(0) + (H.filter(x => nm(x) === nm(j)).length > 1 ? " (" + P.acc[j] + ")" : ""));
+      const xs = D.samples.map((s, c) => s), zmax = z ? 2.5 : null;
+      const ann = D.order.map(g => { const c = D.groups.map((x, q) => x === g ? q : -1).filter(q => q >= 0); return { x: (c[0] + c[c.length - 1]) / 2, y: 1.0, xref: "x", yref: "paper", yanchor: "bottom", text: "<b>" + esc(g) + "</b>", showarrow: false, font: { color: DPDP_GCOL(g, D.order) } }; });
+      const shapes = D.order.slice(1).map(g => { const c0 = D.groups.indexOf(g); return { type: "line", x0: c0 - 0.5, x1: c0 - 0.5, y0: 0, y1: 1, yref: "paper", line: { color: C("--surface-1"), width: 3 } }; });
+      $("pwdrheat").style.height = Math.max(300, 140 + 16 * H.length) + "px";
+      Plotly.react("pwdrheat", [{ type: "heatmap", z: Z, x: xs.map((s, c) => c), y: H.map((j, r) => r), text: H.map(j => xs.map((s, c) => nm(j) + "<br>" + s + " (" + D.groups[c] + ")")),
+        hovertemplate: "%{text}<br>" + (z ? "z %{z:.2f}" : "log2 %{z:.2f}") + "<extra></extra>", colorscale: z ? [[0, DOWN], [0.5, "#f7f7f7"], [1, UP]] : "Viridis",
+        zmin: z ? -zmax : undefined, zmax: z ? zmax : undefined, colorbar: { title: { text: z ? "z-score" : "log2" } }, xgap: 0, ygap: 1 }],
+        Object.assign(bp(), { margin: { l: 10, r: 20, t: 34, b: 110 }, annotations: ann, shapes: shapes,
+          xaxis: { tickvals: xs.map((s, c) => c), ticktext: xs, tickangle: -45, tickfont: { size: 10 } },
+          yaxis: { tickvals: H.map((j, r) => r), ticktext: ys.map((y, r) => (P.call[H[r]] === "Up" ? "▲ " : P.call[H[r]] === "Down" ? "▼ " : "") + y), autorange: "reversed", automargin: true, tickfont: { size: H.length > 60 ? 8 : 10 } } }), cfg);
+    }
+    // table
+    const T = ix.slice().sort((a, b) => (P.p[a] ?? 2) - (P.p[b] ?? 2));
+    $("pwdrtt").textContent = "Proteins of the term (" + T.length + ")";
+    $("pwdrtab").innerHTML = T.length ? "<table><thead><tr><th>Protein</th>" + (site ? "<th>Site</th>" : "") + "<th>Accession</th><th class=num>FC</th><th class=num>p</th><th>Call</th></tr></thead><tbody>" +
+      T.slice(0, 500).map(j => "<tr><td>" + esc(P.name[j] || "") + "</td>" + (site ? "<td>" + esc(P.site[j] || "") + "</td>" : "") + "<td>" + (W.has_explore ? "<a href=\\"10e_explore.html#" + encodeURIComponent(P.acc[j]) + "\\" target=_blank>" + esc(P.acc[j]) + "</a>" : esc(P.acc[j])) +
+        "</td><td class=num>" + (P.fc[j] != null ? (+P.fc[j]).toFixed(2) : "") + "</td><td class=num>" + (P.p[j] != null ? (+P.p[j]).toPrecision(2) : "") + "</td><td" + (P.call[j] === "Up" ? " class=xup" : P.call[j] === "Down" ? " class=xdown" : "") + ">" + esc(P.call[j] || "") + "</td></tr>").join("") +
+      "</tbody></table>" + (T.length > 500 ? "<p class=note>First 500 of " + T.length + " (smallest p).</p>" : "") : "<p class=note>None of the tested proteins.</p>";
+  }
+  ["pwdrlab", "pwdrscale", "pwdrrows"].forEach(id => $(id).addEventListener("input", drill));
+  // --- GO slim profile ---
+  function slimDraw() {
+    const S = W.comps[ci].slim, o = $("pwslont").value, d = S && S[o];
+    if (!S) { $("pwslnote").textContent = "The GO slim profile was not made (switch it on in the options and run again)."; Plotly.purge("pwslchart"); $("pwslterms").innerHTML = ""; return; }
+    $("pwslnote").textContent = W.comps[ci].name + ": " + d.annotated + " tested proteins with a GO " + { BP: "process", MF: "function", CC: "component" }[o] + " annotation (" + d.up + " Up, " + d.down + " Down).";
+    let T = (d.terms || []).slice(); if (!T.length) { Plotly.purge("pwslchart"); $("pwslterms").innerHTML = "<p class=note>No category.</p>"; return; }
+    const best = t => Math.min(t.fdr_up ?? 1, t.fdr_down ?? 1);
+    if ($("pwslorder").value === "sig") T.sort((a, b) => best(a) - best(b) || b.tested - a.tested);
+    T = T.slice(0, +$("pwsltopn").value);
+    const star = (t, w) => (t["fdr_" + w] != null && t["fdr_" + w] <= 0.05) ? " *" : "";
+    const ys = T.map(t => short(t.description, 50)).reverse(), R = T.slice().reverse();
+    Plotly.react("pwslchart", [["tested", "pct_tested", C("--text-muted"), "tested"], ["Up", "pct_up", UP, "up"], ["Down", "pct_down", DOWN, "down"]].map(([nmv, f, col, w]) => ({
+      type: "bar", orientation: "h", name: nmv, y: ys, x: R.map(t => t[f]), marker: { color: col }, text: R.map(t => w === "tested" ? "" : star(t, w)), textposition: "outside", cliponaxis: false, constraintext: "none", textfont: { size: 16, color: col },
+      customdata: R.map(t => [t.term, t[w], w === "tested" ? null : t["fdr_" + w]]),
+      hovertemplate: "%{y}<br>" + nmv + ": %{customdata[1]} proteins (%{x:.1f}%)" + (w === "tested" ? "" : ", FDR %{customdata[2]:.2g}") + "<extra>%{customdata[0]}</extra>" })),
+      Object.assign(bp(), { barmode: "group", bargap: 0.25, margin: { l: 330, r: 30, t: 10, b: 50 }, legend: { orientation: "h", y: 1.04 },
+        xaxis: { title: "% of the annotated proteins of each set", gridcolor: C("--grid") }, yaxis: { categoryorder: "array", categoryarray: ys, automargin: true, tickfont: { size: 11 } } }), cfg);
+    $("pwslchart").style.height = Math.max(360, 90 + 26 * T.length) + "px"; Plotly.Plots.resize("pwslchart");
+    const sc = $("pwslchart"); if (!sc.__click) { sc.__click = true; sc.on("plotly_click", ev => { const pt = ev.points && ev.points[0]; if (!pt) return; const t = (W.comps[ci].slim[$("pwslont").value].terms || []).find(x => x.term === pt.customdata[0]); if (t) slimPick(t); }); }
+    const fdr = v => v == null ? "" : (+v).toPrecision(2);
+    $("pwslterms").innerHTML = "<table><thead><tr><th>GO slim category</th><th class=num>Tested</th><th class=num>%</th><th class=num>Up</th><th class=num>%</th><th class=num>FDR Up</th><th class=num>Down</th><th class=num>%</th><th class=num>FDR Down</th></tr></thead><tbody>" +
+      T.map(t => "<tr data-term=\\"" + t.term + "\\" style=\\"cursor:pointer\\"><td>" + esc(t.description) + " <small>" + t.term + "</small></td><td class=num>" + t.tested + "</td><td class=num>" + (+t.pct_tested).toFixed(1) +
+        "</td><td class=num>" + t.up + "</td><td class=num>" + (+t.pct_up).toFixed(1) + "</td><td class=num" + (star(t, "up") ? " style=\\"color:" + UP + ";font-weight:600\\"" : "") + ">" + fdr(t.fdr_up) +
+        "</td><td class=num>" + t.down + "</td><td class=num>" + (+t.pct_down).toFixed(1) + "</td><td class=num" + (star(t, "down") ? " style=\\"color:" + DOWN + ";font-weight:600\\"" : "") + ">" + fdr(t.fdr_down) + "</td></tr>").join("") + "</tbody></table>";
+  }
+  function slimPick(t) { window.__pwDrill({ term: t.term, label: t.description + " (GO slim)", src: "GO slim", go: true }); $("pwdrill").scrollIntoView({ behavior: "smooth", block: "start" }); }
+  $("pwslterms").addEventListener("click", e => { const tr = e.target.closest("tbody tr"); if (!tr) return; const t = (W.comps[ci].slim[$("pwslont").value].terms || []).find(x => x.term === tr.dataset.term); if (t) slimPick(t); });
+  ["pwslont", "pwslorder", "pwsltopn"].forEach(id => $(id).addEventListener("input", slimDraw));
   ["pwchart", "pwtopn"].forEach(id => $(id).addEventListener("input", oraChart));
   $("pwsrc").addEventListener("input", oraChart); $("pwq").addEventListener("input", () => {});
-  $("pwcomp").addEventListener("change", () => { gsel = null; window.__pwGoSel = null; open_.clear(); gseaSources(); gseaDraw(); oraChart(); goDraw(); });
+  $("pwcomp").addEventListener("change", () => { gsel = null; window.__pwGoSel = null; open_.clear(); gseaSources(); gseaDraw(); oraChart(); goDraw(); slimDraw(); window.__pwDrill(null); });
   document.querySelectorAll(".pwdir:not(#pwgodir) button").forEach(b => b.addEventListener("click", oraChart));
-  fillSources(); drawTerms(); drawNet(); members(); oraChart(); gseaSources(); gseaDraw(); goDraw(); ovSources(); overview();
+  fillSources(); drawTerms(); drawNet(); members(); oraChart(); gseaSources(); gseaDraw(); goDraw(); slimDraw(); ovSources(); overview();
 })();
 '

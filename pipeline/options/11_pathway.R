@@ -42,7 +42,9 @@ pathway_options <- function(p = NULL, orgs = NULL) {
           "topGO's authors advise not to correct weight01 p for multiple testing (the tests are not independent); 0.01 is their usual cutoff.",
           depends = "pathway_topgo", min = 0, max = 0.1, step = "any", app = FALSE),
       opt("pathway_topgo_sim", "Group terms more similar than", "number", 0.7, "GOSemSim Wang similarity (0 to 1): 0.7 groups close relatives, 0.5 groups more broadly.",
-          depends = "pathway_topgo", min = 0.3, max = 0.95, step = 0.05, app = FALSE))),
+          depends = "pathway_topgo", min = 0.3, max = 0.95, step = 0.05, app = FALSE),
+      opt("pathway_goslim", "GO slim profile", "checkbox", TRUE,
+          "The share of the Up, the Down and the tested proteins in each broad GO category (GO Consortium's generic slim), with Fisher's test of Up and Down v the tested proteins. Needs the GO switch above.", app = FALSE))),
     opt_section("Network (STRING)", list(
       opt("pathway_score", "Interaction confidence", "select", "400",
           "STRING combined score: 150 low, 400 medium, 700 high, 900 highest.", choices = c("150", "400", "700", "900"), app = FALSE),

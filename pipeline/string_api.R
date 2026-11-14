@@ -97,3 +97,38 @@ string_terms <- function(species, cache_dir, categories, version = "12.0") {
   d$category <- unname(STRING_FILE_CATEGORIES[d$category])
   as.data.frame(d[!is.na(d$category) & d$category %in% categories, ])
 }
+
+# GO Consortium's generic GO slim (broad categories), downloaded once into cache_dir. Returns data.frame(term, name, ont) with
+# ont BP / MF / CC; the three roots are left out.
+goslim_generic <- function(cache_dir) {
+  dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
+  f <- file.path(cache_dir, "goslim_generic.obo")
+  if (!file.exists(f) || file.size(f) < 1000) {
+    cat("Downloading the generic GO slim...\n")
+    r <- httr::GET("https://current.geneontology.org/ontology/subsets/goslim_generic.obo", httr::write_disk(paste0(f, ".part"), overwrite = TRUE), httr::timeout(120))
+    if (httr::status_code(r) != 200) { unlink(paste0(f, ".part")); stop("GO slim download failed (HTTP ", httr::status_code(r), ")", call. = FALSE) }
+    file.rename(paste0(f, ".part"), f)
+  }
+  x <- readLines(f, warn = FALSE)
+  starts <- which(x == "[Term]"); ends <- c(starts[-1] - 1, length(x))
+  t <- do.call(rbind, lapply(seq_along(starts), function(k) { b <- x[starts[k]:ends[k]]
+    g <- function(tag) sub(paste0("^", tag, ": "), "", grep(paste0("^", tag, ": "), b, value = TRUE)[1])
+    data.frame(term = g("id"), name = g("name"), ns = g("namespace"), obsolete = any(b == "is_obsolete: true"), stringsAsFactors = FALSE) }))
+  t <- t[!t$obsolete & grepl("^GO:", t$term) & !t$term %in% c("GO:0008150", "GO:0003674", "GO:0005575"), ]
+  t$ont <- c(biological_process = "BP", molecular_function = "MF", cellular_component = "CC")[t$ns]
+  t[!is.na(t$ont), c("term", "name", "ont")]
+}
+
+# GO annotations (id, category, term) with every ancestor term added (GO.db), so a protein counts in each broader term.
+go_propagate <- function(an) {
+  if (!NROW(an)) return(an)
+  anc <- list(Process = GO.db::GOBPANCESTOR, Function = GO.db::GOMFANCESTOR, Component = GO.db::GOCCANCESTOR)
+  out <- lapply(names(anc), function(cat_) { a <- an[an$category == cat_, c("id", "term")]; if (!nrow(a)) return(NULL)
+    u <- unique(a$term); m <- AnnotationDbi::mget(u, anc[[cat_]], ifnotfound = NA)
+    lk <- data.frame(term = rep(u, lengths(m)), anc = unlist(m, use.names = FALSE), stringsAsFactors = FALSE)
+    lk <- lk[!is.na(lk$anc) & lk$anc != "all", ]
+    e <- merge(a, lk, by = "term")
+    r <- unique(rbind(a, data.frame(id = e$id, term = e$anc, stringsAsFactors = FALSE)))
+    cbind(r, category = cat_) })
+  do.call(rbind, out)[, c("id", "category", "term")]
+}
