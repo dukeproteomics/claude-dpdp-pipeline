@@ -7,6 +7,14 @@ suppressPackageStartupMessages({ library(jsonlite); library(htmltools) })
 review_dir <- function(run_dir) { d <- file.path(run_dir, "review"); dir.create(d, showWarnings = FALSE); d }
 
 esc <- function(x) htmltools::htmlEscape(as.character(x))
+# Link from a review page to a result file in a subfolder of the run (e.g. Pathway/x.xlsx), served read-only by both servers
+# (review_server.py and the web app: <run>/files/<folder>/<file>.xlsx).
+run_file_link <- function(run_dir, f) {
+  if (is.null(f) || !nzchar(f)) return("")
+  rel <- substring(normalizePath(f, mustWork = FALSE), nchar(normalizePath(run_dir)) + 2)
+  if (!grepl("^[A-Za-z0-9_-][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+\\.xlsx$", rel)) return("")
+  paste0("../files/", rel)
+}
 fmt_n <- function(x) formatC(as.numeric(x), format = "d", big.mark = ",")
 fmt_pct <- function(x, d = 2) paste0(formatC(as.numeric(x), format = "f", digits = d), "%")
 
@@ -105,6 +113,7 @@ pre { background:var(--grid); padding:10px; border-radius:6px; overflow-x:auto; 
 .nextbox.stale { border-color:var(--bad-ink, #b42318); background:var(--bad-bg, #fdecea); } .nextbox.stale h2 { color:var(--bad-ink, #b42318); }
 details.revisit { margin-top:8px; } details.revisit summary { cursor:pointer; font-weight:600; }
 .control button { font:inherit; font-size:13px; padding:3px 10px; border:1px solid var(--rule); border-radius:6px; background:var(--surface-1); color:var(--text-primary); cursor:pointer; }
+.dpdp-csv { font:inherit; font-size:12px; margin:4px 0; padding:2px 10px; border:1px solid var(--rule); border-radius:6px; background:var(--surface-1); color:var(--text-secondary); cursor:pointer; } .dpdp-csv:hover { color:var(--text-primary); border-color:var(--accent); }
 "
 
 # What the analyst does next, shown at the top of every page: the decision form (sent to Claude through pipeline/review_server.py)
@@ -458,12 +467,54 @@ COMMON_JS <- '
     const a = document.createElement("a"); a.href = url; a.download = slug([run, step, ttl].filter(Boolean).join("_")) + "." + fmt;
     document.body.appendChild(a); a.click(); a.remove();
   }
+  // CSV downloads (user, 2026-11-13: every table and chart needs a way to download its content). UTF-8 with a BOM so Excel reads it.
+  const clean = v => v == null ? "" : String(v).replace(/<[^>]+>/g, "").replace(/[\\u200b\\u25b2\\u25bc]/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").trim();
+  const cell = v => { const t = Array.isArray(v) ? v.map(clean).join("; ") : (typeof v === "number" ? (Number.isInteger(v) ? String(v) : String(+v.toPrecision(6))) : clean(v)); return /[",\\n;]/.test(t) ? "\\"" + t.replace(/"/g, "\\"\\"") + "\\"" : t; };
+  function downloadCsv(name, cols, rows) {
+    const run = ((document.querySelector("header .meta b") || {}).textContent || "").trim(), step = location.pathname.split("/").pop().replace(/\\.html$/, "");
+    const txt = "\\ufeff" + [cols.map(cell).join(",")].concat(rows.map(r => r.map(cell).join(","))).join("\\r\\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type: "text/csv;charset=utf-8" }));
+    a.download = slug([run, step, name].filter(Boolean).join("_")) + ".csv"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  // the data of a chart: gd.dpdpData() if the page sets it ({cols, rows}), else read from the traces (heatmap: the matrix; treemap: the
+  // tree; others: one row per point, with the axis titles as column names; lines drawn only for looks, hoverinfo "skip", are left out)
+  function chartData(gd) {
+    if (typeof gd.dpdpData === "function") return gd.dpdpData();
+    const L = gd.layout || {}, fl = gd._fullLayout || {}, arr = v => v == null ? [] : Array.from(v);
+    const tick = (ax, v) => { const a = L[ax] || {}; if (a.tickvals && a.ticktext) { const i = arr(a.tickvals).indexOf(v); if (i >= 0) return clean(a.ticktext[i]); } return v; };
+    const title = (ax, d) => { const t = clean(((fl[ax] || {}).title || {}).text); return t && !/^Click to enter/.test(t) ? t : d; };
+    const hm = (gd.data || []).find(t => t.type === "heatmap");
+    if (hm) { const xs = arr(hm.x).length ? arr(hm.x).map(v => tick("xaxis", v)) : arr(hm.z[0]).map((_, i) => i + 1);
+      return { cols: [title("yaxis", "row")].concat(xs), rows: arr(hm.z).map((r, i) => [arr(hm.y).length ? tick("yaxis", hm.y[i]) : i + 1].concat(arr(r))) }; }
+    const tm = (gd.data || []).find(t => t.type === "treemap" || t.type === "sunburst" || t.type === "pie");
+    if (tm) { const lab = arr(tm.labels), ids = arr(tm.ids), par = arr(tm.parents), byId = {}; ids.forEach((d, i) => { byId[d] = lab[i]; });
+      return { cols: ["label", "parent", "value"], rows: lab.map((l, i) => [l, par.length ? (byId[par[i]] || par[i] || "") : "", arr(tm.values)[i]]) }; }
+    let ncd = 0, cdn = null; const rows = [];
+    (gd.data || []).forEach(t => { if (t.hoverinfo === "skip" || t.visible === false) return; const x = arr(t.x), y = arr(t.y), n = Math.max(x.length, y.length);
+      const lab = arr(t.hovertext).length ? arr(t.hovertext) : arr(t.text), cd = arr(t.customdata); if (t.meta && t.meta.cd && !cdn) cdn = t.meta.cd;
+      for (let i = 0; i < n; i++) { if (x[i] === null && y[i] === null) continue; const c = cd[i] == null ? [] : (Array.isArray(cd[i]) ? cd[i] : [cd[i]]); ncd = Math.max(ncd, c.length);
+        rows.push([clean(t.name || ""), clean(lab[i] == null ? "" : lab[i]), tick("xaxis", x[i]), tick(t.yaxis && t.yaxis !== "y" ? "yaxis" + t.yaxis.slice(1) : "yaxis", y[i])].concat(c)); } });
+    return { cols: ["series", "label", title("xaxis", "x"), title("yaxis", "y")].concat(Array.from({ length: ncd }, (_, k) => (cdn && cdn[k]) || "info " + (k + 1))), rows: rows };
+  }
+  function exportCsv(gd) { const d = chartData(gd), ch = choicesOf(gd); downloadCsv(titleOf(gd) + (ch ? " - " + ch : ""), d.cols, d.rows); }
+  window.dpdpCsv = downloadCsv; window.dpdpChartData = chartData;
+  // a "Download CSV" button just before a table container; data() returns {cols, rows}, name() the file name
+  window.dpdpCsvButton = function (el, name, data) {
+    if (typeof el === "string") el = document.getElementById(el); if (!el || el.__csv) return; el.__csv = true;
+    const b = document.createElement("button"); b.type = "button"; b.className = "dpdp-csv"; b.textContent = "Download table (CSV)";
+    b.title = "Every row and column of this table, in full (opens in Excel)";
+    b.onclick = () => { const d = data(); if (!d || !d.rows.length) { b.textContent = "Nothing to download"; setTimeout(() => { b.textContent = "Download table (CSV)"; }, 1500); return; } downloadCsv(typeof name === "function" ? name() : name, d.cols, d.rows); };
+    el.parentNode.insertBefore(b, el);
+  };
+  const GRID = { width: 1000, height: 1000, path: [0, 1, 2].map(r => [0, 1, 2].map(c => "M" + (60 + c * 310) + " " + (100 + r * 280) + "h270v240h-270z").join("")).join("") };
   function patch(P) {
     if (!P || P.__dpdp) return; P.__dpdp = true;
     const btns = () => [
       { name: "PNG (email/slides)", title: "Download PNG (email, slides; high resolution, white background)", icon: P.Icons.camera, click: gd => exportChart(gd, "png") },
-      { name: "SVG (report)", title: "Download SVG (reports: Word, PowerPoint; sharp at any size)", icon: P.Icons.disk, click: gd => exportChart(gd, "svg") }];
-    const cfg = c => Object.assign({}, c, { displaylogo: false, displayModeBar: "hover",   // every chart gets the download buttons modeBarButtonsToRemove: ((c || {}).modeBarButtonsToRemove || []).concat(["toImage"]),
+      { name: "SVG (report)", title: "Download SVG (reports: Word, PowerPoint; sharp at any size)", icon: P.Icons.disk, click: gd => exportChart(gd, "svg") },
+      { name: "Data (CSV)", title: "Download the data of this chart (CSV, opens in Excel)", icon: GRID, click: gd => exportCsv(gd) }];
+    const cfg = c => Object.assign({}, c, { displaylogo: false, displayModeBar: "hover",   // every chart gets the download buttons
+      modeBarButtonsToRemove: ((c || {}).modeBarButtonsToRemove || []).concat(["toImage"]),
       modeBarButtonsToAdd: ((c || {}).modeBarButtonsToAdd || []).concat(btns()) });
     ["newPlot", "react"].forEach(fn => { const orig = P[fn];
       P[fn] = function (gd, data, layout, config) {

@@ -192,6 +192,10 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   ORA, GSEA, GO or slim term or a network cluster): volcano with the term members (20 smallest p named), heatmap (z-score or log2,
   hits only / 50 / 100 / 300 smallest p, ordered by FC, group labels), member table with Explore links.
 - Tested on 11517 (phospho) and 10658 (protein, human; 7m51s with the first human file download) in headless Chrome.
+- Downloads (user: every table and chart): COMMON_JS adds "Data (CSV)" to every chart toolbar (heatmap matrix, treemap tree, points with
+  axis titles and trace.meta.cd names; gd.dpdpData overrides) and dpdpCsvButton for tables; Pathway: all 7 tables (full content), the
+  network and drill-down volcano overrides; Excel workbook link via the new read-only `<run>/files/<folder>/<file>.xlsx` route in both
+  servers (real path must stay inside the run). Fixed: Plotly own camera button was not removed (the line was inside a comment).
 
 ## Step 12 Phospho: Kinase Library, logos, motif-x (user, 2026-11-13; UniProt sequences, kinase-library installed)
 - `pipeline/phospho_motifs.R` (UniProt FASTA by accession, cached; site table from Protein_PTM_Loc + Local2; 15-mer windows checked

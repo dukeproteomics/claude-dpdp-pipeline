@@ -24,6 +24,15 @@ STEPS = {"01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "0
 RUN_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 FILE_RE = re.compile(r"^[A-Za-z0-9_.-]+\.html$")
 DATA_RE = re.compile(r"^[A-Za-z0-9_.-]+\.json\.gz$")   # page data loaded on demand (e.g. the Explore tab)
+XLSX_RE, SUB_RE = re.compile(r"^[A-Za-z0-9_.-]+\.xlsx$"), re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*$")
+
+
+def xlsx_path(d, sub, f):
+    """A workbook in a subfolder of the run (no hidden folders, nothing outside the run), or None."""
+    if not d or not SUB_RE.match(sub) or sub.startswith(".") or not XLSX_RE.match(f):
+        return None
+    p = os.path.realpath(os.path.join(d, sub, f))
+    return p if p.startswith(os.path.realpath(d) + os.sep) and os.path.isfile(p) else None
 USER_RE = re.compile(r"^[a-z_][a-z0-9_.-]{0,31}$")
 SESSION_HOURS = 12
 SCROLLBACK = 400_000
@@ -378,6 +387,16 @@ def make_app(cfg):
         who = json.dumps(pw.pw_gecos.split(",")[0] or s["user"]).encode()
         html = html.replace(b"</head>", b"<script>window.DPDP_WEB_ANALYST=" + who + b";</script></head>", 1)
         return web.Response(body=html, content_type="text/html", headers={"Cache-Control": "no-store"})
+
+    @routes.get(B + "/runs/{run}/files/{sub}/{f}")
+    async def run_file(request):   # a result workbook of the run (e.g. Pathway/Pathway_STRING_sltmm.xlsx), read only
+        need(request)
+        d, sub, f = run_dir(request.match_info["run"]), request.match_info["sub"], request.match_info["f"]
+        p = xlsx_path(d, sub, f)
+        if not p:
+            raise web.HTTPNotFound(text="File not found")
+        return web.FileResponse(p, headers={"Content-Disposition": 'attachment; filename="%s"' % f, "Cache-Control": "no-store",
+                                            "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
 
     @routes.get(B + "/runs/api/status")
     async def status(request):

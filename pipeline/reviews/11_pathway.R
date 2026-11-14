@@ -19,7 +19,7 @@ review_pathway <- function(db_path) {
   info <- if (!is.null(summ)) paste0('<section><h2>About this analysis</h2><p class="note">',
     sprintf("STRING %s (%s), species %s%s. Background: the proteins tested in each comparison. Up and Down tested separately. ",
             esc(summ$string$version), esc(summ$string$base), esc(summ$species), if (!is.null(summ$organism)) paste0(" (", esc(summ$organism), ")") else ""),
-    sprintf('Excel: <code>%s</code>.', esc(summ$excel)), if (!is.null(acc)) sprintf(" Accepted %s%s.", esc(acc$time), if (!is.null(acc$analyst)) paste0(" by ", esc(acc$analyst)) else "") else "", '</p>',
+    sprintf('Excel (every table of every comparison): <a href="%s" download>download %s</a> <span class="note">(<code>%s</code>)</span>.', esc(run_file_link(run_dir, summ$excel)), esc(basename(summ$excel)), esc(summ$excel)), if (!is.null(acc)) sprintf(" Accepted %s%s.", esc(acc$time), if (!is.null(acc$analyst)) paste0(" by ", esc(acc$analyst)) else "") else "", '</p>',
     html_table(data.frame(Comparison = vapply(summ$comparisons, function(x) esc(x$name), ""),
       Tested = vapply(summ$comparisons, function(x) fmt_n(x$tested), ""), `In STRING` = vapply(summ$comparisons, function(x) fmt_n(x$mapped_background), ""),
       Up = vapply(summ$comparisons, function(x) fmt_n(x$up), ""), `Up terms` = vapply(summ$comparisons, function(x) fmt_n(x$up_terms), ""),
@@ -179,7 +179,7 @@ PATHWAY_JS <- '
       const y = all.map(([d, t], k) => short(t.description, 60) + "\\u200b".repeat(d === "Up" ? 1 : 2));
       Plotly.react("pworachart", ["Down", "Up"].map(d => { const s = all.map((x, k) => [x, k]).filter(([x]) => x[0] === d);
         return { type: "bar", orientation: "h", name: d, y: s.map(([x, k]) => y[k]), x: s.map(([x]) => (d === "Up" ? 1 : -1) * lfdr(x[1].fdr)),
-          marker: { color: d === "Up" ? UP : DOWN }, customdata: s.map(([x]) => [x[1].source, x[1].hits, x[1].term_size, x[1].fold, x[1].fdr]),
+          marker: { color: d === "Up" ? UP : DOWN }, customdata: s.map(([x]) => [x[1].source, x[1].hits, x[1].term_size, x[1].fold, x[1].fdr, x[1].term, x[1].description]), meta: { cd: ["source", "hits", "term size", "fold", "FDR", "term", "description"] },
           hovertemplate: "%{y}<br>%{customdata[0]}: %{customdata[1]} of %{customdata[2]}, fold %{customdata[3]}, FDR %{customdata[4]:.2g}<extra>" + d + "</extra>" }; }),
         Object.assign(bp(), { barmode: "overlay", margin: { l: 360, r: 20, t: 10, b: 50 }, legend: { orientation: "h", y: 1.06 },
           xaxis: { title: "-log10 FDR (Down left, Up right)", gridcolor: C("--grid"), zeroline: true, zerolinecolor: C("--text-muted") },
@@ -190,7 +190,7 @@ PATHWAY_JS <- '
       Plotly.react("pworachart", [{ type: "scatter", mode: "markers", x: T.map(t => t.hits / nh), y: T.map(t => short(t.description, 60)),
         marker: { size: T.map(t => 6 + 2.2 * Math.sqrt(t.hits)), color: T.map(t => lfdr(t.fdr)), colorscale: dir === "up" ? [[0, "#f6c9c2"], [1, UP]] : [[0, "#c8d9ef"], [1, DOWN]],
                   colorbar: { title: { text: "-log10 FDR" } }, line: { width: 0.5, color: C("--text-primary") } },
-        customdata: T.map(t => [t.source, t.hits, t.term_size, t.fold, t.fdr]),
+        customdata: T.map(t => [t.source, t.hits, t.term_size, t.fold, t.fdr, t.term, t.description]), meta: { cd: ["source", "hits", "term size", "fold", "FDR", "term", "description"] },
         hovertemplate: "%{y}<br>%{customdata[0]}: %{customdata[1]} of %{customdata[2]}, fold %{customdata[3]}, FDR %{customdata[4]:.2g}<extra></extra>" }],
         Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 50 }, xaxis: { title: "hit ratio (term hits / " + (dir === "up" ? "Up" : "Down") + " proteins)", gridcolor: C("--grid") },
           yaxis: { automargin: true, tickfont: { size: 11 } } }), cfg);
@@ -211,7 +211,7 @@ PATHWAY_JS <- '
     const bars = N.slice().reverse().concat(P.slice().reverse()).sort((a, b) => a.NES - b.NES);
     if (bars.length) Plotly.react("pwgchart", [{ type: "bar", orientation: "h", y: bars.map(t => short(t.description, 60)), x: bars.map(t => t.NES),
         marker: { color: bars.map(t => t.NES > 0 ? UP : DOWN), opacity: bars.map(t => 0.45 + 0.55 * Math.min(1, lfdr(t.fdr) / 6)) },
-        customdata: bars.map(t => [t.source, t.size, t.fdr]), hovertemplate: "%{y}<br>%{customdata[0]}, %{customdata[1]} proteins<br>NES %{x:.2f}, FDR %{customdata[2]:.2g}<extra></extra>" }],
+        customdata: bars.map(t => [t.source, t.size, t.fdr, t.term, t.description]), meta: { cd: ["source", "size", "FDR", "term", "description"] }, hovertemplate: "%{y}<br>%{customdata[0]}, %{customdata[1]} proteins<br>NES %{x:.2f}, FDR %{customdata[2]:.2g}<extra></extra>" }],
       Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 50 }, xaxis: { title: "normalized enrichment score (NES; up right, down left)", gridcolor: C("--grid"), zerolinecolor: C("--text-muted") },
         yaxis: { automargin: true, tickfont: { size: 11 } } }), cfg);
     else Plotly.purge("pwgchart");
@@ -254,7 +254,7 @@ PATHWAY_JS <- '
     if ($("pwgochart").value === "bar") {
       const R = G2.slice(0, 25).reverse();
       Plotly.react("pwgochartdiv", [{ type: "bar", orientation: "h", y: R.map(g => short(g[0].description, 55) + (g.length > 1 ? " (+" + (g.length - 1) + ")" : "")), x: R.map(g => lfdr(g[0].p)),
-        marker: { color: col }, customdata: R.map(g => [g[0].term, g[0].hits, g[0].annotated, g[0].fold, g[0].p, g.slice(1).map(t => t.description).join("; ")]),
+        marker: { color: col }, customdata: R.map(g => [g[0].term, g[0].hits, g[0].annotated, g[0].fold, g[0].p, g.slice(1).map(t => t.description).join("; "), g[0].description]), meta: { cd: ["GO id", "hits", "annotated", "fold", "weight01 p", "similar terms in the group", "description"] },
         hovertemplate: "%{y}<br>%{customdata[0]}: %{customdata[1]} of %{customdata[2]}, fold %{customdata[3]}, weight01 p %{customdata[4]:.2g}<br>%{customdata[5]}<extra></extra>" }],
         Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 50 }, xaxis: { title: "-log10 p (topGO weight01)", gridcolor: C("--grid") }, yaxis: { automargin: true, tickfont: { size: 11 } } }), cfg);
     } else {
@@ -310,6 +310,9 @@ PATHWAY_JS <- '
       Object.assign(bp(), { margin: { l: 360, r: 20, t: 10, b: 120 }, xaxis: { type: "category", categoryorder: "array", categoryarray: comps, tickangle: -30, gridcolor: C("--grid") },
         yaxis: { type: "category", categoryorder: "array", categoryarray: terms.map(t => short(pick.get(t), 60)).reverse(), automargin: true, tickfont: { size: 11 }, gridcolor: C("--grid") } }), cfg);
   }
+  $("pwoverview").dpdpData = () => { const g = $("pwoverview"), t = (g.data || [])[0]; if (!t) return { cols: [], rows: [] };
+    const m = $("pwomethod").value, v = m === "gsea" ? "NES" : m === "go" ? "signed -log10 weight01 p (Up +, Down -)" : "signed -log10 FDR (Up +, Down -)";
+    return { cols: ["comparison", "term", v, "details"], rows: Array.from(t.x).map((x, i) => [x, t.y[i], t.marker.color[i], t.text[i]]) }; };
   ["pwomethod", "pwosrc", "pwotopn"].forEach(id => $(id).addEventListener("input", overview));
   // --- term drill-down: volcano and heatmap of the tested proteins of the chosen term (data per comparison, loaded on demand) ---
   const DR = {}; let drSel = null;
@@ -392,7 +395,7 @@ PATHWAY_JS <- '
     const ys = T.map(t => short(t.description, 50)).reverse(), R = T.slice().reverse();
     Plotly.react("pwslchart", [["tested", "pct_tested", C("--text-muted"), "tested"], ["Up", "pct_up", UP, "up"], ["Down", "pct_down", DOWN, "down"]].map(([nmv, f, col, w]) => ({
       type: "bar", orientation: "h", name: nmv, y: ys, x: R.map(t => t[f]), marker: { color: col }, text: R.map(t => w === "tested" ? "" : star(t, w)), textposition: "outside", cliponaxis: false, constraintext: "none", textfont: { size: 16, color: col },
-      customdata: R.map(t => [t.term, t[w], w === "tested" ? null : t["fdr_" + w]]),
+      customdata: R.map(t => [t.term, t[w], w === "tested" ? null : t["fdr_" + w], t.description]), meta: { cd: ["GO id", "proteins", "FDR", "description"] },
       hovertemplate: "%{y}<br>" + nmv + ": %{customdata[1]} proteins (%{x:.1f}%)" + (w === "tested" ? "" : ", FDR %{customdata[2]:.2g}") + "<extra>%{customdata[0]}</extra>" })),
       Object.assign(bp(), { barmode: "group", bargap: 0.25, margin: { l: 330, r: 30, t: 10, b: 50 }, legend: { orientation: "h", y: 1.04 },
         xaxis: { title: "% of the annotated proteins of each set", gridcolor: C("--grid") }, yaxis: { categoryorder: "array", categoryarray: ys, automargin: true, tickfont: { size: 11 } } }), cfg);
@@ -411,6 +414,43 @@ PATHWAY_JS <- '
   $("pwsrc").addEventListener("input", oraChart); $("pwq").addEventListener("input", () => {});
   $("pwcomp").addEventListener("change", () => { gsel = null; window.__pwGoSel = null; open_.clear(); gseaSources(); gseaDraw(); oraChart(); goDraw(); slimDraw(); window.__pwDrill(null); });
   document.querySelectorAll(".pwdir:not(#pwgodir) button").forEach(b => b.addEventListener("click", oraChart));
+  // --- downloads: every table (full content, not the shortened lists on screen) and the charts whose points need more columns ---
+  const cname = () => W.comps[ci].name, D_ = () => dir === "up" ? "Up" : "Down", names = ids => (ids || []).map(nameOf);
+  const accOf = id => { const h = (W.comps[ci].hits || {})[id]; return h ? h.acc : ""; };
+  if (window.dpdpCsvButton) {
+    dpdpCsvButton("pwterms", () => "Enriched terms " + cname() + " " + D_(), () => { const src = $("pwsrc").value, q = $("pwq").value.toLowerCase();
+      return { cols: ["comparison", "direction", "source", "term", "description", "hits", "term size (tested)", "fold enrichment", "p", "FDR", "proteins", "accessions"],
+        rows: terms().filter(t => (!src || t.source === src) && (!q || (t.description + " " + t.term).toLowerCase().includes(q)))
+          .map(t => [cname(), D_(), t.source, t.term, t.description, t.hits, t.term_size, t.fold, t.p, t.fdr, names(t.ids), (t.ids || []).map(accOf)]) }; });
+    dpdpCsvButton("pwgterms", () => "GSEA " + cname(), () => ({ cols: ["comparison", "source", "term", "description", "size", "NES", "p", "FDR", "leading edge"],
+      rows: gseaRows().map(t => [cname(), t.source, t.term, t.description, t.size, t.NES, t.p, t.fdr, names(t.leading)]) }));
+    dpdpCsvButton("pwgoterms", () => "GO topGO " + cname() + " " + $("pwgoont").value + " " + (godir === "up" ? "Up" : "Down"), () => {
+      const d = goData(); return { cols: ["comparison", "ontology", "direction", "group", "representative", "term", "description", "annotated", "hits", "expected", "fold", "weight01 p", "classic p", "proteins"],
+        rows: ((d && d.terms) || []).map(t => [cname(), $("pwgoont").value, godir === "up" ? "Up" : "Down", t.group, t.representative ? "yes" : "", t.term, t.description, t.annotated, t.hits, t.expected, t.fold, t.p, t.p_classic, names(t.ids)]) }; });
+    dpdpCsvButton("pwslterms", () => "GO slim " + cname() + " " + $("pwslont").value, () => { const S = W.comps[ci].slim, d = S && S[$("pwslont").value];
+      return { cols: ["comparison", "ontology", "term", "category", "tested", "% tested", "Up", "% Up", "FDR Up", "p Up", "Down", "% Down", "FDR Down", "p Down"],
+        rows: ((d && d.terms) || []).map(t => [cname(), $("pwslont").value, t.term, t.description, t.tested, t.pct_tested, t.up, t.pct_up, t.fdr_up, t.p_up, t.down, t.pct_down, t.fdr_down, t.p_down]) }; });
+    dpdpCsvButton("pwclusters", () => "Network clusters " + cname(), () => { const net = W.comps[ci].network || {};
+      return { cols: ["comparison", "cluster", "proteins", "enriched for (top 3)", "members"], rows: (net.clusters || []).map(c => [cname(), c.cluster, c.size, c.terms || [], (net.nodes || []).filter(n => n.cluster === c.cluster).map(n => n.name)]) }; });
+    dpdpCsvButton("pwmembers", () => $("pwmemt").textContent + " " + cname(), () => { const H = highlighted(), net = W.comps[ci].network;
+      const byId = Object.assign({}, W.comps[ci].hits || {}); ((net && net.nodes) || []).forEach(n => { byId[n.id] = Object.assign({}, byId[n.id], n); });
+      return { cols: ["protein", "accession", "STRING id", "FC", "p", "call"], rows: H ? [...H].map(id => { const n = byId[id] || {}; return [n.name || nameOf(id), n.acc || "", id, n.fc, n.p, n.call || ""]; }) : [] }; });
+    dpdpCsvButton("pwdrtab", () => "Drill-down " + (drSel ? drSel.label : "") + " " + cname(), () => drRows());
+  }
+  // drill-down rows: every tested protein of the term (also used by the volcano download)
+  function drRows(all) {
+    const D = DR[ci]; if (!D || !drSel) return { cols: [], rows: [] };
+    const P = D.prot, TT = drSel.go ? (D.go_terms || {}) : (D.terms || {}); let ix = drSel.term && TT[drSel.term];
+    if (!ix) ix = (drSel.ids || []).map(x => D.sidIx[x]).filter(j => j != null);
+    const inT = new Set(ix), J = all ? P.acc.map((_, j) => j) : [...inT].sort((a, b) => (P.p[a] ?? 2) - (P.p[b] ?? 2)), site = D.level === "site";
+    return { cols: ["comparison", "term", "in term", "protein"].concat(site ? ["site"] : []).concat(["accession", "FC", "log2 FC", "p", "-log10 p", "call"]),
+      rows: J.map(j => [cname(), drSel.label, inT.has(j) ? "yes" : "", P.name[j] || ""].concat(site ? [P.site[j] || ""] : []).concat([P.acc[j], P.fc[j],
+        P.fc[j] == null ? "" : +(Math.sign(P.fc[j]) * Math.log2(Math.max(Math.abs(P.fc[j]), 1))).toFixed(4), P.p[j], P.p[j] == null ? "" : +(-Math.log10(Math.max(P.p[j], 1e-300))).toFixed(4), P.call[j] || ""])) };
+  }
+  $("pwdrvol").dpdpData = () => drRows(true);
+  $("pwnet").dpdpData = () => { const net = W.comps[ci].network || {}, H = highlighted();
+    return { cols: ["comparison", "protein", "accession", "gene", "STRING id", "FC", "p", "call", "cluster", "links", "highlighted", "x", "y"],
+      rows: (net.nodes || []).map(n => [cname(), n.name, n.acc, n.gene, n.id, n.fc, n.p, n.call, n.cluster, n.degree, H && H.has(n.id) ? "yes" : "", n.x, n.y]) }; };
   fillSources(); drawTerms(); drawNet(); members(); oraChart(); gseaSources(); gseaDraw(); goDraw(); slimDraw(); ovSources(); overview();
 })();
 '

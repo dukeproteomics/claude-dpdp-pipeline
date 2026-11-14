@@ -52,6 +52,11 @@ Report the group representatives; mention the grouped terms only when they add m
   the API; for KEGG (not in the downloads) only the hits are known ("partial").
 - Annotation files follow the API's STRING version (`protein.enrichment.terms.v<version>`, cached in `<data>/.dpdp_cache`).
 
+## Downloads (user, 2026-11-13: every table and chart)
+Every table has "Download table (CSV)" with its full content (all proteins and accessions, not the shortened lists on screen);
+every chart has PNG, SVG and "Data (CSV)" in its toolbar (the network: its node table; the drill-down volcano: every tested
+protein with an "in term" column). The About section links the Excel workbook (served read-only from `<run>/files/<folder>/`).
+
 ## Charts for publication (all with PNG / SVG download)
 - GO: group representatives as bars (-log10 weight01 p, "+n" = similar terms), or a treemap of groups and terms (REVIGO-style).
 - Over-representation: top terms as a diverging bar chart (Down left, Up right, -log10 FDR) or a dot plot (hit ratio, size =

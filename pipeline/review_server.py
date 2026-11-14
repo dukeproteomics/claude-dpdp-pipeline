@@ -20,6 +20,7 @@ STEPS = {"01_load", "03_parameters", "04_noise", "05_filter", "06_normalize", "0
 RUN_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 FILE_RE = re.compile(r"^[A-Za-z0-9_.-]+\.html$")
 DATA_RE = re.compile(r"^[A-Za-z0-9_.-]+\.json\.gz$")   # page data loaded on demand (e.g. the Explore tab)
+XLSX_RE, SUB_RE = re.compile(r"^[A-Za-z0-9_.-]+\.xlsx$"), re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*$")
 MAX_BODY = 20000
 
 
@@ -71,6 +72,15 @@ def make_handler(data_root, token):
                 runs = sorted(r for r in os.listdir(data_root) if os.path.isfile(os.path.join(data_root, r, "review", "index.html")))
                 items = "".join('<li><a href="/%s/review/index.html">%s</a></li>' % (r, r) for r in runs)
                 return self.send(200, "<!doctype html><meta charset=utf-8><title>DPDP runs</title><h1>DPDP runs</h1><ul>%s</ul>" % items, "text/html; charset=utf-8")
+            if len(parts) == 4 and parts[1] == "files" and SUB_RE.match(parts[2]) and XLSX_RE.match(parts[3]):   # a result workbook, read only
+                d = self.run_dir(parts[0])
+                f = os.path.realpath(os.path.join(d, parts[2], parts[3])) if d else None
+                if f and f.startswith(os.path.realpath(d) + os.sep) and os.path.isfile(f):
+                    body = open(f, "rb").read()
+                    self.send_response(200); self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    self.send_header("Content-Disposition", 'attachment; filename="%s"' % parts[3])
+                    self.send_header("Content-Length", str(len(body))); self.send_header("Cache-Control", "no-store"); self.end_headers()
+                    self.wfile.write(body); return
             if len(parts) == 3 and parts[1] == "review" and DATA_RE.match(parts[2]):
                 d = self.run_dir(parts[0])
                 f = os.path.join(d, "review", parts[2]) if d else None
