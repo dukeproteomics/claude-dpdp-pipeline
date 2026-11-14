@@ -151,3 +151,7 @@ The data (`review/10e_explore_data.json.gz`, 4-10 MB) loads when the page opens,
 Run 10e after Stats apply (with 10b and 10c), and again after a re-run. Link to a protein: `10e_explore.html#<accession>`.
 The Stats page keeps the top hits' protein plots (10c).
 
+## Downloads (user, 2026-11-13)
+Every table has "Download table (CSV)" (the significant list in full, not the first 500; per-sample values; protein plot values);
+every chart has PNG, SVG and "Data (CSV)" (the volcano: every tested row with its call at the page settings; the heatmap: row names
+and z-scores). "Output files" links the Excel workbooks (read-only `<run>/files/<norm>/<file>.xlsx`).

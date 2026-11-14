@@ -65,7 +65,7 @@ review_stats <- function(db_path) {
   peptides_note <- if (is_peptide_output(p)) sprintf('<p class="note">%s tested: %s</p>', Uc,
     if (ptm_report(p)) sprintf("<b>%s only</b> (Sequence matches <code>%s</code>); adjusted p covers those only.", esc(g("peptide_report_grep")), esc(g("peptide_report_grep"))) else "all peptides") else ""
   decision_html <- paste0(form, '<section><h2>', if (applied) "Comparisons calculated" else "Comparisons at the last preview", '</h2>',
-    if (!is.null(comp_df)) html_table(comp_df) else "<p>None yet.</p>",
+    if (!is.null(comp_df)) paste0('<div id="stcomps">', html_table(comp_df), '</div>') else "<p>None yet.</p>",
     sprintf('<p class="note">Calls: p %s %s (%s), fold change %s %s.</p>', "&le;", esc(pc), if (use_adj) paste("adjusted,", esc(g("padjust_options"))) else "raw", "&ge;", esc(fcc)),
     peptides_note,
     if (!is.null(last_acc)) sprintf('<p class="note">Results accepted %s%s. %s</p>', esc(last_acc$time), if (!is.null(last_acc$analyst)) paste0(" by ", esc(last_acc$analyst)) else "", esc(last_acc$note %||% "")) else "",
@@ -140,7 +140,8 @@ review_stats <- function(db_path) {
   xl <- list.files(file.path(run_dir, summ$stat_norm %||% p$stat_norm %||% ""), pattern = "\\.xlsx$", full.names = TRUE)
   graphs_html <- paste0(
     if (length(stat_plots) || length(prot_plots)) paste0('<section><h2>Static plots</h2>', app_png_panel(c(stat_plots, prot_plots), title = "Static PNG versions (made with --png=TRUE)"), '</section>') else "",
-    if (length(xl)) paste0('<section><h2>Output files</h2><ul>', paste0('<li><code>', esc(xl), '</code></li>', collapse = ""), '</ul>',
+    if (length(xl)) paste0('<section><h2>Output files</h2><ul>', paste0(vapply(xl, function(f) { u <- run_file_link(run_dir, f)
+        if (nzchar(u)) sprintf('<li><a href="%s" download>download %s</a> <span class="note">(<code>%s</code>)</span></li>', esc(u), esc(basename(f)), esc(f)) else sprintf('<li><code>%s</code></li>', esc(f)) }, ""), collapse = ""), '</ul>',
       if (!use_adj) '<p class="note">The Excel Up/Down column uses raw p (checkbox_filter_adjpval off). Table1 Sample Info is created empty by the app.</p>' else "", '</section>') else "")
 
   js_data <- list(U = U, comps = comps, pc = pc, fcc = fcc, order = group_order, sg = if (length(ginfo)) ginfo else NULL,
@@ -158,7 +159,7 @@ review_stats <- function(db_path) {
     paste0('<section><h2>Before and after the change of ', esc(STEP_TITLE[[rvi$step]] %||% rvi$step), '</h2>',
            sprintf('<p class="note">%s was changed on %s and the later steps were redone with the earlier settings. Calls with the old result &rarr; now. The old run is kept in <code>%s</code> until the next change.</p>',
                    esc(STEP_TITLE[[rvi$step]] %||% rvi$step), esc(rvi$time), esc(rvi$backup)),
-           html_table(do.call(rbind, rows)), '</section>')
+           '<div id="stba">', html_table(do.call(rbind, rows)), '</div></section>')
   } else ""
   body <- paste0(decision_html, ba_html, res_html, volc_html, pca_html, prot_html, graphs_html, js)
   write_review_page(run_dir, "10_stats", "Step 10 - Stats", status, status_class, body, extra_head = extra_css,
@@ -210,6 +211,7 @@ function vdraw() {
   const q = (document.getElementById("vq").value || "").toLowerCase();
   const sig = []; for (let i = 0; i < n; i++) { const c = call[i]; if ((c === "Up" || c === "Down") && (!q || (X.gene[i] || "").toLowerCase().includes(q) || X.acc[i].toLowerCase().includes(q))) sig.push(i); }
   sig.sort((a, b) => P[a] - P[b]);
+  vlast = { X: X, call: call, pt: pt, pc: pc, fc: fc, sig: sig };
   document.getElementById("vtable").innerHTML = `<table><thead><tr><th>Accession</th><th>Gene</th><th>Call</th><th class=num>FC</th><th class=num>raw p</th><th class=num>adj p</th><th class=num>precursors</th><th>Measured</th><th>Flag</th></tr></thead><tbody>` +
     sig.slice(0, 500).map(i => `<tr><td>${X.acc[i]}</td><td>${X.gene[i] || ""}</td><td>${call[i]}</td><td class=num>${(+X.fc[i]).toPrecision(4)}</td><td class=num>${(+X.p[i]).toPrecision(3)}</td><td class=num>${X.adj[i] === null ? "-" : (+X.adj[i]).toPrecision(3)}</td><td class=num>${X.prec[i]}</td><td>${X.onoff[i]}</td><td class="${X.flag[i] ? "flag" : ""}">${X.flag[i]}</td></tr>`).join("") + "</tbody></table>" +
     (sig.length > 500 ? `<p class="note">First 500 of ${sig.length}.</p>` : "");
@@ -223,6 +225,17 @@ function vdraw() {
       xaxis: ax("raw p-value"), yaxis: Object.assign(ax(D.U), { rangemode: "tozero" }) }), cfg);
   document.getElementById("phistnote").textContent = `First bar (p < 0.05): ${fmt(bins[0])} ${D.U} against a flat level of about ${fmt(flat)}, so roughly ${fmt(excess)} more than chance alone would give.`;
 }
+let vlast = null;
+// downloads (user, 2026-11-13): every table in full, and the volcano as every tested row with its call at these settings
+const vcsv = (only) => { if (!vlast) return { cols: [], rows: [] }; const X = vlast.X, J = only ? vlast.sig : X.acc.map((_, i) => i);
+  return { cols: ["accession", "gene", "call (" + (vlast.pt === "p" ? "raw" : "adjusted") + " p <= " + vlast.pc + ", |FC| >= " + vlast.fc.toFixed(1) + ")", "FC", "log2 FC", "raw p", "adj p", "precursors", "measured", "flag"],
+    rows: J.map(i => [X.acc[i], X.gene[i] || "", vlast.call[i], X.fc[i], X.fc[i] === null ? "" : +l2(X.fc[i]).toFixed(4), X.p[i], X.adj[i], X.prec[i], X.onoff[i] || "", X.flag[i] || ""]) }; };
+if (window.dpdpCsvButton) {
+  dpdpCsvButton("stcomps", "Comparisons");
+  dpdpCsvButton("stba", "Before and after");
+  dpdpCsvButton("vtable", () => "Significant " + ((document.getElementById("vcomp") || {}).value || names[0] || ""), () => vcsv(true));
+}
+if (document.getElementById("volcano")) document.getElementById("volcano").dpdpData = () => vcsv(false);
 ["vcomp", "vpt", "vpc", "vonoff"].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener("change", vdraw); });
 ["vfc", "vq"].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener("input", vdraw); });
 vdraw();
@@ -263,6 +276,11 @@ if (D.sg && document.getElementById("pset")) {   // no sample graphs section whe
       s.samples.map((x, i) => `<tr><td>${x}</td><td>${s.groups[i]}</td><td class=num>${(+s.total[i]).toPrecision(4)}</td><td class=num>${s.q[i][2].toFixed(2)}</td><td class=num>${sc[i].PC1}</td><td class=num>${sc[i].PC2}</td><td>${s.nearest_sample[x]}</td></tr>`).join("") + "</tbody></table>";
   }
   ps.addEventListener("change", sgdraw); pcs.addEventListener("change", sgdraw); sgdraw();
+  document.getElementById("sgheat").dpdpData = () => { const hm = D.sg[ps.value].heatmap;
+    return { cols: ["row (z-score per row)"].concat(hm.samples.map((x, i) => x + " (" + hm.groups[i] + ")")), rows: hm.labels.map((l, r) => [l].concat(hm.z[r])) }; };
+  if (window.dpdpCsvButton) dpdpCsvButton("sgtable", () => "Samples " + ps.value, () => { const s = D.sg[ps.value], sc = s.pca.scores;
+    return { cols: ["sample", "group", "total intensity", "log2 5%", "log2 25%", "median log2", "log2 75%", "log2 95%", "PC1", "PC2", "PC3", "nearest sample"],
+      rows: s.samples.map((x, i) => [x, s.groups[i], s.total[i]].concat(s.q[i]).concat([sc[i].PC1, sc[i].PC2, sc[i].PC3 == null ? "" : sc[i].PC3, s.nearest_sample[x]])) }; });
 }
 if (D.pp) {
   const sel = document.getElementById("ppsel");
@@ -292,5 +310,7 @@ if (D.pp) {
       smp.map((x, i) => `<tr><td>${x}</td><td>${grs[i]}</td><td class=num>${fmt(vals[i])}</td></tr>`).join("") + "</tbody></table>";
   }
   sel.addEventListener("change", ppdraw); ppdraw();
+  if (window.dpdpCsvButton) dpdpCsvButton("pptable", () => { const it = D.pp.items[+sel.value]; return (it.genes || "") + " " + it.accession + (typeof it.site === "string" && it.site ? " " + it.site : ""); }, () => {
+    const it = D.pp.items[+sel.value]; return { cols: ["sample", "group", "value"], rows: D.pp.samples.map((x, i) => [x, D.pp.groups[i], it.values[x]]) }; });
 }
 '

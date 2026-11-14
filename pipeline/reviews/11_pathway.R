@@ -20,11 +20,11 @@ review_pathway <- function(db_path) {
     sprintf("STRING %s (%s), species %s%s. Background: the proteins tested in each comparison. Up and Down tested separately. ",
             esc(summ$string$version), esc(summ$string$base), esc(summ$species), if (!is.null(summ$organism)) paste0(" (", esc(summ$organism), ")") else ""),
     sprintf('Excel (every table of every comparison): <a href="%s" download>download %s</a> <span class="note">(<code>%s</code>)</span>.', esc(run_file_link(run_dir, summ$excel)), esc(basename(summ$excel)), esc(summ$excel)), if (!is.null(acc)) sprintf(" Accepted %s%s.", esc(acc$time), if (!is.null(acc$analyst)) paste0(" by ", esc(acc$analyst)) else "") else "", '</p>',
-    html_table(data.frame(Comparison = vapply(summ$comparisons, function(x) esc(x$name), ""),
+    '<div id="pwabout">', html_table(data.frame(Comparison = vapply(summ$comparisons, function(x) esc(x$name), ""),
       Tested = vapply(summ$comparisons, function(x) fmt_n(x$tested), ""), `In STRING` = vapply(summ$comparisons, function(x) fmt_n(x$mapped_background), ""),
       Up = vapply(summ$comparisons, function(x) fmt_n(x$up), ""), `Up terms` = vapply(summ$comparisons, function(x) fmt_n(x$up_terms), ""),
       Down = vapply(summ$comparisons, function(x) fmt_n(x$down), ""), `Down terms` = vapply(summ$comparisons, function(x) fmt_n(x$down_terms), ""),
-      Network = vapply(summ$comparisons, function(x) sprintf("%s proteins, %s links", fmt_n(x$network_proteins), fmt_n(x$network_edges)), ""), check.names = FALSE), 2:7),
+      Network = vapply(summ$comparisons, function(x) sprintf("%s proteins, %s links", fmt_n(x$network_proteins), fmt_n(x$network_edges)), ""), check.names = FALSE), 2:7), '</div>',
     '</section>') else '<section><h2>Not run yet</h2><p>Set the options and press <b>Run with these settings</b>.</p></section>'
   body <- paste0(form, info, if (!is.null(res)) paste0(
     '<section><h2>Enriched terms</h2><div class="control"><label for="pwcomp">Comparison</label><select id="pwcomp"></select>',
@@ -418,6 +418,7 @@ PATHWAY_JS <- '
   const cname = () => W.comps[ci].name, D_ = () => dir === "up" ? "Up" : "Down", names = ids => (ids || []).map(nameOf);
   const accOf = id => { const h = (W.comps[ci].hits || {})[id]; return h ? h.acc : ""; };
   if (window.dpdpCsvButton) {
+    dpdpCsvButton("pwabout", "Summary");
     dpdpCsvButton("pwterms", () => "Enriched terms " + cname() + " " + D_(), () => { const src = $("pwsrc").value, q = $("pwq").value.toLowerCase();
       return { cols: ["comparison", "direction", "source", "term", "description", "hits", "term size (tested)", "fold enrichment", "p", "FDR", "proteins", "accessions"],
         rows: terms().filter(t => (!src || t.source === src) && (!q || (t.description + " " + t.term).toLowerCase().includes(q)))

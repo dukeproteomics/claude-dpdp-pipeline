@@ -15,13 +15,14 @@ review_phospho <- function(db_path) {
                        words = list(preview = "Run", apply = "Accept", previewing = "the last run", applied = "accepted",
                                     effect = "(UniProt sequences, Kinase Library, logos, motif-x; a minute or two)"))
   info <- if (!is.null(summ)) paste0('<section><h2>About this analysis</h2><p class="note">',
-    sprintf("Kinase Library %s (percentile rank, top %s kinases per site; Fisher&apos;s exact test, BH, Up or Down v the unchanged sites). Logos and motif-x: Up or Down v every tested site. Windows: %s of %s sites (UniProt). Excel: <code>%s</code>.",
-            esc(summ$kinase_library), esc(summ$settings$phospho_kl_rank), fmt_n(summ$windows$with_window), fmt_n(summ$windows$sites), esc(summ$excel)),
+    sprintf("Kinase Library %s (percentile rank, top %s kinases per site; Fisher&apos;s exact test, BH, Up or Down v the unchanged sites). Logos and motif-x: Up or Down v every tested site. Windows: %s of %s sites (UniProt). Excel (every table of every comparison): %s.",
+            esc(summ$kinase_library), esc(summ$settings$phospho_kl_rank), fmt_n(summ$windows$with_window), fmt_n(summ$windows$sites),
+            { u <- run_file_link(run_dir, summ$excel); if (nzchar(u)) sprintf('<a href="%s" download>download %s</a> (<code>%s</code>)', esc(u), esc(basename(summ$excel)), esc(summ$excel)) else sprintf("<code>%s</code>", esc(summ$excel)) }),
     if (!is.null(acc)) sprintf(" Accepted %s%s.", esc(acc$time), if (!is.null(acc$analyst)) paste0(" by ", esc(acc$analyst)) else "") else "", '</p>',
-    html_table(data.frame(Comparison = vapply(summ$comparisons, function(x) esc(x$name), ""), Sites = vapply(summ$comparisons, function(x) fmt_n(x$with_window), ""),
+    '<div id="phabout">', html_table(data.frame(Comparison = vapply(summ$comparisons, function(x) esc(x$name), ""), Sites = vapply(summ$comparisons, function(x) fmt_n(x$with_window), ""),
       Up = vapply(summ$comparisons, function(x) fmt_n(x$up), ""), Down = vapply(summ$comparisons, function(x) fmt_n(x$down), ""),
       `Up: kinases (adj p)` = vapply(summ$comparisons, function(x) esc(paste(unlist(x$up_kinases), collapse = ", ")), ""),
-      `Down: kinases (adj p)` = vapply(summ$comparisons, function(x) esc(paste(unlist(x$down_kinases), collapse = ", ")), ""), check.names = FALSE), 2:4),
+      `Down: kinases (adj p)` = vapply(summ$comparisons, function(x) esc(paste(unlist(x$down_kinases), collapse = ", ")), ""), check.names = FALSE), 2:4), '</div>',
     '<p class="note">The Kinase Library describes human kinases; for other organisms read the kinases as motif classes (e.g. CDK / MAPK = proline-directed, PKA / AKT = basophilic, CK2 = acidophilic).</p></section>')
   else '<section><h2>Not run yet</h2><p>Set the options and press <b>Run with these settings</b>.</p></section>'
   body <- paste0(form, info, if (!is.null(res)) paste0(
@@ -63,7 +64,7 @@ PHOSPHO_JS <- '
     const tr = fams.map((f, k) => { const s = rows.filter(r => (r.family || "other") === f);
       return { type: "scatter", mode: "markers+text", name: f, x: s.map(r => r.log2_freq_factor), y: s.map(r => -Math.log10(Math.max(r.fisher_adj_pval, 1e-300))),
         text: s.map(r => lab.includes(r.kinase) ? r.kinase : ""), textposition: "top center", textfont: { size: 10 },
-        customdata: s.map(r => [r.kinase, r.fg_counts, r.fg_total, r.bg_counts, r.bg_total, r.fisher_adj_pval]),
+        customdata: s.map(r => [r.kinase, r.fg_counts, r.fg_total, r.bg_counts, r.bg_total, r.fisher_adj_pval]), meta: { cd: ["kinase", "sites", "of sites", "unchanged sites", "of unchanged", "adj p"] },
         hovertemplate: "<b>%{customdata[0]}</b> (" + f + ")<br>%{customdata[1]} of %{customdata[2]} sites v %{customdata[3]} of %{customdata[4]}<br>log2 frequency factor %{x:.2f}, adj p %{customdata[5]:.2g}<extra></extra>",
         marker: { size: 8, color: FAM[k % FAM.length], opacity: s.map(r => sig(r) ? 0.95 : 0.25) } }; });
     Plotly.react("phvol", tr, Object.assign(base(), { margin: { l: 60, r: 10, t: 10, b: 50 }, legend: { orientation: "h", y: 1.1 },
@@ -106,6 +107,20 @@ PHOSPHO_JS <- '
     $("phsites").innerHTML = "<table><thead><tr><th>Protein</th><th>Site</th><th>Window</th><th class=num>FC</th><th class=num>p</th><th>Call</th><th>Top kinases (percentile)</th></tr></thead><tbody>" +
       rows.slice(0, 300).map(s => "<tr><td>" + esc(s.gene || s.acc) + " " + (W.has_explore ? "<a href=\\"10e_explore.html#" + encodeURIComponent(s.acc) + "\\" target=_blank>" + esc(s.acc) + "</a>" : esc(s.acc)) + "</td><td>" + esc(s.site) +
         "</td><td class=phwin>" + win(s.window) + "</td><td class=num>" + (s.fc == null ? "" : (+s.fc).toFixed(2)) + "</td><td class=num>" + (s.p == null ? "" : (+s.p).toPrecision(2)) + "</td><td>" + esc(s.call) + "</td><td>" + esc(s.top_kinases) + "</td></tr>").join("") + "</tbody></table>";
+  }
+  // downloads (user, 2026-11-13): every table in full (all kinases, all filtered sites), not only the rows shown
+  const D_ = () => (dir === "up" ? "Up" : "Down"), K_ = () => (kt === "ser_thr" ? "Ser-Thr" : "Tyr");
+  if (window.dpdpCsvButton) {
+    dpdpCsvButton("phabout", "Summary");
+    dpdpCsvButton("phkin", () => "Kinases " + W.comps[ci].name + " " + D_() + " " + K_(), () => { const rows = (((W.comps[ci].kinases || {})[kt] || {})[dir]) || [];
+      const cols = rows.length ? Object.keys(rows[0]) : []; return { cols: ["comparison", "direction", "kinase type"].concat(cols), rows: rows.map(r => [W.comps[ci].name, D_(), K_()].concat(cols.map(k => r[k]))) }; });
+    dpdpCsvButton("phmotifs", () => "Motifs " + W.comps[ci].name + " " + D_(), () => { const M = W.comps[ci][dir].motifs || [], cols = M.length ? Object.keys(M[0]) : [];
+      return { cols: ["comparison", "direction"].concat(cols), rows: M.map(m => [W.comps[ci].name, D_()].concat(cols.map(k => m[k]))) }; });
+    dpdpCsvButton("phsites", () => "Sites " + W.comps[ci].name + ($("phsig").checked ? " Up-Down" : "") + ($("phq").value ? " " + $("phq").value : ""), () => {
+      const S = cache[W.comps[ci].site_file] || [], q = $("phq").value.toLowerCase(), only = $("phsig").checked;
+      const rows = S.filter(s => (!only || s.call) && (!q || [s.gene, s.acc, s.site, s.top_kinases].join(" ").toLowerCase().includes(q)));
+      return { cols: ["comparison", "accession", "gene", "site", "window", "FC", "p", "call", "peptides", "top kinases (percentile)"],
+        rows: rows.map(s => [W.comps[ci].name, s.acc, s.gene, s.site, s.window, s.fc, s.p, s.call, s.peptides, s.top_kinases]) }; });
   }
   const all = () => { kinases(); logo(); motifs(); sites(); };
   $("phcomp").addEventListener("change", () => { ci = +$("phcomp").value; all(); });

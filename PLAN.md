@@ -196,6 +196,9 @@ rollup=iq_maxlfq (maxlfq_scale on) · stats: B_v_A, fdr adj p<0.05, FC 1.5, miss
   axis titles and trace.meta.cd names; gd.dpdpData overrides) and dpdpCsvButton for tables; Pathway: all 7 tables (full content), the
   network and drill-down volcano overrides; Excel workbook link via the new read-only `<run>/files/<folder>/<file>.xlsx` route in both
   servers (real path must stay inside the run). Fixed: Plotly own camera button was not removed (the line was inside a comment).
+- Same on Stats (comparisons, before/after, significant list in full, samples, protein plot values; volcano and heatmap data;
+  Excel links in Output files) and Phospho (summary, all kinases, motifs, all filtered sites; Excel link). dpdpTableData: CSV of a
+  static table as shown.
 
 ## Step 12 Phospho: Kinase Library, logos, motif-x (user, 2026-11-13; UniProt sequences, kinase-library installed)
 - `pipeline/phospho_motifs.R` (UniProt FASTA by accession, cached; site table from Protein_PTM_Loc + Local2; 15-mer windows checked

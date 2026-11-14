@@ -42,3 +42,7 @@ with windows and top kinases, loaded per comparison from `review/12_phospho_site
 Report per comparison the top kinases (adj p and the share of sites), whether the logo and motif-x agree with them (e.g. P at +1 /
 `sP` with CDK / MAPK; acidic +1..+3 / `s..E`, `sD` with CK2), and the biggest differences between Up and Down. 11517 (Cryptococcus,
 30 -> 37 C): Up = p38 / JNK / ERK (proline-directed stress MAPK, adj p ~1e-22, `sP`), Down = CK2 (`s..E`, `sD`).
+
+## Downloads (user, 2026-11-13)
+CSV for the summary, kinases (every kinase, not only the enriched ones shown), motifs and sites (every site of the filter, not the
+first 300); the kinase volcano and logo charts have "Data (CSV)"; the About section links the Excel workbook.

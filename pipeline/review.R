@@ -468,7 +468,7 @@ COMMON_JS <- '
     document.body.appendChild(a); a.click(); a.remove();
   }
   // CSV downloads (user, 2026-11-13: every table and chart needs a way to download its content). UTF-8 with a BOM so Excel reads it.
-  const clean = v => v == null ? "" : String(v).replace(/<[^>]+>/g, "").replace(/[\\u200b\\u25b2\\u25bc]/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").trim();
+  const clean = v => v == null ? "" : String(v).replace(/<[/]?[a-zA-Z][^>]*>/g, "").replace(/[\\u200b\\u25b2\\u25bc]/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").trim();
   const cell = v => { const t = Array.isArray(v) ? v.map(clean).join("; ") : (typeof v === "number" ? (Number.isInteger(v) ? String(v) : String(+v.toPrecision(6))) : clean(v)); return /[",\\n;]/.test(t) ? "\\"" + t.replace(/"/g, "\\"\\"") + "\\"" : t; };
   function downloadCsv(name, cols, rows) {
     const run = ((document.querySelector("header .meta b") || {}).textContent || "").trim(), step = location.pathname.split("/").pop().replace(/\\.html$/, "");
@@ -499,8 +499,11 @@ COMMON_JS <- '
   function exportCsv(gd) { const d = chartData(gd), ch = choicesOf(gd); downloadCsv(titleOf(gd) + (ch ? " - " + ch : ""), d.cols, d.rows); }
   window.dpdpCsv = downloadCsv; window.dpdpChartData = chartData;
   // a "Download CSV" button just before a table container; data() returns {cols, rows}, name() the file name
+  window.dpdpTableData = el => { const t = el && (el.tagName === "TABLE" ? el : el.querySelector("table")); if (!t) return { cols: [], rows: [] };
+    const R = Array.from(t.rows).map(r => Array.from(r.cells).map(c => c.textContent.replace(/\\s+/g, " ").trim())); return { cols: R[0] || [], rows: R.slice(1) }; };
   window.dpdpCsvButton = function (el, name, data) {
     if (typeof el === "string") el = document.getElementById(el); if (!el || el.__csv) return; el.__csv = true;
+    if (!data) data = () => window.dpdpTableData(el);   // default: the table as shown (static summary tables)
     const b = document.createElement("button"); b.type = "button"; b.className = "dpdp-csv"; b.textContent = "Download table (CSV)";
     b.title = "Every row and column of this table, in full (opens in Excel)";
     b.onclick = () => { const d = data(); if (!d || !d.rows.length) { b.textContent = "Nothing to download"; setTimeout(() => { b.textContent = "Download table (CSV)"; }, 1500); return; } downloadCsv(typeof name === "function" ? name() : name, d.cols, d.rows); };
