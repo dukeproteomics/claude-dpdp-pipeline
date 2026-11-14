@@ -146,7 +146,8 @@ and the peptides of its protein, mean +- SD per group, as log2 intensity or **z-
 on its mean over the shown samples, in SDs; here on log2), ordered by position or intensity, plus FC / p / call in every comparison.
 Plots are stacked (full width). Below them the **comparison table**: every row and column of that comparison's Excel sheet (the
 final stats table without `_FC2`), loaded per comparison (`review/10e_explore_table_<n>.json.gz`, ~1 MB each), with a filter, Up/Down
-only, sorting by any column, 50 rows a page, CSV download of the shown rows; clicking a row plots it.
+only, sorting by any column, 50 rows a page, CSV download of the shown rows; clicking a row plots it. Above it, links to the Stats Excel workbooks (with their size; the
+final stats file is 100+ MB) and the name of the comparison's sheet in it.
 The data (`review/10e_explore_data.json.gz`, 4-10 MB) loads when the page opens, so the page needs the review server or the web app.
 Run 10e after Stats apply (with 10b and 10c), and again after a re-run. Link to a protein: `10e_explore.html#<accession>`.
 The Stats page keeps the top hits' protein plots (10c).

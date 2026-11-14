@@ -10,6 +10,17 @@ review_explore <- function(db_path) {
   info <- if (file.exists(f)) fromJSON(f, simplifyVector = FALSE) else list()
   pep <- identical(info$level, "peptide")
   U <- if (pep) "peptide" else "protein"
+  # The Stats Excel workbooks (step 10c) and each comparison's sheet in them
+  outj <- file.path(run_dir, "steps", "10_stats", "output.json")
+  out <- if (file.exists(outj)) fromJSON(outj, simplifyVector = FALSE) else list()
+  xl <- unlist(out$excel$files)
+  if (!length(xl)) xl <- list.files(file.path(run_dir, info$norm %||% p$stat_norm %||% ""), pattern = "\\.xlsx$", full.names = TRUE)
+  xl <- xl[file.exists(xl)]
+  sheets <- unlist(out$excel$sheets); sheet_of <- list()
+  for (cn in unlist(info$comparisons)) { m <- sheets[sub("^Table[0-9]+ ", "", sheets) == cn]; if (length(m)) sheet_of[[cn]] <- m[1] }
+  xl_html <- if (length(xl)) paste0('<p class="note">Excel: ', paste(vapply(xl, function(f) { u <- run_file_link(run_dir, f)
+      if (nzchar(u)) sprintf('<a href="%s" download>download %s</a> (%s)', esc(u), esc(basename(f)), { b <- file.size(f); if (b >= 1e6) sprintf("%.1f MB", b / 1e6) else sprintf("%d KB", max(1L, as.integer(round(b / 1e3)))) }) else sprintf("<code>%s</code>", esc(f)) }, ""), collapse = " &middot; "),
+      '<span id="xtsheet"></span></p>') else ""
   body <- paste0(
     '<section><h2>Find a ', U, '</h2>',
     sprintf('<p class="note">Search by gene, accession or description%s. %s of the tested data (%s normalization, %s %ss); FC and p are from the chosen comparison. Charts download from their toolbar (PNG / SVG).</p>',
@@ -28,7 +39,7 @@ review_explore <- function(db_path) {
     '<label for="xorder">Order</label><select id="xorder"><option value="pos">position in the protein</option><option value="int">intensity</option></select></div>',
     '<div id="xpep" style="height:480px" role="img" aria-label="Peptides of the protein, mean per group"></div><p class="note" id="xpepnote"></p></div>',
     '<h3>In each comparison</h3><div id="xstats"></div></section>',
-    '<section id="xtsec"><h2 id="xttitle">Comparison table</h2><p class="note">Every row and column of the comparison&apos;s Excel sheet (the app&apos;s final stats table, without the _FC2 columns). Click a row to plot it; click a column name to sort.</p>',
+    '<section id="xtsec"><h2 id="xttitle">Comparison table</h2><p class="note">Every row and column of the comparison&apos;s Excel sheet (the app&apos;s final stats table, without the _FC2 columns). Click a row to plot it; click a column name to sort.</p>', xl_html,
     '<div class="control"><input type="search" id="xtq" placeholder="filter rows (any column)" style="font:inherit;font-size:14px;padding:3px 8px;width:18em"/>',
     '<label><input type="checkbox" id="xtsig"/> Up/Down only</label><button type="button" id="xtcsv">Download CSV (these rows)</button><span class="note" id="xtcount"></span></div>',
     '<div id="xtwrap" style="overflow:auto;max-height:640px;border:1px solid var(--grid)"><table id="xtab" class="xtab"></table></div>',
@@ -39,7 +50,7 @@ review_explore <- function(db_path) {
 .xtab td { padding:2px 8px; border-bottom:1px solid var(--grid); } .xtab td.n { text-align:right; font-variant-numeric:tabular-nums; } .xtab tbody tr { cursor:pointer; } .xtab tbody tr:hover { background:var(--surface-0); }
 .xtab tr.sel td { background:var(--warn-bg); font-weight:600; } .xtab td.up { color:#c0392b; font-weight:600; } .xtab td.down { color:#2e6fb7; font-weight:600; }
 .xchips button { font:inherit; font-size:12px; margin:6px 4px 0 0; padding:1px 8px; border:1px solid var(--rule); border-radius:10px; background:transparent; color:var(--text-primary); cursor:pointer; }</style>',
-    '<script>', plotly_js(), '</script><script>', EXPLORE_JS, '</script>')
+    '<script>', plotly_js(), '</script><script>window.XSHEETS = ', toJSON(if (length(sheet_of)) sheet_of else setNames(list(), character()), auto_unbox = TRUE), ';', EXPLORE_JS, '</script>')
   write_review_page(run_dir, "10e_explore", "Explore - protein and peptide plots", "Search any protein", "done", body)
 }
 
@@ -143,6 +154,7 @@ EXPLORE_JS <- '
     function loadTable() {
       const c = cur(); if (!c || !c.table) { $("xtsec").hidden = true; return; }
       $("xtsec").hidden = false; $("xttitle").textContent = "Comparison table: " + c.name;
+      if ($("xtsheet")) $("xtsheet").textContent = (window.XSHEETS || {})[c.name] ? ". This comparison is the sheet \\u201c" + XSHEETS[c.name] + "\\u201d." : "";
       if (T.cache[c.table]) { T.cur = T.cache[c.table]; filterTable(true); return; }
       $("xtcount").textContent = "loading...";
       fetch(c.table).then(r => r.json()).then(t => { T.cache[c.table] = t; T.cur = t; T.sortCol = -1; filterTable(true); })
