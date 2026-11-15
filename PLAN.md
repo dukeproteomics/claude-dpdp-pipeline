@@ -569,11 +569,27 @@ One Spectronaut analysis, one TSV, with per-run `EG.TotalQuantity`, `EG.Qvalue` 
 - Every step shows the user ALL graphs it makes; the human makes the choice (first said for Noise).
 - First pass: match the Shiny run's settings and show the plots. Add detailed decision rules later.
 
-## Report step needs (from Shiny_Report*.R)
-- Template: `/mnt/DocShare/Proteomics_Report_Templates/base_templates/proteomics_report_protein_SP_v1.docx` (+ .xlsx key map)
-- Raw file path (TIC step) gives the project number (`/RawData/<num>/`) and instrument method via `rawrr`
-- `get_google_data()`: authenticated Google Sheet (resuspend volume, trypsin, sample amount, order ID)
-- `get_pamlims_data()`: PAM LIMS login with stored credentials (customer, PI, project name)
+## Report step needs (from Shiny_Report*.R; details checked 2026-11-14, not started: user not ready for the report)
+- Template: `/mnt/DocShare/Proteomics_Report_Templates/base_templates/proteomics_report_protein_SP_v1.docx` (+ .xlsx key map);
+  text blocks from the same share (`instrument_methods/`, `sample_prep/`, `data_analysis/`, ...), e.g. `spd30_dia.txt`,
+  `tip_loading_peptide_quant.txt`. Target to match: a finished report, e.g. `/mnt/RawData/11517/11517_Report_103026.docx`.
+- The app's chain (`template_parameters` in `Shiny_Report_Functions.R`):
+  1. **Raw file path** (`raw_data_paths`, chosen on the app's TIC tab) -> project number from `.../RawData/<number>/...`.
+  2. **Google Sheet** `get_google_data(project)`: service-account key `GSA_KEY_PATH`; the tracking sheet's "Current Projects" tab,
+     then "Completed", row `Project Group #` -> `Order #`, `Sample_Amount`, `Recon_Vol`, `Trypsin_Amount`.
+  3. **PamLims** `get_pamlims_data(order)` (`Shiny_PamLims.R`): login POST `staff.pamlims.net/log_in_for_visitor` with the email and
+     password in the `.rds` at `PAMLIMS_LOGIN_PATH`, then the page `/order?id=<order>`, scraped with regexes -> project number,
+     customer name, PI name (taken as the 3rd "name" on the page: fragile, check it), project title; last names for the text and file name.
+  4. **Method from the raw file** `extract_method_info` (rawrr, Thermo .raw only): header (serial number, sample comment, user text 0,
+     time range, instrument method), scan 1 (FT resolution, max ion time, mass range, AGC target), scan 2 (mass range, max ion time,
+     isolation width, AGC target, HCD energy), DIA range (min / max precursor mass -/+ half the isolation width) and window
+     (spacing of the precursor masses).
+- Status here (2026-11-14): `PAMLIMS_LOGIN_PATH` and `GSA_KEY_PATH` set, files present (not opened); `/mnt/RawData` and `/mnt/DocShare`
+  mounted; rawrr 1.20.0 and dotnet installed but rawrr's reader is not (`rawrr::installRawrrExe()`, Thermo RawFileReader licence).
+- Pipeline plan: the pipeline has no raw file path yet; record one per run (an option at setup or the report step: pick one raw file
+  of the set, or find it under `/mnt/RawData/<project>/`). Fetch the project / order / PamLims / method information early, as part of
+  the run's setup, store it with the run (summary + decisions), and show it on a review page for the analyst to check and correct
+  before the report uses it. Web app: credentials stay server-side, never in a page or log.
 - Report tab inputs: staff roles, report type, searched databases, Duke Box folder
 - Don't call Google/LIMS without the user's explicit OK.
 
